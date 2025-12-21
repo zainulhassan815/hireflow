@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.router import api_router
 from app.core.api_config import custom_generate_unique_id
 from app.core.config import settings
-from app.api.router import api_router
 
 
 def create_app() -> FastAPI:

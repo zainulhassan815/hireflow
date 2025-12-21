@@ -36,6 +36,7 @@ select = [
 ignore = [
     "E501",   # line too long (handled by formatter)
     "B008",   # function call in default argument (FastAPI Depends)
+    "UP046",  # Pydantic generics require Generic[T] syntax
 ]
 
 [tool.ruff.lint.isort]
