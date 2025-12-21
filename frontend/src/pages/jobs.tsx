@@ -3,13 +3,7 @@ import { MoreHorizontalIcon, PlusIcon, UsersIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Typography } from "@/components/ui/typography";
 
 type JobStatus = "active" | "closed" | "draft";
 
@@ -100,13 +95,13 @@ const statusVariant: Record<JobStatus, "default" | "secondary" | "outline"> = {
 
 export function JobsPage() {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Jobs</h1>
-          <p className="text-muted-foreground">
+          <Typography variant="h3">Jobs</Typography>
+          <Typography variant="muted">
             Manage your job postings and view applicants
-          </p>
+          </Typography>
         </div>
         <Button>
           <PlusIcon className="size-4" data-icon="inline-start" />
@@ -120,14 +115,14 @@ export function JobsPage() {
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
-                  <CardTitle className="text-base">
+                  <Typography variant="h6">
                     <Link to={`/jobs/${job.id}`} className="hover:underline">
                       {job.title}
                     </Link>
-                  </CardTitle>
-                  <CardDescription>
+                  </Typography>
+                  <Typography variant="muted">
                     {job.department} · {job.location}
-                  </CardDescription>
+                  </Typography>
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger>
@@ -153,18 +148,18 @@ export function JobsPage() {
                   <Badge variant={statusVariant[job.status]}>
                     {job.status}
                   </Badge>
-                  <span className="text-muted-foreground text-sm">
+                  <Typography variant="muted" as="span">
                     {job.type}
-                  </span>
+                  </Typography>
                 </div>
                 <div className="text-muted-foreground flex items-center gap-1 text-sm">
                   <UsersIcon className="size-4" />
                   {job.applicants}
                 </div>
               </div>
-              <p className="text-muted-foreground mt-3 text-xs">
+              <Typography variant="muted" className="mt-3 text-xs">
                 Posted {new Date(job.postedAt).toLocaleDateString()}
-              </p>
+              </Typography>
             </CardContent>
           </Card>
         ))}

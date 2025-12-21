@@ -55,14 +55,17 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="p-4">
+      <SidebarHeader className="p-4 group-data-[collapsible=icon]:p-2">
         <SidebarMenu>
           <SidebarMenuItem>
-            <NavLink to="/" className="flex items-center gap-3">
-              <div className="bg-primary flex size-8 items-center justify-center">
-                <span className="text-sm font-bold text-white">S</span>
+            <NavLink
+              to="/"
+              className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center"
+            >
+              <div className="bg-primary flex size-10 items-center justify-center">
+                <span className="text-base font-bold text-white">S</span>
               </div>
-              <span className="text-lg font-semibold group-data-[collapsible=icon]:hidden">
+              <span className="text-base font-medium group-data-[collapsible=icon]:hidden">
                 ScreenAI
               </span>
             </NavLink>
@@ -70,7 +73,7 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent className="px-2">
+      <SidebarContent className="px-2 group-data-[collapsible=icon]:px-0">
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
@@ -95,16 +98,18 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4">
-        <SidebarSeparator className="mb-4" />
-        <Button className="w-full gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:p-0">
-          <PlusIcon className="size-4" />
-          <span className="group-data-[collapsible=icon]:hidden">
-            Post New Job
-          </span>
-        </Button>
-        <div className="mt-4 flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
-          <div className="bg-muted flex size-8 items-center justify-center text-xs font-medium">
+      <SidebarFooter className="p-4 group-data-[collapsible=icon]:p-2">
+        <SidebarSeparator className="mb-4 group-data-[collapsible=icon]:hidden" />
+        <div className="flex justify-center">
+          <Button className="w-full gap-2 group-data-[collapsible=icon]:size-10 group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:p-0">
+            <PlusIcon className="size-4 group-data-[collapsible=icon]:size-5" />
+            <span className="group-data-[collapsible=icon]:hidden">
+              Post New Job
+            </span>
+          </Button>
+        </div>
+        <div className="mt-4 flex items-center gap-3 group-data-[collapsible=icon]:mt-2 group-data-[collapsible=icon]:justify-center">
+          <div className="bg-muted flex size-10 items-center justify-center text-sm font-medium">
             AM
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">

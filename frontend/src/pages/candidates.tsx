@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
+import { Typography } from "@/components/ui/typography";
 
 type CandidateStatus = "new" | "reviewed" | "shortlisted" | "rejected";
 
@@ -115,12 +116,12 @@ const statusVariant: Record<
 
 export function CandidatesPage() {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Candidates</h1>
-        <p className="text-muted-foreground">
+        <Typography variant="h3">Candidates</Typography>
+        <Typography variant="muted">
           View and manage all job applicants
-        </p>
+        </Typography>
       </div>
 
       {/* Filters */}
@@ -160,7 +161,7 @@ export function CandidatesPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border">
+      <div className="border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -177,22 +178,24 @@ export function CandidatesPage() {
               <TableRow key={candidate.id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <div className="bg-muted flex size-8 items-center justify-center rounded-full text-xs font-medium">
+                    <div className="bg-muted flex size-8 items-center justify-center text-xs font-medium">
                       {candidate.name
                         .split(" ")
                         .map((n) => n[0])
                         .join("")}
                     </div>
                     <div>
-                      <p className="font-medium">{candidate.name}</p>
-                      <p className="text-muted-foreground text-xs">
+                      <Typography variant="small" className="font-medium">
+                        {candidate.name}
+                      </Typography>
+                      <Typography variant="muted" className="text-xs">
                         {candidate.email}
-                      </p>
+                      </Typography>
                     </div>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <span className="text-sm">{candidate.job}</span>
+                  <Typography variant="small">{candidate.job}</Typography>
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
@@ -216,11 +219,11 @@ export function CandidatesPage() {
                   <div className="flex items-center gap-2">
                     <Progress
                       value={candidate.matchScore}
-                      className="h-2 w-16"
+                      className="h-1.5 w-16"
                     />
-                    <span className="text-sm font-medium">
+                    <Typography variant="small" className="font-medium">
                       {candidate.matchScore}%
-                    </span>
+                    </Typography>
                   </div>
                 </TableCell>
                 <TableCell>
@@ -229,9 +232,9 @@ export function CandidatesPage() {
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <span className="text-muted-foreground text-sm">
+                  <Typography variant="muted">
                     {new Date(candidate.appliedAt).toLocaleDateString()}
-                  </span>
+                  </Typography>
                 </TableCell>
               </TableRow>
             ))}

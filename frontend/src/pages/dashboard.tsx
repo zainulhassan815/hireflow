@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Typography } from "@/components/ui/typography";
 import {
   Table,
   TableBody,
@@ -140,10 +141,10 @@ export function DashboardPage() {
       {/* Header & Search */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground text-sm">
+          <Typography variant="h3">Dashboard</Typography>
+          <Typography variant="muted">
             Overview of your recruitment pipeline
-          </p>
+          </Typography>
         </div>
         <div className="w-full sm:w-80">
           <div className="relative">
@@ -165,25 +166,27 @@ export function DashboardPage() {
           <Card key={stat.title} className="border">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
-                <p className="text-muted-foreground text-sm font-medium">
+                <Typography variant="muted" as="span">
                   {stat.title}
-                </p>
+                </Typography>
                 <stat.icon className="text-muted-foreground size-4" />
               </div>
-              <p className="mt-2 text-2xl font-semibold">{stat.value}</p>
+              <Typography variant="h3" className="mt-2">
+                {stat.value}
+              </Typography>
               <div className="mt-1 flex items-center gap-1">
                 {stat.trendUp ? (
                   <TrendingUpIcon className="size-3 text-green-600" />
                 ) : (
                   <TrendingDownIcon className="size-3 text-red-600" />
                 )}
-                <span
-                  className={`text-xs ${
-                    stat.trendUp ? "text-green-600" : "text-red-600"
-                  }`}
+                <Typography
+                  variant="small"
+                  as="span"
+                  className={stat.trendUp ? "text-green-600" : "text-red-600"}
                 >
                   {stat.trend}
-                </span>
+                </Typography>
               </div>
             </CardContent>
           </Card>
@@ -193,7 +196,7 @@ export function DashboardPage() {
       {/* Recent Applications */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Recent Applications</h2>
+          <Typography variant="h5">Recent Applications</Typography>
           <Button variant="ghost" size="sm" className="text-muted-foreground">
             View All
           </Button>
@@ -218,20 +221,20 @@ export function DashboardPage() {
                         {application.initials}
                       </div>
                       <div>
-                        <p className="text-sm font-medium">
+                        <Typography variant="small" className="font-medium">
                           {application.name}
-                        </p>
-                        <p className="text-muted-foreground text-xs">
+                        </Typography>
+                        <Typography variant="muted" className="text-xs">
                           {application.appliedAt}
-                        </p>
+                        </Typography>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <p className="text-sm">{application.job}</p>
-                    <p className="text-muted-foreground text-xs">
+                    <Typography variant="small">{application.job}</Typography>
+                    <Typography variant="muted" className="text-xs">
                       {application.department}
-                    </p>
+                    </Typography>
                   </TableCell>
                   <TableCell>
                     {application.matchScore !== null ? (
@@ -240,14 +243,12 @@ export function DashboardPage() {
                           value={application.matchScore}
                           className="h-1.5 w-16"
                         />
-                        <span className="text-sm font-medium">
+                        <Typography variant="small" className="font-medium">
                           {application.matchScore}%
-                        </span>
+                        </Typography>
                       </div>
                     ) : (
-                      <span className="text-muted-foreground text-sm">
-                        Processing...
-                      </span>
+                      <Typography variant="muted">Processing...</Typography>
                     )}
                   </TableCell>
                   <TableCell>

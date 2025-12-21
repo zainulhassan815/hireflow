@@ -1,34 +1,29 @@
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Typography } from "@/components/ui/typography";
 
 export function SettingsPage() {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">
+        <Typography variant="h3">Settings</Typography>
+        <Typography variant="muted">
           Manage your account and preferences
-        </p>
+        </Typography>
       </div>
 
       <div className="grid gap-6">
         {/* Profile */}
         <Card>
           <CardHeader>
-            <CardTitle>Profile</CardTitle>
-            <CardDescription>
+            <Typography variant="h5">Profile</Typography>
+            <Typography variant="muted">
               Your personal information and account details
-            </CardDescription>
+            </Typography>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -52,38 +47,38 @@ export function SettingsPage() {
         {/* Notifications */}
         <Card>
           <CardHeader>
-            <CardTitle>Notifications</CardTitle>
-            <CardDescription>
+            <Typography variant="h5">Notifications</Typography>
+            <Typography variant="muted">
               Configure how you receive notifications
-            </CardDescription>
+            </Typography>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>New Applications</Label>
-                <p className="text-muted-foreground text-sm">
+                <Typography variant="label">New Applications</Typography>
+                <Typography variant="muted">
                   Get notified when a new candidate applies
-                </p>
+                </Typography>
               </div>
               <Switch defaultChecked />
             </div>
             <Separator />
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Daily Digest</Label>
-                <p className="text-muted-foreground text-sm">
+                <Typography variant="label">Daily Digest</Typography>
+                <Typography variant="muted">
                   Receive a daily summary of applications
-                </p>
+                </Typography>
               </div>
               <Switch defaultChecked />
             </div>
             <Separator />
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>AI Recommendations</Label>
-                <p className="text-muted-foreground text-sm">
+                <Typography variant="label">AI Recommendations</Typography>
+                <Typography variant="muted">
                   Get notified about high-match candidates
-                </p>
+                </Typography>
               </div>
               <Switch defaultChecked />
             </div>
@@ -93,10 +88,10 @@ export function SettingsPage() {
         {/* API Configuration */}
         <Card>
           <CardHeader>
-            <CardTitle>API Configuration</CardTitle>
-            <CardDescription>
+            <Typography variant="h5">API Configuration</Typography>
+            <Typography variant="muted">
               Configure API keys for AI services
-            </CardDescription>
+            </Typography>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -107,9 +102,9 @@ export function SettingsPage() {
                 placeholder="sk-..."
                 defaultValue="sk-••••••••••••••••••••"
               />
-              <p className="text-muted-foreground text-xs">
+              <Typography variant="muted" className="text-xs">
                 Used for embeddings and AI-powered search
-              </p>
+              </Typography>
             </div>
             <Button>Update API Key</Button>
           </CardContent>
@@ -118,18 +113,22 @@ export function SettingsPage() {
         {/* Danger Zone */}
         <Card className="border-destructive/50">
           <CardHeader>
-            <CardTitle className="text-destructive">Danger Zone</CardTitle>
-            <CardDescription>
+            <Typography variant="h5" className="text-destructive">
+              Danger Zone
+            </Typography>
+            <Typography variant="muted">
               Irreversible actions for your account
-            </CardDescription>
+            </Typography>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <p className="font-medium">Delete All Data</p>
-                <p className="text-muted-foreground text-sm">
+                <Typography variant="small" className="font-medium">
+                  Delete All Data
+                </Typography>
+                <Typography variant="muted">
                   Permanently delete all jobs, candidates, and applications
-                </p>
+                </Typography>
               </div>
               <Button variant="destructive" size="sm">
                 Delete All
