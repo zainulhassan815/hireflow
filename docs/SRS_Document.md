@@ -1,0 +1,702 @@
+\pagebreak
+
+# Introduction
+
+## Purpose
+
+The project is intended to help organizations in effectively managing, searching, and extracting meaningful information from large and unstructured collection of documents. Manual document scrutiny and resume screening processes are time-consuming, error-prone, and inefficient. The proposed project addresses these challenges by using AI driven tools that enhance document understanding and information retrieval.
+
+## Project Scope
+
+The problem that most businesses face when trying to manage and gain insight from large collections of documents is addressed by the AI-Powered HR Screening and Document Retrieval System Using RAG. The time-consuming manual review of documents is eliminated by the system, which also provides a capable system for document comprehension and analysis.
+
+### Key Capabilities
+
+**Document Processing**
+
+The system processes these file types:
+
+- PDF files
+- Microsoft Word documents
+- Scanned images
+- Classifies documents by type
+
+**Natural Language Interface**
+
+- Search documents using plain English queries
+- Ask questions about document content
+- Tags them with relevant metadata
+
+**Retrieval-Augmented Generation (RAG)**
+
+- Finds relevant document content based on the user's query
+- Uses semantic search
+- Gives the factual context from stored documents
+
+### Document Screening
+
+- Helps HR Team in document screening of collected attachments from incoming emails
+- Handles multiple resume formats
+- Matches and ranks candidates against job specific requirements
+
+## References
+
+The following documents and resources were consulted during the preparation of this SRS:
+
+1. Google Cloud Documentation - Document AI Overview
+   <https://cloud.google.com/document-ai>
+
+2. Amazon Web Services - Amazon Textract: Extract Text and Data from Documents
+   <https://aws.amazon.com/textract>
+
+3. Microsoft Azure - Form Recognizer Documentation
+   <https://azure.microsoft.com/en-us/products/form-recognizer>
+
+4. LangChain Documentation - Building Applications with Retrieval-Augmented Generation (RAG)
+   <https://python.langchain.com>
+
+5. Hugging Face - Document AI: Understanding Documents with Transformers
+   <https://huggingface.co/blog/document-ai>
+
+6. Hugging Face - Transformers and Large Language Models Documentation
+   <https://huggingface.co/docs>
+
+7. PyMuPDF Documentation - Working with PDFs in Python
+   <https://pymupdf.readthedocs.io>
+
+8. FAISS - Facebook AI Similarity Search Library
+   <https://faiss.ai>
+
+9. Tesseract OCR - Optical Character Recognition Engine
+   <https://github.com/tesseract-ocr/tesseract>
+
+10. IEEE Standard 830-1998 - IEEE Recommended Practice for Software Requirements Specification
+
+# Overall Description
+
+## Product Perspective
+
+This is a standalone system built to help organizations process and search documents using AI. It offers semantic search, text extraction, and question answering features.
+
+### Literature Review
+
+| **Name**           | **Technology**                   | **Release Date** |
+| ------------------ | -------------------------------- | ---------------- |
+| LangChain          | RAG Framework, LLM Orchestration | 2022             |
+| FAISS              | Vector Similarity Search         | 2017             |
+| Pinecone           | Vector Database                  | 2019             |
+| Weaviate           | Vector Database, Hybrid Search   | 2019             |
+| ChromaDB           | Vector Database                  | 2022             |
+| Eightfold AI       | AI Recruitment, Deep Learning    | 2016             |
+| Greenhouse         | ATS, AI Resume Filtering         | 2012             |
+| Google Document AI | Document Processing, OCR         | 2020             |
+| Amazon Textract    | Document Text Extraction         | 2018             |
+| Tesseract          | Open-source OCR Engine           | 2006             |
+
+### Major System Components
+
+The system is made up of several connected components:
+
+| **Component**      | **Description**                                                          |
+| ------------------ | ------------------------------------------------------------------------ |
+| Document Ingestion | Handles file uploads, format validation, and document routing            |
+| Processing Engine  | Performs OCR, text extraction, classification, and metadata generation   |
+| AI/NLP Module      | Generates vector embeddings, runs semantic search, and powers RAG        |
+| Vector Database    | Stores document embeddings for similarity-based retrieval                |
+| HR Module          | Manages Gmail integration, resume collection, and candidate shortlisting |
+| Backend API        | Coordinates system operations and handles business logic                 |
+| Frontend Interface | Web application for user interactions                                    |
+| Security Layer     | Handles authentication, authorization, and data protection               |
+
+![Figure 1: Architecture Diagram](./src/images/architecture_diagram.png){width=50%}
+
+### External Interfaces
+
+The system connects to HR Team email accounts for document collection. Email integration uses OAuth authentication without storing credentials. Future versions may include connections to ERP systems and document management platforms.
+
+### Hardware Platform
+
+The system runs on standard server hardware or cloud instances. Users access it through web browsers without needing to install any software.
+
+## Product Features
+
+The system includes the following features:
+
+### Document Processing and Management
+
+Users can upload PDF, Word documents, and scanned images using drag-and-drop or batch uploads. The system then:
+
+- Extracts text using OCR
+- Classifies documents by type (resumes, reports, contracts, letters)
+- Generates metadata (document type, date, author, and other attributes)
+- Stores everything in a searchable format
+
+A dashboard lets users view, sort, filter, preview, download, and delete documents.
+
+### Search and Retrieval
+
+Users can search using natural language queries instead of exact keywords. The system uses vector embeddings to find documents based on meaning, not just matching words. Users can filter results by document type, date range, or other metadata. Results are ranked by relevance and show matching text with highlights.
+
+### RAG System
+
+Using Retrieval-Augmented Generation (RAG) methodology, the system answers questions about uploaded documents. Users ask questions in plain language through a chat interface. The system finds relevant content and generates responses based on that content.
+
+**Example queries:**
+
+- "Extract skills from candidate John's resume"
+- "Summarize the findings in the Q3 report"
+- "What are the key terms in this contract?"
+
+### Resume Screening
+
+HR personnel create job descriptions with required skills, education, experience, and other criteria. The HR module connects to Gmail accounts using OAuth authentication and collects resume attachments from incoming emails. It keeps a history of collected resumes and lets HR personnel send follow-up emails to candidates.
+
+### Privacy and Security
+
+The system includes role-based access control, authentication, activity logging, and audit trails to help protect data and support privacy compliance.
+
+## User Classes and Characteristics
+
+### HR Personnel
+
+HR personnel use the system mainly for resume screening and candidate management. They have moderate technical skills and are familiar with recruitment workflows. They need features for:
+
+- Connecting email accounts
+- Defining job descriptions
+- Reviewing candidate information
+- Managing shortlists
+- Exporting candidate data
+- Communicating with applicants
+
+HR personnel use the system frequently during recruitment cycles and occasionally at other times. The system should reduce the time spent on manual resume review.
+
+### Email Service
+
+The Email Service is an external system that handles email-based tasks in the HR module. It connects to email accounts using OAuth 2.0 to access and collect incoming resume attachments. It runs in the background and performs predefined tasks, helping to sync resumes and reduce manual effort for HR personnel.
+
+## Operating Environment
+
+### Server Environment
+
+- The system can run on Linux servers (Ubuntu 20.04+, CentOS 8+) or Windows Server 2019+
+- Minimum hardware:
+  - 16 GB RAM (32 GB recommended)
+  - Quad-core processor (eight-core recommended)
+  - 500 GB storage (SSD preferred)
+
+### Software Dependencies
+
+- Python 3.9+
+- PostgreSQL 13+ (for metadata and user data)
+- Vector database for embeddings and semantic search (e.g., FAISS, Weaviate, or Chroma)
+- OCR libraries for text extraction
+- NLP frameworks for document processing
+- Web frameworks for API and frontend
+- Docker for deployment
+
+### Client Environment
+
+- Supported browsers: Chrome 90+, Firefox 88+, Edge 90+, Safari 14+
+- JavaScript must be enabled
+- Stable internet or intranet connection required
+- No plugins or software installation needed
+- The interface adapts to different screen sizes (desktop and tablet)
+
+### Network Environment
+
+- Network connectivity required between server components and client devices
+- HR module needs outbound HTTPS connections to Gmail servers
+- Can be deployed behind firewalls with appropriate port configurations
+- Client-server communication uses HTTPS
+
+### Integration Environment
+
+- Gmail integration via OAuth 2.0 for HR resume collection
+- Future integrations may include document management systems, ERP platforms, or other applications via REST APIs
+
+## Design and Implementation Constraints
+
+### Privacy and Security Constraints
+
+- The system should implement security measures to protect sensitive information
+- Data encryption should be applied at rest and in transit
+- Audit trails should be maintained for data access and processing activities
+- Role-based access control (RBAC) should restrict functionality based on user privileges
+- Data storage and processing should comply with relevant data protection regulations (e.g., GDPR, CCPA) based on deployment location
+
+### Technology and Tool Constraints
+
+- The system should use modular components to reduce vendor lock-in
+- AI models should be deployable on cloud or local infrastructure based on needs
+- The system should support both CPU-only and GPU-accelerated deployments
+
+## User Documentation
+
+The system will include the following documentation:
+
+### Installation and Deployment Guide
+
+- Can be deployed on Linux or Windows servers using Docker or manual installation
+- Requires standard hardware; GPU optional for faster AI processing
+- Uses open-source components for backend, frontend, OCR, and AI
+- Includes a relational database for metadata and a vector database for search
+- Supports OCR, RAG for question answering, email-based resume collection, and role-based access control
+
+### HR Module User Guide
+
+Documentation for HR personnel covering:
+
+- Gmail account connection and resume collection
+- Creating and managing job descriptions and screening criteria
+- Reviewing extracted candidate information and shortlisting
+- Exporting candidate data
+- Workflow examples and best practices
+
+### API Documentation
+
+Technical documentation for developers including:
+
+- API endpoint descriptions with supported operations and parameters
+- Request and response formats with data structures
+- Authentication and authorization requirements
+- Error codes and handling procedures
+- Generated using Swagger/OpenAPI with usage examples
+
+### Quick Start Guide
+
+A short reference guide for new users covering:
+
+- Common tasks: document upload, search, and question answering
+- Step-by-step instructions
+- Print-friendly format for use as a reference card
+
+### Video Tutorials
+
+Short instructional videos covering:
+
+- Document upload, search, question answering, and HR module setup
+- Available within the system or as downloads
+- Supports user training and onboarding
+
+### Release Notes
+
+Documentation for each version including:
+
+- New features, enhancements, and resolved issues
+- Known issues and limitations
+- Upgrade and deployment instructions where applicable
+
+## Assumptions and Dependencies
+
+### Technical Assumptions
+
+- Hardware has sufficient CPU, memory, and storage
+- GPU is optional; the system works on CPU-only machines
+- Stable network connection available between system components
+- Internet connectivity available for HR module email integration
+- Python runtime and libraries remain compatible throughout development
+
+### AI and NLP Model Assumptions
+
+- Language and embedding models are available for local deployment
+- OCR provides acceptable accuracy for standard printed documents
+- Document quality affects extraction accuracy, especially for scanned or handwritten files
+- RAG returns relevant answers for most queries
+
+### Dependencies
+
+- Python and its ecosystem remain available and maintained
+- OCR, NLP, and vector storage libraries remain compatible
+- Web frameworks and containerization tools available for deployment
+- HR module requires Gmail API access and OAuth 2.0
+- Access to test documents and datasets for development
+- Academic supervision and feedback for progress
+- Trained personnel and documentation for long-term maintenance
+
+# System Features
+
+## User Authentication and Access Control
+
+### Description
+
+This feature provides user authentication and role-based access control so that only authorized users can access features appropriate to their roles.
+
+### Actors
+
+- HR Personnel
+
+### Functional Requirements
+
+| **#** | **Requirement**                                              | **Use Case** |
+| ----- | ------------------------------------------------------------ | ------------ |
+| FR01  | Allow users to log in using email and password               | UC-01        |
+| FR02  | Allow users to reset password using a verification mechanism | UC-02        |
+| FR03  | Restrict access to features unless user is authenticated     | UC-01        |
+
+## Document Upload and Processing
+
+### Description
+
+This feature allows HR personnel to upload documents and process them for analysis.
+
+### Actors
+
+- HR Personnel
+
+### Functional Requirements
+
+| **#** | **Requirement**                                                     | **Use Case** |
+| ----- | ------------------------------------------------------------------- | ------------ |
+| FR04  | Allow HR personnel to upload files such as resumes and HR documents | UC-03        |
+| FR05  | Extract text from uploaded documents using OCR when needed          | UC-04        |
+| FR06  | Store uploaded documents along with extracted text for retrieval    | UC-03        |
+
+## Search Document
+
+### Description
+
+This feature allows users to search documents and refine results using filters.
+
+### Actors
+
+- HR Personnel
+
+### Functional Requirements
+
+| **#** | **Requirement**                                                        | **Use Case** |
+| ----- | ---------------------------------------------------------------------- | ------------ |
+| FR07  | Allow users to search documents using keywords or natural language     | UC-05        |
+| FR08  | Allow users to search based on criteria such as skills, job role, date | UC-05        |
+| FR09  | Display search results ranked by relevance                             | UC-05        |
+
+## Filter Document
+
+### Description
+
+This feature allows HR personnel to filter documents based on various criteria.
+
+### Actors
+
+- HR Personnel
+
+### Functional Requirements
+
+| **#** | **Requirement**                                                        | **Use Case** |
+| ----- | ---------------------------------------------------------------------- | ------------ |
+| FR10  | Allow users to filter documents based on criteria (skills, role, date) | UC-06        |
+
+## Job Creation and Management
+
+### Description
+
+This feature allows HR personnel to create and manage job postings for resume screening.
+
+### Actors
+
+- HR Personnel
+
+### Functional Requirements
+
+| **#** | **Requirement**                                             | **Use Case** |
+| ----- | ----------------------------------------------------------- | ------------ |
+| FR11  | Allow HR personnel to create job descriptions with criteria | UC-06        |
+| FR12  | Allow HR personnel to edit existing job postings            | UC-07        |
+
+## Resume Viewing and Candidate Screening
+
+### Description
+
+This feature allows HR personnel to review resumes and shortlist candidates.
+
+### Actors
+
+- HR Personnel
+
+### Functional Requirements
+
+| **#** | **Requirement**                                                   | **Use Case** |
+| ----- | ----------------------------------------------------------------- | ------------ |
+| FR13  | Allow HR personnel to view and read extracted resume content      | UC-12        |
+| FR14  | Allow HR personnel to shortlist candidates based on job relevance | UC-12        |
+| FR15  | Allow HR personnel to reject candidates                           | UC-12        |
+| FR16  | Allow HR personnel to export shortlisted candidates to Excel      | UC-05        |
+
+## Email Integration and Resume Synchronization
+
+### Description
+
+This feature connects the system with email services to collect resumes.
+
+### Actors
+
+- HR Personnel
+- Email Service
+
+### Functional Requirements
+
+| **#** | **Requirement**                                       | **Use Case** |
+| ----- | ----------------------------------------------------- | ------------ |
+| FR17  | Allow HR personnel to connect their email account     | UC-08        |
+| FR18  | Sync resume attachments from connected email accounts | UC-09        |
+
+## Logs and Metadata Management
+
+### Description
+
+This feature provides visibility into system activities and document data.
+
+### Actors
+
+- HR Personnel
+
+### Functional Requirements
+
+| **#** | **Requirement**                                                      | **Use Case** |
+| ----- | -------------------------------------------------------------------- | ------------ |
+| FR19  | Allow users to view activity logs                                    | UC-10        |
+| FR20  | Allow users to view extracted document metadata (skills, experience) | UC-11        |
+
+# Use Cases
+
+## UC-01: Login
+
+| **Field**                    | **Description**                                                                        |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| **Use Case #**               | UC-01                                                                                  |
+| **Context of Use**           | HR personnel logs in to access the system                                              |
+| **Scope**                    | User Authentication                                                                    |
+| **Primary Actor**            | HR Personnel                                                                           |
+| **Stakeholders & Interests** | HR – access to system                                                                  |
+| **Pre-Conditions**           | 1. System is running 2. User is registered                                             |
+| **Trigger**                  | HR personnel selects Login                                                             |
+| **Main Course**              | 1. Open Login Page 2. Enter email and password 3. Validate credentials 4. Grant access |
+| **Post-Conditions**          | User redirected to dashboard                                                           |
+| **Failure Protection**       | Invalid credentials block access                                                       |
+| **Extensions**               | UC-02 Reset Password                                                                   |
+| **Open Issues**              | Account lock after multiple failures                                                   |
+| **References**               | Use Case Diagram                                                                       |
+
+## UC-02: Reset Password
+
+| **Field**                    | **Description**                                       |
+| ---------------------------- | ----------------------------------------------------- |
+| **Use Case #**               | UC-02                                                 |
+| **Context of Use**           | User resets forgotten password                        |
+| **Scope**                    | User Authentication                                   |
+| **Primary Actor**            | HR Personnel                                          |
+| **Stakeholders & Interests** | HR – account recovery                                 |
+| **Pre-Conditions**           | User email exists                                     |
+| **Trigger**                  | User clicks "Reset Password"                          |
+| **Main Course**              | 1. Enter email 2. Verify identity 3. Set new password |
+| **Post-Conditions**          | Password updated                                      |
+| **Failure Protection**       | Invalid email rejected                                |
+| **Extensions**               | Verification timeout                                  |
+| **Open Issues**              | Password policy                                       |
+| **References**               | Use Case Diagram                                      |
+
+## UC-03: Search Documents
+
+| **Field**                    | **Description**                                          |
+| ---------------------------- | -------------------------------------------------------- |
+| **Use Case #**               | UC-03                                                    |
+| **Context of Use**           | HR personnel searches stored documents                   |
+| **Scope**                    | Document Retrieval                                       |
+| **Primary Actor**            | HR Personnel                                             |
+| **Stakeholders & Interests** | HR – document access                                     |
+| **Pre-Conditions**           | Documents exist                                          |
+| **Trigger**                  | HR personnel enters search query                         |
+| **Main Course**              | 1. Enter keywords 2. Search documents 3. Display results |
+| **Post-Conditions**          | Matching documents shown                                 |
+| **Failure Protection**       | No results handled                                       |
+| **Extensions**               | UC-04 Filter Search, UC-05 Export Excel                  |
+| **Open Issues**              | Ranking logic                                            |
+| **References**               | Use Case Diagram                                         |
+
+## UC-04: Filter Search
+
+| **Field**                    | **Description**                     |
+| ---------------------------- | ----------------------------------- |
+| **Use Case #**               | UC-04                               |
+| **Context of Use**           | HR personnel refines search results |
+| **Scope**                    | Search Filtering                    |
+| **Primary Actor**            | HR Personnel                        |
+| **Stakeholders & Interests** | HR – accurate results               |
+| **Pre-Conditions**           | Search performed                    |
+| **Trigger**                  | HR personnel selects filters        |
+| **Main Course**              | 1. Choose filters 2. Apply criteria |
+| **Post-Conditions**          | Filtered results displayed          |
+| **Failure Protection**       | Invalid filters ignored             |
+| **Extensions**               | Multi-filter selection              |
+| **Open Issues**              | Filter performance                  |
+| **References**               | Use Case Diagram                    |
+
+## UC-05: Export Excel
+
+| **Field**                    | **Description**                                |
+| ---------------------------- | ---------------------------------------------- |
+| **Use Case #**               | UC-05                                          |
+| **Context of Use**           | HR personnel exports search results            |
+| **Scope**                    | Data Export                                    |
+| **Primary Actor**            | HR Personnel                                   |
+| **Stakeholders & Interests** | HR – offline analysis                          |
+| **Pre-Conditions**           | Search results available                       |
+| **Trigger**                  | HR personnel selects Export                    |
+| **Main Course**              | 1. Select export option 2. Generate Excel file |
+| **Post-Conditions**          | Excel downloaded                               |
+| **Failure Protection**       | Export failure handled                         |
+| **Extensions**               | Custom fields                                  |
+| **Open Issues**              | File size limits                               |
+| **References**               | Use Case Diagram                               |
+
+## UC-06: Create Job
+
+| **Field**                    | **Description**                  |
+| ---------------------------- | -------------------------------- |
+| **Use Case #**               | UC-06                            |
+| **Context of Use**           | HR personnel creates job opening |
+| **Scope**                    | Job Management                   |
+| **Primary Actor**            | HR Personnel                     |
+| **Stakeholders & Interests** | HR – job posting                 |
+| **Pre-Conditions**           | User logged in                   |
+| **Trigger**                  | HR personnel selects Create Job  |
+| **Main Course**              | 1. Enter job details 2. Save job |
+| **Post-Conditions**          | Job created                      |
+| **Failure Protection**       | Invalid data blocked             |
+| **Extensions**               | UC-07 Edit/Delete Job            |
+| **Open Issues**              | Job template                     |
+| **References**               | Use Case Diagram                 |
+
+## UC-07: Edit/Delete Job
+
+| **Field**                    | **Description**                      |
+| ---------------------------- | ------------------------------------ |
+| **Use Case #**               | UC-07                                |
+| **Context of Use**           | HR personnel updates job information |
+| **Scope**                    | Job Management                       |
+| **Primary Actor**            | HR Personnel                         |
+| **Stakeholders & Interests** | HR – job accuracy                    |
+| **Pre-Conditions**           | Job exists                           |
+| **Trigger**                  | HR personnel selects edit/delete     |
+| **Main Course**              | 1. Modify Job 2. Save or delete      |
+| **Post-Conditions**          | Job updated                          |
+| **Failure Protection**       | Unauthorized action blocked          |
+| **Extensions**               | Job history                          |
+| **Open Issues**              | Audit trail                          |
+| **References**               | Use Case Diagram                     |
+
+## UC-08: Receive Email
+
+| **Field**                    | **Description**                                          |
+| ---------------------------- | -------------------------------------------------------- |
+| **Use Case #**               | UC-08                                                    |
+| **Context of Use**           | System receives resumes via email                        |
+| **Scope**                    | Resume Collection                                        |
+| **Primary Actor**            | Email Service                                            |
+| **Secondary Actor**          | System                                                   |
+| **Stakeholders & Interests** | HR – resume intake                                       |
+| **Pre-Conditions**           | Email integration enabled                                |
+| **Trigger**                  | Incoming email                                           |
+| **Main Course**              | 1. Receive email 2. Extract attachments 3. Store resumes |
+| **Post-Conditions**          | Resume added to system                                   |
+| **Failure Protection**       | Invalid attachment ignored                               |
+| **Extensions**               | Multiple attachments                                     |
+| **Open Issues**              | Spam handling                                            |
+| **References**               | Use Case Diagram                                         |
+
+## UC-09: Sync Resumes
+
+| **Field**                    | **Description**                    |
+| ---------------------------- | ---------------------------------- |
+| **Use Case #**               | UC-09                              |
+| **Context of Use**           | System syncs resumes from email    |
+| **Scope**                    | Resume Synchronization             |
+| **Primary Actor**            | Email Service                      |
+| **Stakeholders & Interests** | HR – updated data                  |
+| **Pre-Conditions**           | New emails received                |
+| **Trigger**                  | Sync scheduled                     |
+| **Main Course**              | 1. Fetch emails 2. Process resumes |
+| **Post-Conditions**          | Resumes indexed                    |
+| **Failure Protection**       | Duplicate check                    |
+| **Extensions**               | Manual sync                        |
+| **Open Issues**              | Sync frequency                     |
+| **References**               | Use Case Diagram                   |
+
+## UC-10: View Logs
+
+| **Field**                    | **Description**                      |
+| ---------------------------- | ------------------------------------ |
+| **Use Case #**               | UC-10                                |
+| **Context of Use**           | HR personnel reviews system activity |
+| **Scope**                    | Logging                              |
+| **Primary Actor**            | HR Personnel                         |
+| **Stakeholders & Interests** | HR – auditing                        |
+| **Pre-Conditions**           | Logs exist                           |
+| **Trigger**                  | HR personnel selects View Logs       |
+| **Main Course**              | 1. Retrieve logs 2. Display entries  |
+| **Post-Conditions**          | Logs shown                           |
+| **Failure Protection**       | Empty logs handled                   |
+| **Extensions**               | Filter logs                          |
+| **Open Issues**              | Log retention                        |
+| **References**               | Use Case Diagram                     |
+
+## UC-11: View Metadata
+
+| **Field**                    | **Description**                      |
+| ---------------------------- | ------------------------------------ |
+| **Use Case #**               | UC-11                                |
+| **Context of Use**           | HR personnel views document metadata |
+| **Scope**                    | Metadata Management                  |
+| **Primary Actor**            | HR Personnel                         |
+| **Stakeholders & Interests** | HR – document insight                |
+| **Pre-Conditions**           | Document exists                      |
+| **Trigger**                  | HR personnel selects View Metadata   |
+| **Main Course**              | 1. Fetch metadata 2. Display info    |
+| **Post-Conditions**          | Metadata shown                       |
+| **Failure Protection**       | Missing metadata handled             |
+| **Extensions**               | Metadata edit                        |
+| **Open Issues**              | Standard fields                      |
+| **References**               | Use Case Diagram                     |
+
+## UC-12: Read Resumes
+
+| **Field**                    | **Description**                   |
+| ---------------------------- | --------------------------------- |
+| **Use Case #**               | UC-12                             |
+| **Context of Use**           | HR personnel reads resume content |
+| **Scope**                    | Resume Analysis                   |
+| **Primary Actor**            | HR Personnel                      |
+| **Stakeholders & Interests** | HR – candidate review             |
+| **Pre-Conditions**           | Resume processed                  |
+| **Trigger**                  | HR personnel selects resume       |
+| **Main Course**              | 1. Load resume 2. Display content |
+| **Post-Conditions**          | Resume displayed                  |
+| **Failure Protection**       | OCR fallback                      |
+| **Extensions**               | Highlight skills                  |
+| **Open Issues**              | Formatting                        |
+| **References**               | Use Case Diagram                  |
+
+\pagebreak
+
+# Diagrams
+
+## Use Case Diagram
+
+![Figure 2: Use Case Diagram](./src/images/use_case_diagram.jpeg){width=100%}
+
+## Activity Diagram
+
+![Figure 3: Activity Diagram](./src/images/activity_diagram.png){height=8in}
+
+## DFD Diagrams
+
+### Level 0
+
+![Figure 4: DFD Level 0 Diagram](./src/images/dfd_level_0.jpeg){width=100%}
+
+### Level 1
+
+![Figure 5: DFD Level 1 Diagram](./src/images/dfd_level_1.png){height=6in}
+
+### Level 2
+
+![Figure 6: DFD Level 2 Diagram](./src/images/dfd_level_2.png){width=100%}

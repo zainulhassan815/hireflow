@@ -1,5 +1,11 @@
-import { Link } from "react-router-dom";
-import { MoreHorizontalIcon, PlusIcon, UsersIcon } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  MoreHorizontalIcon,
+  PencilIcon,
+  PlusIcon,
+  TrashIcon,
+  UsersIcon,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Typography } from "@/components/ui/typography";
+import { toast } from "sonner";
 
 type JobStatus = "active" | "closed" | "draft";
 
@@ -94,6 +101,14 @@ const statusVariant: Record<JobStatus, "default" | "secondary" | "outline"> = {
 };
 
 export function JobsPage() {
+  const navigate = useNavigate();
+
+  const handleDeleteJob = (jobId: string) => {
+    // Mock delete action
+    toast.success("Job deleted successfully");
+    console.log("Deleting job:", jobId);
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -103,7 +118,7 @@ export function JobsPage() {
             Manage your job postings and view applicants
           </Typography>
         </div>
-        <Button>
+        <Button onClick={() => navigate("/jobs/create")}>
           <PlusIcon className="size-4" data-icon="inline-start" />
           Create Job
         </Button>
@@ -116,7 +131,10 @@ export function JobsPage() {
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <Typography variant="h6">
-                    <Link to={`/jobs/${job.id}`} className="hover:underline">
+                    <Link
+                      to={`/jobs/${job.id}/edit`}
+                      className="hover:underline"
+                    >
                       {job.title}
                     </Link>
                   </Typography>
@@ -131,12 +149,25 @@ export function JobsPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem>Edit</DropdownMenuItem>
-                    <DropdownMenuItem>View Applications</DropdownMenuItem>
-                    <DropdownMenuItem>Duplicate</DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => navigate(`/jobs/${job.id}/edit`)}
+                    >
+                      <PencilIcon className="mr-2 size-4" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => navigate(`/candidates?job=${job.id}`)}
+                    >
+                      <UsersIcon className="mr-2 size-4" />
+                      View Applicants
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-destructive">
-                      Close Job
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => handleDeleteJob(job.id)}
+                    >
+                      <TrashIcon className="mr-2 size-4" />
+                      Delete Job
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

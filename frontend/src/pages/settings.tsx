@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Typography } from "@/components/ui/typography";
+import { EmailConnection } from "@/components/settings/email-connection";
 
 export function SettingsPage() {
   return (
@@ -43,6 +44,9 @@ export function SettingsPage() {
             <Button>Save Changes</Button>
           </CardContent>
         </Card>
+
+        {/* Email Integration */}
+        <EmailConnection />
 
         {/* Notifications */}
         <Card>
