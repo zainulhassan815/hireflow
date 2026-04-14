@@ -60,7 +60,8 @@ Every feature follows this loop. Docs live in `docs/dev/<feature-id>/`:
 2. **Plan** → write `docs/dev/<id>/01-plan.md` (scope, files to touch, API/schema changes, tests, risks).
 3. **Plan review** → critique the plan in `02-plan-review.md`. Revise `01-plan.md` until approved.
 4. **Implement** — code the change. No doc step.
-5. **Implementation review** → `03-implementation-review.md` — what was built vs plan, deviations, concerns.
+   - Final step before leaving this stage: run `uv run ruff check --fix && uv run ruff format` (backend) and `npm run lint && npm run format` (frontend) for anything touched. Don't defer.
+5. **Implementation review** → `03-implementation-review.md` — what was built vs plan, deviations, concerns. Note any ruff/lint findings.
 6. **Manual test** → `04-manual-test.md` — checklist of what was exercised in the browser / curl, results, any bugs found and fixed.
 7. **Commit** — single focused commit referencing the feature id (e.g. `F01: add User model + Alembic baseline`).
 8. **Summary** → `05-summary.md` — short postmortem: what shipped, links to PR/commit, follow-ups, lessons. Flip the tracker entry to `[x]`.
