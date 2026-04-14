@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Coroutine
 from typing import Annotated
 from uuid import UUID
 
@@ -14,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.core.redis import get_redis
 from app.core.security import TokenType, decode_token
-from app.models import User
+from app.models import User, UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=True)
 
@@ -45,3 +46,22 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_role(
+    *allowed: UserRole,
+) -> Callable[[User], Coroutine[None, None, User]]:
+    """Dependency factory: 403 unless the caller's role is in `allowed`."""
+
+    async def _checker(current_user: CurrentUser) -> User:
+        if current_user.role not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action.",
+            )
+        return current_user
+
+    return _checker
+
+
+RequireAdmin = Annotated[User, Depends(require_role(UserRole.ADMIN))]

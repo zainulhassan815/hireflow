@@ -55,7 +55,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - Secure token storage (httpOnly cookie preferred; else memory + refresh)
   - Route guards; 401 → auto-refresh → logout on failure
 
-- [ ] **F14 · RBAC scaffolding**
+- [x] **F14 · RBAC scaffolding**
   SRS: §Privacy and Security · Depends on: F10
   - Role enum (`hr`, `admin`); route-level role checks
   - Seed script for initial admin
