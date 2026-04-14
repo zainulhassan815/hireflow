@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import jwt
 from argon2 import PasswordHasher
@@ -51,6 +51,7 @@ def _create_token(
     payload: dict[str, Any] = {
         "sub": str(subject),
         "type": token_type.value,
+        "jti": str(uuid4()),
         "iat": now,
         "exp": now + expires_delta,
     }
@@ -80,6 +81,12 @@ def create_refresh_token(user_id: UUID) -> str:
         token_type=TokenType.REFRESH,
         expires_delta=timedelta(days=settings.jwt_refresh_token_expire_days),
     )
+
+
+def token_remaining_ttl(payload: dict[str, Any]) -> int:
+    """Seconds remaining until a decoded JWT expires. Clamped at 0."""
+    exp = datetime.fromtimestamp(payload["exp"], tz=UTC)
+    return max(0, int((exp - datetime.now(UTC)).total_seconds()))
 
 
 def decode_token(token: str, expected_type: TokenType) -> dict[str, Any]:

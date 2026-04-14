@@ -39,7 +39,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - `get_current_user` dependency; protect all non-public routes
   - Rate limit login attempts (address UC-01 open issue: account lock)
 
-- [ ] **F11 · Token refresh + logout**
+- [x] **F11 · Token refresh + logout**
   SRS: FR01 · Depends on: F10
   - `POST /auth/refresh`, `POST /auth/logout` (refresh-token revocation list in Redis)
 
