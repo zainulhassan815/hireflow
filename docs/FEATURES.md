@@ -22,7 +22,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - Base `User` model (id, email, hashed_password, role, timestamps)
   - First migration committed
 
-- [ ] **F02 · Generated API client & frontend wiring**
+- [x] **F02 · Generated API client & frontend wiring**
   SRS: infra · Depends on: F00
   - `openapi-ts` generation script wired into frontend build
   - Shared `apiClient` with base URL from env, auth header injection
