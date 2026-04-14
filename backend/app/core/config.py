@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
 
+    # Password reset
+    password_reset_token_expire_minutes: int = 15
+
     # File Upload
     max_file_size_mb: int = 10
 

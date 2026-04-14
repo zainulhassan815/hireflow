@@ -20,6 +20,17 @@ class RefreshRequest(BaseModel):
     refresh_token: str = Field(..., description="JWT refresh token")
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr = Field(..., description="Account email address")
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., description="One-time reset token from the email link")
+    new_password: str = Field(
+        ..., min_length=8, description="New password (min 8 characters)"
+    )
+
+
 class TokenResponse(BaseModel):
     access_token: str = Field(..., description="JWT access token")
     refresh_token: str = Field(..., description="JWT refresh token")

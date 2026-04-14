@@ -43,7 +43,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   SRS: FR01 · Depends on: F10
   - `POST /auth/refresh`, `POST /auth/logout` (refresh-token revocation list in Redis)
 
-- [ ] **F12 · Password reset flow**
+- [x] **F12 · Password reset flow**
   SRS: FR02, UC-02 · Depends on: F10
   - `POST /auth/forgot-password` issues one-time reset token (email delivery stubbable)
   - `POST /auth/reset-password` validates token + sets new password
