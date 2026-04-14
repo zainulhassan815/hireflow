@@ -60,14 +60,22 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - Role enum (`hr`, `admin`); route-level role checks
   - Seed script for initial admin
 
+- [x] **F15 · Layered refactor: domain / adapters / repositories / services**
+  Not user-facing. Moves auth/session/reset code behind `Protocol`s, adds
+  `domain/exceptions.py` + an error-handler, introduces `repositories/`,
+  formalises `Authorizer`. Routes become minimal HTTP wrappers. All F10–F14
+  HTTP contracts preserved and re-exercised.
+  Depends on: F14
+
+- [ ] **F20 · Document model + storage (MinIO)**
+  Depends on: F15
+  - Add MinIO to `docker-compose.yml` + one-shot bucket init
+  - `Document` table (id, owner, filename, mime, size, storage_key, status, metadata JSONB, timestamps)
+  - `BlobStorage` Protocol; `MinioBlobStorage` adapter (portable to S3/GCS via endpoint swap)
+
 ---
 
 ## Phase 2 — Documents (FR04–FR06, UC-03)
-
-- [ ] **F20 · Document model + storage**
-  Depends on: F01
-  - `Document` table (id, owner, filename, mime, size, storage_path, status, metadata JSONB, timestamps)
-  - Local-disk storage adapter behind an interface (S3/GCS later)
 
 - [ ] **F21 · Upload endpoint + frontend uploader**
   SRS: FR04 · Depends on: F20, F13

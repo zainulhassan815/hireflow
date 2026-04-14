@@ -29,9 +29,11 @@ os.environ.setdefault("JWT_SECRET_KEY", "x" * 32)
 
 from sqlalchemy import select  # noqa: E402
 
+from app.adapters.argon2_hasher import Argon2Hasher  # noqa: E402
 from app.core.db import SessionLocal  # noqa: E402
-from app.core.security import hash_password  # noqa: E402
 from app.models import User, UserRole  # noqa: E402
+
+_hasher = Argon2Hasher()
 
 
 async def main() -> int:
@@ -56,7 +58,7 @@ async def main() -> int:
                 return 2
             user = User(
                 email=email.lower(),
-                hashed_password=hash_password(password),
+                hashed_password=_hasher.hash(password),
                 full_name=full_name,
                 role=UserRole.ADMIN,
             )

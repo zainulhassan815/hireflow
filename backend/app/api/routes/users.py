@@ -1,18 +1,17 @@
-"""Admin-gated user administration endpoints."""
+"""User administration endpoints."""
 
 from fastapi import APIRouter
-from sqlalchemy import select
 
-from app.api.deps import DbSession, RequireAdmin
-from app.models import User
+from app.api.deps import CurrentUser, UserServiceDep
 from app.schemas.auth import UserResponse
 
 router = APIRouter()
 
 
 @router.get("", response_model=list[UserResponse])
-async def list_users(db: DbSession, _admin: RequireAdmin) -> list[UserResponse]:
+async def list_users(
+    current_user: CurrentUser, users: UserServiceDep
+) -> list[UserResponse]:
     """List all users. Admin only."""
-    result = await db.execute(select(User).order_by(User.created_at.desc()))
-    users = result.scalars().all()
-    return [UserResponse.model_validate(u) for u in users]
+    result = await users.list_all(actor=current_user)
+    return [UserResponse.model_validate(u) for u in result]

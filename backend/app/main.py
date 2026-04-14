@@ -1,9 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.error_handlers import handle_domain_error
 from app.api.router import api_router
 from app.core.api_config import custom_generate_unique_id
 from app.core.config import settings
+from app.domain.exceptions import DomainError
 
 
 def create_app() -> FastAPI:
@@ -28,6 +30,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.add_exception_handler(DomainError, handle_domain_error)
 
     app.include_router(api_router, prefix="/api")
 
