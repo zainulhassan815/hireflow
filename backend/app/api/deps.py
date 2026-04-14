@@ -154,7 +154,11 @@ def get_document_service(
     documents: DocumentRepositoryDep,
     storage: Annotated[BlobStorage, Depends(get_blob_storage)],
 ) -> DocumentService:
-    return DocumentService(documents, storage)
+    return DocumentService(
+        documents,
+        storage,
+        max_file_size_bytes=settings.max_file_size_mb * 1024 * 1024,
+    )
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]

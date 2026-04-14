@@ -32,5 +32,13 @@ class NotFound(DomainError):
     """Requested resource does not exist."""
 
 
+class FileTooLarge(DomainError):
+    """Uploaded file exceeds the configured size limit."""
+
+
+class UnsupportedFileType(DomainError):
+    """The file's MIME type is not in the allowed set."""
+
+
 class Forbidden(DomainError):
     """Caller is authenticated but not permitted to perform this action."""

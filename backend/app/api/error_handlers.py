@@ -14,10 +14,12 @@ from app.domain.exceptions import (
     AccountDisabled,
     DomainError,
     EmailAlreadyRegistered,
+    FileTooLarge,
     Forbidden,
     InvalidCredentials,
     InvalidToken,
     NotFound,
+    UnsupportedFileType,
 )
 
 _STATUS: dict[type[DomainError], int] = {
@@ -27,6 +29,8 @@ _STATUS: dict[type[DomainError], int] = {
     Forbidden: 403,
     NotFound: 404,
     EmailAlreadyRegistered: 409,
+    FileTooLarge: 413,
+    UnsupportedFileType: 415,
 }
 
 

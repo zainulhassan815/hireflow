@@ -77,7 +77,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## Phase 2 — Documents (FR04–FR06, UC-03)
 
-- [ ] **F21 · Upload endpoint + frontend uploader**
+- [x] **F21 · Upload endpoint + frontend uploader**
   SRS: FR04 · Depends on: F20, F13
   - `POST /documents` multipart, size/MIME validation (PDF, DOCX, images)
   - Drag-and-drop + batch upload on `documents.tsx` wired to real API

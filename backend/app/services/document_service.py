@@ -5,15 +5,38 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 
 from app.adapters.protocols import BlobStorage
-from app.domain.exceptions import Forbidden, NotFound
+from app.domain.exceptions import (
+    FileTooLarge,
+    Forbidden,
+    NotFound,
+    UnsupportedFileType,
+)
 from app.models import Document, User
 from app.repositories.document import DocumentRepository
 
+ALLOWED_MIME_TYPES = frozenset(
+    {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+        "image/png",
+        "image/jpeg",
+        "image/tiff",
+    }
+)
+
 
 class DocumentService:
-    def __init__(self, documents: DocumentRepository, storage: BlobStorage) -> None:
+    def __init__(
+        self,
+        documents: DocumentRepository,
+        storage: BlobStorage,
+        *,
+        max_file_size_bytes: int,
+    ) -> None:
         self._documents = documents
         self._storage = storage
+        self._max_size = max_file_size_bytes
 
     async def upload(
         self,
@@ -23,6 +46,15 @@ class DocumentService:
         mime_type: str,
         data: bytes,
     ) -> Document:
+        if len(data) > self._max_size:
+            limit_mb = self._max_size // (1024 * 1024)
+            raise FileTooLarge(f"File exceeds {limit_mb} MB limit.")
+        if mime_type not in ALLOWED_MIME_TYPES:
+            raise UnsupportedFileType(
+                f"File type {mime_type!r} is not supported. "
+                f"Allowed: PDF, DOCX, DOC, PNG, JPEG, TIFF."
+            )
+
         storage_key = f"{owner.id}/{uuid4()}/{filename}"
         blob = await self._storage.put(storage_key, data, mime_type)
         return await self._documents.create(
