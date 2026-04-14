@@ -20,7 +20,9 @@ class Settings(BaseSettings):
     )
 
     # Database
-    database_url: str = "postgresql://postgres:postgres@localhost:5432/hr_screening"
+    database_url: str = (
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/hr_screening"
+    )
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"

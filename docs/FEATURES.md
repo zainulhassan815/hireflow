@@ -15,7 +15,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - Real `.env.example` for Postgres, Redis, Chroma, JWT, Gmail OAuth, LLM provider
   - `backend/app/core/config.py` split: settings validated at import
 
-- [ ] **F01 · Database layer (Postgres + SQLAlchemy + Alembic)**
+- [x] **F01 · Database layer (Postgres + SQLAlchemy + Alembic)**
   SRS: infra · Depends on: F00
   - Async SQLAlchemy 2.x engine + session dependency
   - Alembic initialized with autogenerate

@@ -5,9 +5,12 @@ description = "AI-Powered HR Screening and Document Retrieval System Using RAG"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.18.4",
+    "asyncpg>=0.31.0",
     "fastapi[standard]>=0.127.0",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.12.0",
+    "sqlalchemy>=2.0.49",
     "uvicorn[standard]>=0.40.0",
 ]
 
