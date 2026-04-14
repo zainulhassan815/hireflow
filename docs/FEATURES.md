@@ -32,7 +32,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## Phase 1 — Authentication (FR01–FR03, UC-01, UC-02)
 
-- [ ] **F10 · Backend auth: register + login + JWT**
+- [x] **F10 · Backend auth: register + login + JWT**
   SRS: FR01, FR03 · Depends on: F01
   - `POST /auth/register`, `POST /auth/login` return access + refresh tokens
   - Bcrypt/argon2 password hashing
