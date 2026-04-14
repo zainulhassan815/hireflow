@@ -87,3 +87,24 @@ class ResetTokenStore(Protocol):
 @runtime_checkable
 class EmailSender(Protocol):
     async def send_password_reset(self, to: str, reset_url: str) -> None: ...
+
+
+# ---------- Blob storage ----------
+
+
+@dataclass(frozen=True, slots=True)
+class StoredBlob:
+    key: str
+    size: int
+    etag: str
+
+
+@runtime_checkable
+class BlobStorage(Protocol):
+    async def put(self, key: str, data: bytes, content_type: str) -> StoredBlob: ...
+
+    async def get(self, key: str) -> bytes: ...
+
+    async def delete(self, key: str) -> None: ...
+
+    async def presigned_url(self, key: str, expires_seconds: int = 3600) -> str: ...

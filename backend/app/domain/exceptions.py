@@ -28,5 +28,9 @@ class InvalidToken(DomainError):
     """Presented token is unrecognised, expired, revoked, or of the wrong type."""
 
 
+class NotFound(DomainError):
+    """Requested resource does not exist."""
+
+
 class Forbidden(DomainError):
     """Caller is authenticated but not permitted to perform this action."""

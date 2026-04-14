@@ -19,7 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.argon2_hasher import Argon2Hasher
 from app.adapters.email_sender import LoggingEmailSender
 from app.adapters.jwt_token_issuer import JwtTokenIssuer
+from app.adapters.minio_storage import MinioBlobStorage
 from app.adapters.protocols import (
+    BlobStorage,
     EmailSender,
     PasswordHasher,
     ResetTokenStore,
@@ -34,8 +36,10 @@ from app.core.db import get_db
 from app.core.redis import get_redis
 from app.domain.exceptions import InvalidToken
 from app.models import User, UserRole
+from app.repositories.document import DocumentRepository
 from app.repositories.user import UserRepository
 from app.services.auth_service import AuthService
+from app.services.document_service import DocumentService
 from app.services.password_reset_service import PasswordResetService
 from app.services.session_service import SessionService
 from app.services.user_service import UserService
@@ -58,6 +62,13 @@ _token_issuer = JwtTokenIssuer(
     refresh_ttl=timedelta(days=settings.jwt_refresh_token_expire_days),
 )
 _email_sender = LoggingEmailSender()
+_blob_storage = MinioBlobStorage(
+    endpoint=settings.storage_endpoint,
+    access_key=settings.storage_access_key,
+    secret_key=settings.storage_secret_key,
+    bucket=settings.storage_bucket,
+    region=settings.storage_region,
+)
 
 
 # ---------- Adapter providers ----------
@@ -83,6 +94,10 @@ def get_reset_token_store(redis: RedisDep) -> ResetTokenStore:
     return RedisResetTokenStore(redis)
 
 
+def get_blob_storage() -> BlobStorage:
+    return _blob_storage
+
+
 # ---------- Repository providers ----------
 
 
@@ -90,7 +105,12 @@ def get_user_repository(db: DbSession) -> UserRepository:
     return UserRepository(db)
 
 
+def get_document_repository(db: DbSession) -> DocumentRepository:
+    return DocumentRepository(db)
+
+
 UserRepositoryDep = Annotated[UserRepository, Depends(get_user_repository)]
+DocumentRepositoryDep = Annotated[DocumentRepository, Depends(get_document_repository)]
 
 
 # ---------- Service providers ----------
@@ -130,12 +150,20 @@ def get_user_service(users: UserRepositoryDep) -> UserService:
     return UserService(users)
 
 
+def get_document_service(
+    documents: DocumentRepositoryDep,
+    storage: Annotated[BlobStorage, Depends(get_blob_storage)],
+) -> DocumentService:
+    return DocumentService(documents, storage)
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
 PasswordResetServiceDep = Annotated[
     PasswordResetService, Depends(get_password_reset_service)
 ]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
 
 
 # ---------- Auth context ----------

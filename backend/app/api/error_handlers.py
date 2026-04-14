@@ -17,6 +17,7 @@ from app.domain.exceptions import (
     Forbidden,
     InvalidCredentials,
     InvalidToken,
+    NotFound,
 )
 
 _STATUS: dict[type[DomainError], int] = {
@@ -24,6 +25,7 @@ _STATUS: dict[type[DomainError], int] = {
     InvalidToken: 401,
     AccountDisabled: 403,
     Forbidden: 403,
+    NotFound: 404,
     EmailAlreadyRegistered: 409,
 }
 

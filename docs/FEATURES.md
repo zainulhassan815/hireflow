@@ -67,7 +67,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   HTTP contracts preserved and re-exercised.
   Depends on: F14
 
-- [ ] **F20 · Document model + storage (MinIO)**
+- [x] **F20 · Document model + storage (MinIO)**
   Depends on: F15
   - Add MinIO to `docker-compose.yml` + one-shot bucket init
   - `Document` table (id, owner, filename, mime, size, storage_key, status, metadata JSONB, timestamps)

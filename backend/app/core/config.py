@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     # File Upload
     max_file_size_mb: int = 10
 
+    # Object storage (MinIO / S3-compatible)
+    storage_endpoint: str = "http://localhost:9000"
+    storage_access_key: str = "minio"
+    storage_secret_key: SecretStr = Field(default=SecretStr("minio12345"))
+    storage_bucket: str = "hireflow-documents"
+    storage_region: str = "us-east-1"
+
     # Gmail OAuth (F50 — optional until that phase)
     gmail_client_id: str | None = None
     gmail_client_secret: SecretStr | None = None
