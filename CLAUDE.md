@@ -48,6 +48,7 @@ uv run pytest
 - `docs/FEATURES.md` — ordered feature tracker (pick next `[ ]`)
 - `docs/CONVENTIONS.md` — naming, FastAPI patterns, React composition rules, Tailwind v4
 - `docs/api-standards.md` — endpoint/tag/response conventions
+- `docs/openapi-standards.md` — **schema + route checklist for self-documenting OpenAPI**
 - `docs/frontend-standards.md` — component + data-fetching patterns
 - `docs/SRS_Document.md` — functional requirements (FR01+) and use cases
 - `docs/RAG-ARCHITECTURE.md` — RAG design reference
@@ -76,6 +77,7 @@ Every feature follows this loop. Docs live in `docs/dev/<feature-id>/`:
 ## House rules for Claude
 
 - **Read before writing.** Always read `docs/CONVENTIONS.md` + the relevant standards doc before generating code in a new area.
+- **Self-documenting API.** Every new schema and route must follow `docs/openapi-standards.md`: `Field(description=..., examples=[...])` on every field, `summary` + `description` + `responses` on every route. The OpenAPI spec is the frontend developer's only documentation.
 - **Match existing patterns.** Don't introduce new libraries or abstractions without flagging it in the plan.
 - **No new backend libs without mention.** SQLAlchemy, Alembic, bcrypt, langchain, etc. each need to appear in the feature plan.
 - **No mock data in committed code** past F02. Frontend pages should call the real API.

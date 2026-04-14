@@ -15,11 +15,35 @@ def create_app() -> FastAPI:
         version="0.1.0",
         generate_unique_id_function=custom_generate_unique_id,
         openapi_tags=[
-            {"name": "auth", "description": "Authentication operations"},
-            {"name": "jobs", "description": "Job posting management"},
-            {"name": "documents", "description": "Resume and document management"},
-            {"name": "search", "description": "Semantic search and RAG queries"},
-            {"name": "applications", "description": "Job applications management"},
+            {
+                "name": "auth",
+                "description": (
+                    "Registration, login, token refresh, logout, and password reset."
+                ),
+            },
+            {
+                "name": "users",
+                "description": "User administration (admin only).",
+            },
+            {
+                "name": "documents",
+                "description": (
+                    "Document upload, listing, metadata retrieval, "
+                    "download, and deletion."
+                ),
+            },
+            {
+                "name": "jobs",
+                "description": "Job posting management.",
+            },
+            {
+                "name": "search",
+                "description": "Semantic search and RAG question-answering.",
+            },
+            {
+                "name": "applications",
+                "description": "Job applications and candidate management.",
+            },
         ],
     )
 
