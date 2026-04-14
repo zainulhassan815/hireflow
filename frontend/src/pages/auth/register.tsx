@@ -6,7 +6,8 @@ import { AuthLayout } from "@/components/auth/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/providers/auth-provider";
+import { useAuth } from "@/providers/use-auth";
+import { AuthError } from "@/providers/auth-errors";
 import { toast } from "sonner";
 
 export function RegisterPage() {
@@ -39,8 +40,10 @@ export function RegisterPage() {
       await register(email, password, name);
       toast.success("Account created successfully");
       navigate("/login");
-    } catch {
-      toast.error("Failed to create account");
+    } catch (err) {
+      const message =
+        err instanceof AuthError ? err.message : "Failed to create account";
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }

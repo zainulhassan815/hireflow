@@ -6,6 +6,8 @@ import { AuthLayout } from "@/components/auth/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/providers/use-auth";
+import { AuthError } from "@/providers/auth-errors";
 import { toast } from "sonner";
 
 export function ForgotPasswordPage() {
@@ -13,17 +15,20 @@ export function ForgotPasswordPage() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isEmailSent, setIsEmailSent] = React.useState(false);
 
+  const { forgotPassword } = useAuth();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      // TODO: Implement actual password reset request
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await forgotPassword(email);
       setIsEmailSent(true);
-      toast.success("Reset link sent to your email");
-    } catch {
-      toast.error("Failed to send reset link");
+      toast.success("If the account exists, a reset link has been sent.");
+    } catch (err) {
+      const message =
+        err instanceof AuthError ? err.message : "Failed to send reset link";
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }

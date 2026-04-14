@@ -49,7 +49,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - `POST /auth/reset-password` validates token + sets new password
   - Password policy shared between FE/BE
 
-- [ ] **F13 · Frontend auth integration**
+- [x] **F13 · Frontend auth integration**
   SRS: FR01–FR03 · Depends on: F10–F12, F02
   - Replace `auth-provider.tsx` mock with real API calls
   - Secure token storage (httpOnly cookie preferred; else memory + refresh)

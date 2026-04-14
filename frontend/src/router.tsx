@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppLayout } from "@/components/layout/app-layout";
 import { ProtectedRoute } from "@/components/auth/protected-route";
+import { PublicOnlyRoute } from "@/components/auth/public-only-route";
 import { DashboardPage } from "@/pages/dashboard";
 import { JobsPage } from "@/pages/jobs";
 import { CreateJobPage } from "@/pages/jobs/create";
@@ -19,18 +20,30 @@ import { ForgotPasswordPage } from "@/pages/auth/forgot-password";
 import { ResetPasswordPage } from "@/pages/auth/reset-password";
 
 export const router = createBrowserRouter([
-  // Public auth routes
+  // Public auth routes (redirect to app if already signed in)
   {
     path: "/login",
-    element: <LoginPage />,
+    element: (
+      <PublicOnlyRoute>
+        <LoginPage />
+      </PublicOnlyRoute>
+    ),
   },
   {
     path: "/register",
-    element: <RegisterPage />,
+    element: (
+      <PublicOnlyRoute>
+        <RegisterPage />
+      </PublicOnlyRoute>
+    ),
   },
   {
     path: "/forgot-password",
-    element: <ForgotPasswordPage />,
+    element: (
+      <PublicOnlyRoute>
+        <ForgotPasswordPage />
+      </PublicOnlyRoute>
+    ),
   },
   {
     path: "/reset-password",

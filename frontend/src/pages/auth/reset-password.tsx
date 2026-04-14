@@ -11,6 +11,8 @@ import { AuthLayout } from "@/components/auth/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/providers/use-auth";
+import { AuthError } from "@/providers/auth-errors";
 import { toast } from "sonner";
 
 export function ResetPasswordPage() {
@@ -23,9 +25,12 @@ export function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get("token");
+  const { resetPassword } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!token) return;
 
     if (password !== confirmPassword) {
       toast.error("Passwords do not match");
@@ -40,12 +45,13 @@ export function ResetPasswordPage() {
     setIsSubmitting(true);
 
     try {
-      // TODO: Implement actual password reset
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await resetPassword(token, password);
       setIsSuccess(true);
       toast.success("Password reset successfully");
-    } catch {
-      toast.error("Failed to reset password");
+    } catch (err) {
+      const message =
+        err instanceof AuthError ? err.message : "Failed to reset password";
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }

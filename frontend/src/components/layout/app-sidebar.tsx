@@ -40,7 +40,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAuth } from "@/providers/auth-provider";
+import { useAuth } from "@/providers/use-auth";
 import { cn } from "@/lib/utils";
 
 const mainNavItems = [
@@ -287,11 +287,11 @@ export function AppSidebar() {
               )}
             >
               <div className="from-primary/20 to-primary/10 text-primary ring-primary/20 relative flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-sm font-semibold ring-2">
-                {user ? getInitials(user.name) : "U"}
+                {user ? getInitials(user.full_name ?? user.email) : "U"}
               </div>
               <div className="flex min-w-0 flex-1 flex-col group-data-[collapsible=icon]:hidden">
                 <span className="truncate text-sm font-medium">
-                  {user?.name || "User"}
+                  {user?.full_name || "User"}
                 </span>
                 <span className="text-muted-foreground truncate text-xs">
                   {user?.email || ""}
@@ -306,7 +306,7 @@ export function AppSidebar() {
             className="w-56"
           >
             <div className="px-2 py-1.5">
-              <p className="text-sm font-medium">{user?.name || "User"}</p>
+              <p className="text-sm font-medium">{user?.full_name || "User"}</p>
               <p className="text-muted-foreground text-xs">
                 {user?.email || ""}
               </p>
