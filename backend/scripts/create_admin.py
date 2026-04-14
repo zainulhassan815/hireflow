@@ -21,22 +21,17 @@ import os
 import sys
 from pathlib import Path
 
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(BACKEND_ROOT))
-
-# Config validates on import; a throwaway JWT secret is fine for a seed script.
-os.environ.setdefault("JWT_SECRET_KEY", "x" * 32)
-
-from sqlalchemy import select  # noqa: E402
-
-from app.adapters.argon2_hasher import Argon2Hasher  # noqa: E402
-from app.core.db import SessionLocal  # noqa: E402
-from app.models import User, UserRole  # noqa: E402
-
-_hasher = Argon2Hasher()
-
 
 async def main() -> int:
+    os.environ.setdefault("JWT_SECRET_KEY", "a]kP9#mQ$2xR!vN7&wZ5^tL0@dF3+hY8")
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from sqlalchemy import select
+
+    from app.adapters.argon2_hasher import Argon2Hasher
+    from app.core.db import SessionLocal
+    from app.models import User, UserRole
+
     email = os.environ.get("ADMIN_EMAIL")
     password = os.environ.get("ADMIN_PASSWORD")
     full_name = os.environ.get("ADMIN_FULL_NAME", "Admin")
@@ -44,6 +39,8 @@ async def main() -> int:
     if not email:
         print("ADMIN_EMAIL is required", file=sys.stderr)
         return 2
+
+    hasher = Argon2Hasher()
 
     async with SessionLocal() as db:
         result = await db.execute(select(User).where(User.email == email.lower()))
@@ -58,7 +55,7 @@ async def main() -> int:
                 return 2
             user = User(
                 email=email.lower(),
-                hashed_password=_hasher.hash(password),
+                hashed_password=hasher.hash(password),
                 full_name=full_name,
                 role=UserRole.ADMIN,
             )
