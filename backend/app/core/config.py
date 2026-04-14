@@ -1,4 +1,7 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Annotated
+
+from pydantic import Field, SecretStr, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -11,6 +14,10 @@ class Settings(BaseSettings):
     # App
     app_name: str = "HR Screening RAG API"
     debug: bool = False
+    allowed_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:5173"],
+        description="CORS origins. Comma-separated in .env (e.g. https://a.com,https://b.com).",
+    )
 
     # Database
     database_url: str = "postgresql://postgres:postgres@localhost:5432/hr_screening"
@@ -22,8 +29,8 @@ class Settings(BaseSettings):
     chroma_host: str = "localhost"
     chroma_port: int = 8000
 
-    # JWT
-    jwt_secret_key: str = "change-me-in-production"
+    # JWT — required, no default. Generate with: openssl rand -hex 32
+    jwt_secret_key: SecretStr = Field(min_length=32)
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
@@ -31,5 +38,23 @@ class Settings(BaseSettings):
     # File Upload
     max_file_size_mb: int = 10
 
+    # Gmail OAuth (F50 — optional until that phase)
+    gmail_client_id: str | None = None
+    gmail_client_secret: SecretStr | None = None
+    gmail_redirect_uri: str | None = None
 
-settings = Settings()
+    # LLM provider (F33 — optional until that phase)
+    llm_provider: str = "anthropic"
+    anthropic_api_key: SecretStr | None = None
+    openai_api_key: SecretStr | None = None
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def _split_origins(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
+
+settings = Settings()  # fails fast on import if required vars are missing/invalid

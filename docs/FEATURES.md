@@ -8,7 +8,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## Phase 0 — Foundation
 
-- [ ] **F00 · Environment & config hardening**
+- [x] **F00 · Environment & config hardening**
   SRS: infra · Depends on: —
   - Enforce `JWT_SECRET_KEY` (no default; fail-fast on startup)
   - Drive CORS origins from env (`ALLOWED_ORIGINS`)
