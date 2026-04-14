@@ -1,0 +1,82 @@
+# Hireflow — Claude Code Guide
+
+AI-Powered HR Screening and Document Retrieval System using RAG. Built for HR personnel to manage documents, search/ask questions over them, screen resumes, and sync candidate emails from Gmail.
+
+## Stack
+
+- **Backend:** FastAPI, Pydantic v2, SQLAlchemy 2 (planned), Python 3.12, `uv`
+- **Frontend:** React 19, TypeScript, Vite, Tailwind v4, shadcn/ui, `@base-ui/react`
+- **Services:** PostgreSQL 15, Redis 7, ChromaDB (all via `docker-compose.yml`)
+- **API contract:** OpenAPI → `openapi-ts` generated client for the frontend
+
+## Repo layout
+
+```
+backend/          FastAPI app (core, schemas, models, services, api/routes)
+frontend/        React app (pages, components, providers, hooks)
+docs/            Specs + conventions (authoritative)
+  FEATURES.md    Main feature tracker — pick the next task from here
+  dev/           Per-feature planning/review/summary docs (this workflow)
+  SRS_Document.md, PRD.md, CONVENTIONS.md, api-standards.md, frontend-standards.md
+docker-compose.yml
+scripts/
+```
+
+## Dev commands
+
+```bash
+# Services
+docker compose up -d postgres redis chromadb
+
+# Backend (from backend/)
+uv sync
+uv run uvicorn app.main:app --reload
+
+# Frontend (from frontend/)
+npm install
+npm run dev           # vite dev server
+npm run generate-api  # regenerate API client from OpenAPI
+npm run lint
+npm run format
+
+# Tests (backend, from backend/)
+uv run pytest
+```
+
+## Authoritative docs — consult before coding
+
+- `docs/FEATURES.md` — ordered feature tracker (pick next `[ ]`)
+- `docs/CONVENTIONS.md` — naming, FastAPI patterns, React composition rules, Tailwind v4
+- `docs/api-standards.md` — endpoint/tag/response conventions
+- `docs/frontend-standards.md` — component + data-fetching patterns
+- `docs/SRS_Document.md` — functional requirements (FR01+) and use cases
+- `docs/RAG-ARCHITECTURE.md` — RAG design reference
+
+## Workflow (strict)
+
+Every feature follows this loop. Docs live in `docs/dev/<feature-id>/`:
+
+1. **Pick** — choose the next `[ ]` item in `docs/FEATURES.md`. Mark it `[~]`.
+2. **Plan** → write `docs/dev/<id>/01-plan.md` (scope, files to touch, API/schema changes, tests, risks).
+3. **Plan review** → critique the plan in `02-plan-review.md`. Revise `01-plan.md` until approved.
+4. **Implement** — code the change. No doc step.
+5. **Implementation review** → `03-implementation-review.md` — what was built vs plan, deviations, concerns.
+6. **Manual test** → `04-manual-test.md` — checklist of what was exercised in the browser / curl, results, any bugs found and fixed.
+7. **Commit** — single focused commit referencing the feature id (e.g. `F01: add User model + Alembic baseline`).
+8. **Summary** → `05-summary.md` — short postmortem: what shipped, links to PR/commit, follow-ups, lessons. Flip the tracker entry to `[x]`.
+
+### Conventions for dev docs
+
+- Feature id = the `FXX` code from `FEATURES.md` (e.g. `F01`, `F22`).
+- Folder name: `F01-database-layer/` (id + short slug).
+- Keep docs short. Bullets > prose. Link code by `path:line`.
+- Don't skip steps. If a step is trivial, write one line and move on — but leave a record.
+
+## House rules for Claude
+
+- **Read before writing.** Always read `docs/CONVENTIONS.md` + the relevant standards doc before generating code in a new area.
+- **Match existing patterns.** Don't introduce new libraries or abstractions without flagging it in the plan.
+- **No new backend libs without mention.** SQLAlchemy, Alembic, bcrypt, langchain, etc. each need to appear in the feature plan.
+- **No mock data in committed code** past F02. Frontend pages should call the real API.
+- **Security defaults:** never commit secrets, never weaken CORS/auth to make tests pass, fail-fast on missing env vars.
+- **Scope discipline:** implement only what the current feature covers. Park unrelated fixes in a "follow-ups" list in the summary.

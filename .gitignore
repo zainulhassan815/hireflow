@@ -41,3 +41,6 @@ chroma_data/
 
 # Drafts
 drafts/
+
+# Local dev workflow notes (per-feature plans, reviews, summaries)
+docs/dev/
