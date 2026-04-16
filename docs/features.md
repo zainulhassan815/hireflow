@@ -123,6 +123,34 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ---
 
+## Phase 2.5 — Frontend Integration Sprint
+
+Wire existing frontend pages to the real backend API. All pages must follow
+`docs/frontend-api-rules.md`: SDK types only, no mock data, no custom types.
+
+- [~] **F25 · Documents page**
+  Depends on: F21
+  - Upload via `documentsUploadDocument`, list via `documentsListDocuments`
+  - Download, delete, metadata view against real API
+  - Loading/empty/error states
+
+- [ ] **F26 · Search page**
+  Depends on: F31
+  - Wire to `searchSearchDocuments` with filter controls
+  - Display ranked results with highlights and metadata
+
+- [ ] **F27 · RAG chat page**
+  Depends on: F33
+  - New page or panel with `ragQueryDocuments`
+  - Show answer + source citations with links to documents
+
+- [ ] **F28 · Dashboard**
+  Depends on: F25
+  - Real counts (documents, recent uploads)
+  - Replace all mock data with API calls
+
+---
+
 ## Phase 4 — Jobs & Candidates (FR11–FR16, UC-06, UC-07, UC-12)
 
 - [ ] **F40 · Jobs CRUD**
