@@ -125,6 +125,21 @@ class VisionProvider(Protocol):
     ) -> str: ...
 
 
+# ---------- LLM ----------
+
+
+@runtime_checkable
+class LlmProvider(Protocol):
+    """Text-to-text LLM completion. Synchronous — call via
+    ``asyncio.to_thread`` from async routes.
+    """
+
+    def complete(self, system: str, user: str) -> str: ...
+
+    @property
+    def model_name(self) -> str: ...
+
+
 # ---------- Document classification ----------
 
 

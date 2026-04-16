@@ -38,7 +38,14 @@ def create_app() -> FastAPI:
             },
             {
                 "name": "search",
-                "description": "Semantic search and RAG question-answering.",
+                "description": "Hybrid semantic + metadata search across documents.",
+            },
+            {
+                "name": "rag",
+                "description": (
+                    "Retrieval-Augmented Generation: ask questions about "
+                    "uploaded documents and get AI-generated answers with citations."
+                ),
             },
             {
                 "name": "applications",

@@ -21,6 +21,7 @@ from app.adapters.argon2_hasher import Argon2Hasher
 from app.adapters.chroma_store import ChromaVectorStore
 from app.adapters.email_sender import LoggingEmailSender
 from app.adapters.jwt_token_issuer import JwtTokenIssuer
+from app.adapters.llm.registry import get_llm_provider
 from app.adapters.minio_storage import MinioBlobStorage
 from app.adapters.protocols import (
     BlobStorage,
@@ -44,6 +45,7 @@ from app.repositories.user import UserRepository
 from app.services.auth_service import AuthService
 from app.services.document_service import DocumentService
 from app.services.password_reset_service import PasswordResetService
+from app.services.rag_service import RagService
 from app.services.search_service import SearchService
 from app.services.session_service import SessionService
 from app.services.user_service import UserService
@@ -83,6 +85,10 @@ try:
 except Exception:
     _logger.warning("ChromaDB unavailable at startup; vector search disabled")
     _vector_store = None
+
+_llm_provider = get_llm_provider(settings)
+if _llm_provider:
+    _logger.info("LLM provider: %s", _llm_provider.model_name)
 
 
 # ---------- Adapter providers ----------
@@ -184,6 +190,12 @@ def get_search_service(documents: DocumentRepositoryDep) -> SearchService:
     return SearchService(documents, _vector_store)
 
 
+def get_rag_service(documents: DocumentRepositoryDep) -> RagService | None:
+    if _vector_store is None or _llm_provider is None:
+        return None
+    return RagService(documents, _vector_store, _llm_provider)
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
 PasswordResetServiceDep = Annotated[
@@ -192,6 +204,7 @@ PasswordResetServiceDep = Annotated[
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
 SearchServiceDep = Annotated[SearchService, Depends(get_search_service)]
+RagServiceDep = Annotated[RagService | None, Depends(get_rag_service)]
 
 
 # ---------- Auth context ----------

@@ -115,7 +115,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - Hybrid filter: SQL metadata filter + vector similarity
   - Frontend `search.tsx` + `documents.tsx` filter UI wired
 
-- [ ] **F33 · RAG chat (Q&A over documents)**
+- [x] **F33 · RAG chat (Q&A over documents)**
   SRS: §RAG System · Depends on: F31
   - `POST /rag/query` streams answer + citations
   - LLM provider abstraction (Anthropic / OpenAI / local)
