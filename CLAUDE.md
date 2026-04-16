@@ -48,6 +48,7 @@ uv run pytest
 
 ## Authoritative docs — consult before coding
 
+- `docs/ARCHITECTURE.md` — **system architecture: layers, pipelines, data model, auth, providers** (read first)
 - `docs/FEATURES.md` — ordered feature tracker (pick next `[ ]`)
 - `docs/CONVENTIONS.md` — naming, FastAPI patterns, React composition rules, Tailwind v4
 - `docs/api-standards.md` — endpoint/tag/response conventions
