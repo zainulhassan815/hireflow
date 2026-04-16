@@ -55,7 +55,12 @@ class Settings(BaseSettings):
     gmail_client_secret: SecretStr | None = None
     gmail_redirect_uri: str | None = None
 
-    # LLM provider (F33 — optional until that phase)
+    # Vision OCR provider: claude | ollama | tesseract | none
+    vision_provider: str = "tesseract"
+    vision_model: str | None = None
+    ollama_base_url: str = "http://localhost:11434"
+
+    # LLM / Embeddings (F33 — optional until that phase)
     llm_provider: str = "anthropic"
     anthropic_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None

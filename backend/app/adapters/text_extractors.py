@@ -7,15 +7,32 @@ dispatches to the first extractor that supports the given type.
 from __future__ import annotations
 
 import io
+import logging
+from typing import TYPE_CHECKING
 
 from app.adapters.protocols import ExtractionResult
 from app.domain.exceptions import UnsupportedFileType
 
+if TYPE_CHECKING:
+    from app.adapters.protocols import VisionProvider
+
+logger = logging.getLogger(__name__)
+
+_SCANNED_PAGE_THRESHOLD = 50  # chars — below this we treat the page as scanned
+
 
 class PdfExtractor:
-    """Extract text from PDF files using PyMuPDF."""
+    """Extract text from PDF files using PyMuPDF.
+
+    Pages that yield fewer than ``_SCANNED_PAGE_THRESHOLD`` characters are
+    treated as scanned: rendered to an image and delegated to the configured
+    ``VisionProvider`` for OCR.
+    """
 
     _MIME_TYPES = frozenset({"application/pdf"})
+
+    def __init__(self, vision: VisionProvider | None = None) -> None:
+        self._vision = vision
 
     def supports(self, mime_type: str) -> bool:
         return mime_type in self._MIME_TYPES
@@ -25,17 +42,32 @@ class PdfExtractor:
 
         doc = pymupdf.open(stream=data, filetype="pdf")
         pages: list[str] = []
+
         for page in doc:
-            pages.append(page.get_text())
+            text = page.get_text().strip()
+            if len(text) >= _SCANNED_PAGE_THRESHOLD or self._vision is None:
+                pages.append(text)
+            else:
+                pages.append(self._ocr_page(page))
+
+        page_count = len(pages)
         doc.close()
         return ExtractionResult(
             text="\n\n".join(pages).strip(),
-            page_count=len(pages),
+            page_count=page_count,
         )
+
+    def _ocr_page(self, page) -> str:  # type: ignore[no-untyped-def]
+        """Render the page to a PNG and delegate to the vision provider."""
+        assert self._vision is not None
+        pix = page.get_pixmap(dpi=300)
+        image_bytes = pix.tobytes("png")
+        logger.info("page %d has sparse text, delegating to vision OCR", page.number)
+        return self._vision.extract_text_from_image(image_bytes)
 
 
 class DocxExtractor:
-    """Extract text from DOCX/DOC files using python-docx."""
+    """Extract text from DOCX files using python-docx."""
 
     _MIME_TYPES = frozenset(
         {
@@ -56,35 +88,34 @@ class DocxExtractor:
 
 
 class ImageExtractor:
-    """Extract text from images using Tesseract OCR."""
+    """Extract text from images by delegating to the configured VisionProvider."""
 
     _MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/tiff"})
+
+    def __init__(self, vision: VisionProvider) -> None:
+        self._vision = vision
 
     def supports(self, mime_type: str) -> bool:
         return mime_type in self._MIME_TYPES
 
     def extract(self, data: bytes, mime_type: str) -> ExtractionResult:
-        import pytesseract
-        from PIL import Image
-
-        image = Image.open(io.BytesIO(data))
-        text: str = pytesseract.image_to_string(image)
-        return ExtractionResult(text=text.strip())
+        text = self._vision.extract_text_from_image(data)
+        return ExtractionResult(text=text)
 
 
 class CompositeExtractor:
     """Dispatch to the first extractor that supports the given MIME type.
 
-    This is the implementation wired into the service layer. Adding a new
-    format means writing an extractor class and appending it to the list.
+    Wired in the Celery task with the runtime-resolved ``VisionProvider``.
     """
 
-    def __init__(self, extractors: list | None = None) -> None:
-        self._extractors = extractors or [
-            PdfExtractor(),
+    def __init__(self, vision: VisionProvider | None = None) -> None:
+        self._extractors = [
+            PdfExtractor(vision=vision),
             DocxExtractor(),
-            ImageExtractor(),
         ]
+        if vision is not None:
+            self._extractors.append(ImageExtractor(vision=vision))
 
     def supports(self, mime_type: str) -> bool:
         return any(e.supports(mime_type) for e in self._extractors)

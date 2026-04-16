@@ -110,6 +110,21 @@ class BlobStorage(Protocol):
     async def presigned_url(self, key: str, expires_seconds: int = 3600) -> str: ...
 
 
+# ---------- Vision OCR ----------
+
+
+@runtime_checkable
+class VisionProvider(Protocol):
+    """Extract text from an image using OCR or a vision-capable LLM.
+
+    Implementations are synchronous (called from Celery workers).
+    """
+
+    def extract_text_from_image(
+        self, image: bytes, *, prompt: str | None = None
+    ) -> str: ...
+
+
 # ---------- Text extraction ----------
 
 
