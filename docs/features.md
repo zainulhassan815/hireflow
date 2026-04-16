@@ -159,7 +159,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
   - `GET/POST/PATCH/DELETE /jobs`
   - Frontend `jobs` pages wired
 
-- [ ] **F41 · Candidate model + resume linking**
+- [x] **F41 · Candidate model + resume linking**
   Depends on: F23, F40
   - `Candidate` (derived from processed resumes: name, email, skills[], experience, source_document_id)
   - `Application` join table (candidate ↔ job, status: new/shortlisted/rejected, score)

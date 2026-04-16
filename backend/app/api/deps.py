@@ -40,10 +40,12 @@ from app.core.db import get_db
 from app.core.redis import get_redis
 from app.domain.exceptions import InvalidToken
 from app.models import User, UserRole
+from app.repositories.candidate import ApplicationRepository, CandidateRepository
 from app.repositories.document import DocumentRepository
 from app.repositories.job import JobRepository
 from app.repositories.user import UserRepository
 from app.services.auth_service import AuthService
+from app.services.candidate_service import CandidateService
 from app.services.document_service import DocumentService
 from app.services.job_service import JobService
 from app.services.password_reset_service import PasswordResetService
@@ -142,6 +144,21 @@ def get_job_repository(db: DbSession) -> JobRepository:
 JobRepositoryDep = Annotated[JobRepository, Depends(get_job_repository)]
 
 
+def get_candidate_repository(db: DbSession) -> CandidateRepository:
+    return CandidateRepository(db)
+
+
+def get_application_repository(db: DbSession) -> ApplicationRepository:
+    return ApplicationRepository(db)
+
+
+CandidateRepositoryDep = Annotated[
+    CandidateRepository, Depends(get_candidate_repository)
+]
+ApplicationRepositoryDep = Annotated[
+    ApplicationRepository, Depends(get_application_repository)
+]
+
 UserRepositoryDep = Annotated[UserRepository, Depends(get_user_repository)]
 DocumentRepositoryDep = Annotated[DocumentRepository, Depends(get_document_repository)]
 
@@ -209,6 +226,13 @@ def get_job_service(jobs: JobRepositoryDep) -> JobService:
     return JobService(jobs)
 
 
+def get_candidate_service(
+    candidates: CandidateRepositoryDep,
+    applications: ApplicationRepositoryDep,
+) -> CandidateService:
+    return CandidateService(candidates, applications)
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
 PasswordResetServiceDep = Annotated[
@@ -219,6 +243,7 @@ DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
 SearchServiceDep = Annotated[SearchService, Depends(get_search_service)]
 RagServiceDep = Annotated[RagService | None, Depends(get_rag_service)]
 JobServiceDep = Annotated[JobService, Depends(get_job_service)]
+CandidateServiceDep = Annotated[CandidateService, Depends(get_candidate_service)]
 
 
 # ---------- Auth context ----------
