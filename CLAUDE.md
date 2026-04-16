@@ -14,10 +14,10 @@ AI-Powered HR Screening and Document Retrieval System using RAG. Built for HR pe
 ```
 backend/          FastAPI app (core, schemas, models, services, api/routes)
 frontend/        React app (pages, components, providers, hooks)
-docs/            Specs + conventions (authoritative)
-  FEATURES.md    Main feature tracker — pick the next task from here
+docs/            Specs + conventions (authoritative, kebab-case filenames)
+  features.md    Main feature tracker — pick the next task from here
+  architecture.md System architecture reference
   dev/           Per-feature planning/review/summary docs (this workflow)
-  SRS_Document.md, PRD.md, CONVENTIONS.md, api-standards.md, frontend-standards.md
 docker-compose.yml
 scripts/
 ```
@@ -48,20 +48,20 @@ uv run pytest
 
 ## Authoritative docs — consult before coding
 
-- `docs/ARCHITECTURE.md` — **system architecture: layers, pipelines, data model, auth, providers** (read first)
-- `docs/FEATURES.md` — ordered feature tracker (pick next `[ ]`)
-- `docs/CONVENTIONS.md` — naming, FastAPI patterns, React composition rules, Tailwind v4
+- `docs/architecture.md` — **system architecture: layers, pipelines, data model, auth, providers** (read first)
+- `docs/features.md` — ordered feature tracker (pick next `[ ]`)
+- `docs/conventions.md` — naming, FastAPI patterns, React composition rules, Tailwind v4
 - `docs/api-standards.md` — endpoint/tag/response conventions
 - `docs/openapi-standards.md` — **schema + route checklist for self-documenting OpenAPI**
 - `docs/frontend-standards.md` — component + data-fetching patterns
-- `docs/SRS_Document.md` — functional requirements (FR01+) and use cases
-- `docs/RAG-ARCHITECTURE.md` — RAG design reference
+- `docs/srs-document.md` — functional requirements (FR01+) and use cases
+- `docs/rag-architecture.md` — RAG design reference
 
 ## Workflow (strict)
 
 Every feature follows this loop. Docs live in `docs/dev/<feature-id>/`:
 
-1. **Pick** — choose the next `[ ]` item in `docs/FEATURES.md`. Mark it `[~]`.
+1. **Pick** — choose the next `[ ]` item in `docs/features.md`. Mark it `[~]`.
 2. **Plan** → write `docs/dev/<id>/01-plan.md` (scope, files to touch, API/schema changes, tests, risks).
 3. **Plan review** → critique the plan in `02-plan-review.md`. Revise `01-plan.md` until approved.
 4. **Implement** — code the change. No doc step.
@@ -73,14 +73,14 @@ Every feature follows this loop. Docs live in `docs/dev/<feature-id>/`:
 
 ### Conventions for dev docs
 
-- Feature id = the `FXX` code from `FEATURES.md` (e.g. `F01`, `F22`).
+- Feature id = the `FXX` code from `features.md` (e.g. `F01`, `F22`).
 - Folder name: `F01-database-layer/` (id + short slug).
 - Keep docs short. Bullets > prose. Link code by `path:line`.
 - Don't skip steps. If a step is trivial, write one line and move on — but leave a record.
 
 ## House rules for Claude
 
-- **Read before writing.** Always read `docs/CONVENTIONS.md` + the relevant standards doc before generating code in a new area.
+- **Read before writing.** Always read `docs/conventions.md` + the relevant standards doc before generating code in a new area.
 - **Self-documenting API.** Every new schema and route must follow `docs/openapi-standards.md`: `Field(description=..., examples=[...])` on every field, `summary` + `description` + `responses` on every route. The OpenAPI spec is the frontend developer's only documentation.
 - **Match existing patterns.** Don't introduce new libraries or abstractions without flagging it in the plan.
 - **No new backend libs without mention.** SQLAlchemy, Alembic, bcrypt, langchain, etc. each need to appear in the feature plan.

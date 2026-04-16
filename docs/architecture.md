@@ -360,7 +360,7 @@ All settings in `core/config.py` via `pydantic-settings`. Read from env vars and
 
 ## 12. Adding a new feature
 
-Follow the checklist from `docs/FEATURES.md`. For code:
+Follow the checklist from `docs/features.md`. For code:
 
 1. **Schema** — request/response DTOs in `schemas/`. Follow `docs/openapi-standards.md`.
 2. **Model + migration** — in `models/`. Run `alembic revision --autogenerate`. Add explicit `DROP TYPE` in downgrade for new enums.
