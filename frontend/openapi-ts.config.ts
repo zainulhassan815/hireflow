@@ -14,5 +14,8 @@ export default defineConfig({
       name: "@hey-api/transformers",
       dates: true,
     },
+    {
+      name: "@tanstack/react-query",
+    },
   ],
 });

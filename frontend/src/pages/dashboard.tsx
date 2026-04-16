@@ -1,5 +1,5 @@
-import * as React from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   BriefcaseIcon,
   FileTextIcon,
@@ -10,12 +10,9 @@ import {
 } from "lucide-react";
 
 import {
-  candidatesListCandidates,
-  documentsListDocuments,
-  jobsListJobs,
-  type CandidateResponse,
-  type DocumentResponse,
-  type JobResponse,
+  listDocumentsOptions,
+  listJobsOptions,
+  listCandidatesOptions,
 } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,23 +33,21 @@ import { useAuth } from "@/providers/use-auth";
 export function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [documents, setDocuments] = React.useState<DocumentResponse[]>([]);
-  const [jobs, setJobs] = React.useState<JobResponse[]>([]);
-  const [candidates, setCandidates] = React.useState<CandidateResponse[]>([]);
-  const [loading, setLoading] = React.useState(true);
 
-  React.useEffect(() => {
-    Promise.all([
-      documentsListDocuments(),
-      jobsListJobs(),
-      candidatesListCandidates(),
-    ]).then(([docRes, jobRes, candRes]) => {
-      setDocuments(docRes.data ?? []);
-      setJobs(jobRes.data ?? []);
-      setCandidates(candRes.data ?? []);
-      setLoading(false);
-    });
-  }, []);
+  const { data: documents = [], isLoading: docsLoading } = useQuery({
+    ...listDocumentsOptions(),
+    select: (data) => data ?? [],
+  });
+  const { data: jobs = [], isLoading: jobsLoading } = useQuery({
+    ...listJobsOptions(),
+    select: (data) => data ?? [],
+  });
+  const { data: candidates = [], isLoading: candsLoading } = useQuery({
+    ...listCandidatesOptions(),
+    select: (data) => data ?? [],
+  });
+
+  const loading = docsLoading || jobsLoading || candsLoading;
 
   const stats = {
     documents: documents.length,
@@ -95,7 +90,6 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Card>
           <CardContent className="p-4">
@@ -154,7 +148,6 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      {/* Recent Documents */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <Typography variant="h5">Recent Documents</Typography>

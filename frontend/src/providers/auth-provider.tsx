@@ -1,12 +1,12 @@
 import * as React from "react";
 
 import {
-  authForgotPassword,
-  authLogin,
-  authLogout,
-  authReadMe,
-  authRegister,
-  authResetPassword,
+  forgotPassword as apiForgotPassword,
+  login as apiLogin,
+  logout as apiLogout,
+  readMe,
+  register as apiRegister,
+  resetPassword as apiResetPassword,
   clearTokens,
   getAccessToken,
   getRefreshToken,
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false);
         return;
       }
-      const { data, error } = await authReadMe();
+      const { data, error } = await readMe();
       if (cancelled) return;
       if (error || !data) {
         clearTokens();
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = React.useCallback(async (email: string, password: string) => {
-    const { data: tokens, error } = await authLogin({
+    const { data: tokens, error } = await apiLogin({
       body: { email, password },
     });
     if (error || !tokens) {
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAccessToken(tokens.access_token);
     setRefreshToken(tokens.refresh_token);
 
-    const { data: me, error: meError } = await authReadMe();
+    const { data: me, error: meError } = await readMe();
     if (meError || !me) {
       clearTokens();
       throw new AuthError("Could not load user profile.");
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = React.useCallback(
     async (email: string, password: string, fullName: string) => {
-      const { error } = await authRegister({
+      const { error } = await apiRegister({
         body: { email, password, full_name: fullName },
       });
       if (error) {
@@ -94,14 +94,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = React.useCallback(async () => {
     const refresh = getRefreshToken();
     if (refresh) {
-      await authLogout({ body: { refresh_token: refresh } });
+      await apiLogout({ body: { refresh_token: refresh } });
     }
     clearTokens();
     setUser(null);
   }, []);
 
   const forgotPassword = React.useCallback(async (email: string) => {
-    const { error } = await authForgotPassword({ body: { email } });
+    const { error } = await apiForgotPassword({ body: { email } });
     if (error) {
       throw new AuthError(errorMessage(error, "Could not send reset link."));
     }
@@ -109,7 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resetPassword = React.useCallback(
     async (token: string, newPassword: string) => {
-      const { error } = await authResetPassword({
+      const { error } = await apiResetPassword({
         body: { token, new_password: newPassword },
       });
       if (error) {

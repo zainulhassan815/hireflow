@@ -1,7 +1,7 @@
 import * as React from "react";
 import { CloudUploadIcon, FileIcon, XIcon } from "lucide-react";
 
-import { documentsUploadDocument, type DocumentResponse } from "@/api";
+import { uploadDocument, type DocumentResponse } from "@/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -93,7 +93,7 @@ export function UploadDialog({
       { file, status: "uploading" as const },
     ]);
 
-    const { data, error } = await documentsUploadDocument({
+    const { data, error } = await uploadDocument({
       body: { file },
     });
 
@@ -200,7 +200,10 @@ export function UploadDialog({
                   </Typography>
                   <div className="flex items-center gap-2">
                     {upload.status === "uploading" ? (
-                      <Progress value={50} className="h-1.5 flex-1 animate-pulse" />
+                      <Progress
+                        value={50}
+                        className="h-1.5 flex-1 animate-pulse"
+                      />
                     ) : (
                       <Typography variant="muted" className="text-xs">
                         {upload.status === "completed" ? "Done" : "Failed"}

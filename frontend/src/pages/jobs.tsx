@@ -1,5 +1,5 @@
-import * as React from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   BriefcaseIcon,
   MoreHorizontalIcon,
@@ -8,7 +8,7 @@ import {
   TrashIcon,
 } from "lucide-react";
 
-import { jobsDeleteJob, jobsListJobs, type JobResponse } from "@/api";
+import { listJobsOptions, deleteJob, type JobResponse } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -36,27 +36,23 @@ const statusVariant: Record<
 
 export function JobsPage() {
   const navigate = useNavigate();
-  const [jobs, setJobs] = React.useState<JobResponse[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const queryClient = useQueryClient();
 
-  React.useEffect(() => {
-    jobsListJobs().then(({ data }) => {
-      setJobs(data ?? []);
-      setLoading(false);
-    });
-  }, []);
+  const { data: jobs = [], isLoading } = useQuery({
+    ...listJobsOptions(),
+    select: (data) => data ?? [],
+  });
 
-  const handleDelete = async (job: JobResponse) => {
-    const { error } = await jobsDeleteJob({ path: { job_id: job.id } });
-    if (error) {
-      toast.error("Failed to delete job");
-      return;
-    }
-    toast.success(`${job.title} deleted`);
-    setJobs((prev) => prev.filter((j) => j.id !== job.id));
-  };
+  const deleteMut = useMutation({
+    mutationFn: (job: JobResponse) => deleteJob({ path: { job_id: job.id } }),
+    onSuccess: (_, job) => {
+      toast.success(`${job.title} deleted`);
+      queryClient.invalidateQueries({ queryKey: listJobsOptions().queryKey });
+    },
+    onError: () => toast.error("Failed to delete job"),
+  });
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <Spinner className="size-8" />
@@ -122,7 +118,7 @@ export function JobsPage() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="text-destructive"
-                        onClick={() => handleDelete(job)}
+                        onClick={() => deleteMut.mutate(job)}
                       >
                         <TrashIcon className="mr-2 size-4" />
                         Delete

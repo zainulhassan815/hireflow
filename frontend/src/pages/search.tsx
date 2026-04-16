@@ -9,8 +9,8 @@ import {
 } from "lucide-react";
 
 import {
-  searchSearchDocuments,
-  ragQueryDocuments,
+  searchDocuments,
+  queryDocuments,
   type SearchResultItem,
   type SourceCitation,
 } from "@/api";
@@ -56,7 +56,7 @@ export function SearchPage() {
     setIsSearching(true);
     setHasSearched(true);
 
-    const { data, error } = await searchSearchDocuments({
+    const { data, error } = await searchDocuments({
       body: { query: searchQuery },
     });
 
@@ -89,7 +89,7 @@ export function SearchPage() {
     setChatInput("");
     setIsSending(true);
 
-    const { data, error } = await ragQueryDocuments({
+    const { data, error } = await queryDocuments({
       body: { question: chatInput, max_chunks: 5 },
     });
 

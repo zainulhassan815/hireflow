@@ -1,8 +1,8 @@
 import { DownloadIcon, FileTextIcon, XIcon } from "lucide-react";
 
 import {
-  documentsDownloadDocument,
-  documentsGetDocumentMetadata,
+  downloadDocument,
+  getDocumentMetadata,
   type DocumentResponse,
   type DocumentMetadataResponse,
 } from "@/api";
@@ -41,18 +41,16 @@ export function DocumentPreview({
       return;
     }
     setLoading(true);
-    documentsGetDocumentMetadata({ path: { document_id: doc.id } }).then(
-      ({ data }) => {
-        if (data) setMetadata(data);
-        setLoading(false);
-      }
-    );
+    getDocumentMetadata({ path: { document_id: doc.id } }).then(({ data }) => {
+      if (data) setMetadata(data);
+      setLoading(false);
+    });
   }, [doc?.id, open]);
 
   if (!doc) return null;
 
   const handleDownload = async () => {
-    const { data, error } = await documentsDownloadDocument({
+    const { data, error } = await downloadDocument({
       path: { document_id: doc.id },
     });
     if (error) {

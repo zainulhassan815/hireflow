@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { authChangePassword, authUpdateProfile } from "@/api";
+import { changePassword, updateProfile } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ export function SettingsPage() {
 
   const handleSaveProfile = async () => {
     setSavingProfile(true);
-    const { error } = await authUpdateProfile({
+    const { error } = await updateProfile({
       body: {
         full_name: fullName || undefined,
         email: email !== user?.email ? email : undefined,
@@ -53,7 +53,7 @@ export function SettingsPage() {
       return;
     }
     setSavingPassword(true);
-    const { error } = await authChangePassword({
+    const { error } = await changePassword({
       body: {
         current_password: currentPassword,
         new_password: newPassword,

@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowLeftIcon } from "lucide-react";
 
-import { jobsCreateJob } from "@/api";
+import { createJob } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Typography } from "@/components/ui/typography";
 import { JobForm, type JobFormData } from "@/components/jobs/job-form";
@@ -11,7 +11,7 @@ export function CreateJobPage() {
   const navigate = useNavigate();
 
   const handleSubmit = async (data: JobFormData) => {
-    const { error } = await jobsCreateJob({
+    const { error } = await createJob({
       body: {
         title: data.title,
         description: data.description,

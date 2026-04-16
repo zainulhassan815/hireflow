@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   DownloadIcon,
   EyeIcon,
@@ -14,9 +15,9 @@ import {
 } from "lucide-react";
 
 import {
-  documentsDeleteDocument,
-  documentsDownloadDocument,
-  documentsListDocuments,
+  listDocumentsOptions,
+  deleteDocument,
+  downloadDocument,
   type DocumentResponse,
 } from "@/api";
 import { Badge } from "@/components/ui/badge";
@@ -64,8 +65,7 @@ const statusVariants: Record<
 };
 
 export function DocumentsPage() {
-  const [documents, setDocuments] = React.useState<DocumentResponse[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const queryClient = useQueryClient();
   const [view, setView] = React.useState<"list" | "grid">("list");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [uploadOpen, setUploadOpen] = React.useState(false);
@@ -73,30 +73,25 @@ export function DocumentsPage() {
     null
   );
 
-  const fetchDocuments = React.useCallback(async () => {
-    const { data } = await documentsListDocuments();
-    setDocuments(data ?? []);
-    setLoading(false);
-  }, []);
+  const { data: documents = [], isLoading } = useQuery({
+    ...listDocumentsOptions(),
+    select: (data) => data ?? [],
+  });
 
-  React.useEffect(() => {
-    fetchDocuments();
-  }, [fetchDocuments]);
-
-  const handleDelete = async (doc: DocumentResponse) => {
-    const { error } = await documentsDeleteDocument({
-      path: { document_id: doc.id },
-    });
-    if (error) {
-      toast.error("Failed to delete document");
-      return;
-    }
-    toast.success(`${doc.filename} deleted`);
-    setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
-  };
+  const deleteMut = useMutation({
+    mutationFn: (doc: DocumentResponse) =>
+      deleteDocument({ path: { document_id: doc.id } }),
+    onSuccess: (_, doc) => {
+      toast.success(`${doc.filename} deleted`);
+      queryClient.invalidateQueries({
+        queryKey: listDocumentsOptions().queryKey,
+      });
+    },
+    onError: () => toast.error("Failed to delete document"),
+  });
 
   const handleDownload = async (doc: DocumentResponse) => {
-    const { data, error } = await documentsDownloadDocument({
+    const { data, error } = await downloadDocument({
       path: { document_id: doc.id },
     });
     if (error) {
@@ -114,8 +109,10 @@ export function DocumentsPage() {
     }
   };
 
-  const handleUploaded = (doc: DocumentResponse) => {
-    setDocuments((prev) => [doc, ...prev]);
+  const handleUploaded = () => {
+    queryClient.invalidateQueries({
+      queryKey: listDocumentsOptions().queryKey,
+    });
   };
 
   const filtered = documents.filter((doc) =>
@@ -131,7 +128,7 @@ export function DocumentsPage() {
     failed: documents.filter((d) => d.status === "failed").length,
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <Spinner className="size-8" />
@@ -141,7 +138,6 @@ export function DocumentsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Typography variant="h3">Documents</Typography>
@@ -155,7 +151,6 @@ export function DocumentsPage() {
         </Button>
       </div>
 
-      {/* Search + View Toggle */}
       <div className="flex flex-wrap items-center gap-4">
         <div className="relative max-w-sm min-w-[200px] flex-1">
           <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
@@ -184,11 +179,10 @@ export function DocumentsPage() {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {(
           [
-            ["Total Documents", stats.total],
+            ["Total", stats.total],
             ["Resumes", stats.resumes],
             ["Processing", stats.processing],
             ["Failed", stats.failed],
@@ -207,7 +201,6 @@ export function DocumentsPage() {
         ))}
       </div>
 
-      {/* Empty State */}
       {documents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <FileTextIcon className="text-muted-foreground size-12" />
@@ -293,7 +286,7 @@ export function DocumentsPage() {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive"
-                            onClick={() => handleDelete(doc)}
+                            onClick={() => deleteMut.mutate(doc)}
                           >
                             <TrashIcon className="mr-2 size-4" />
                             Delete
@@ -319,35 +312,8 @@ export function DocumentsPage() {
                 onClick={() => setPreviewDoc(doc)}
               >
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="bg-muted flex size-12 items-center justify-center rounded">
-                      <TypeIcon className="text-muted-foreground size-6" />
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreHorizontalIcon className="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleDownload(doc)}>
-                          <DownloadIcon className="mr-2 size-4" />
-                          Download
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => handleDelete(doc)}
-                        >
-                          <TrashIcon className="mr-2 size-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                  <div className="bg-muted flex size-12 items-center justify-center rounded">
+                    <TypeIcon className="text-muted-foreground size-6" />
                   </div>
                   <div className="mt-4">
                     <Typography
@@ -364,14 +330,12 @@ export function DocumentsPage() {
                         {formatFileSize(doc.size_bytes)}
                       </Typography>
                     </div>
-                    <div className="mt-3">
-                      <Badge
-                        variant={statusVariants[doc.status] ?? "secondary"}
-                        className="capitalize"
-                      >
-                        {doc.status}
-                      </Badge>
-                    </div>
+                    <Badge
+                      variant={statusVariants[doc.status] ?? "secondary"}
+                      className="mt-3 capitalize"
+                    >
+                      {doc.status}
+                    </Badge>
                     <Typography variant="muted" className="mt-2 text-xs">
                       {formatDate(doc.created_at)}
                     </Typography>

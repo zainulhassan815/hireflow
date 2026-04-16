@@ -1,7 +1,8 @@
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { SearchIcon, UsersIcon } from "lucide-react";
 
-import { candidatesListCandidates, type CandidateResponse } from "@/api";
+import { listCandidatesOptions } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -16,16 +17,12 @@ import {
 import { Typography } from "@/components/ui/typography";
 
 export function CandidatesPage() {
-  const [candidates, setCandidates] = React.useState<CandidateResponse[]>([]);
-  const [loading, setLoading] = React.useState(true);
   const [searchQuery, setSearchQuery] = React.useState("");
 
-  React.useEffect(() => {
-    candidatesListCandidates().then(({ data }) => {
-      setCandidates(data ?? []);
-      setLoading(false);
-    });
-  }, []);
+  const { data: candidates = [], isLoading } = useQuery({
+    ...listCandidatesOptions(),
+    select: (data) => data ?? [],
+  });
 
   const filtered = candidates.filter((c) => {
     const q = searchQuery.toLowerCase();
@@ -36,7 +33,7 @@ export function CandidatesPage() {
     );
   });
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <Spinner className="size-8" />
@@ -46,25 +43,21 @@ export function CandidatesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <Typography variant="h3">Candidates</Typography>
-          <Typography variant="muted">
-            Candidates extracted from uploaded resumes
-          </Typography>
-        </div>
+      <div>
+        <Typography variant="h3">Candidates</Typography>
+        <Typography variant="muted">
+          Candidates extracted from uploaded resumes
+        </Typography>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="relative max-w-sm min-w-[200px] flex-1">
-          <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-          <Input
-            placeholder="Search by name, email, or skill..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <div className="relative max-w-sm min-w-[200px]">
+        <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+        <Input
+          placeholder="Search by name, email, or skill..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
       </div>
 
       {candidates.length === 0 ? (

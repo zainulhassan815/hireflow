@@ -1,5 +1,5 @@
 import { client } from "./generated/client.gen";
-import { authRefreshToken } from "./generated/sdk.gen";
+import { refreshToken } from "./generated/sdk.gen";
 
 const ACCESS_TOKEN_KEY = "hireflow.access_token";
 const REFRESH_TOKEN_KEY = "hireflow.refresh_token";
@@ -34,7 +34,7 @@ function endpointIsRefreshOrLogin(url: string): boolean {
 async function refreshAccessToken(): Promise<string | null> {
   const refresh = getRefreshToken();
   if (!refresh) return null;
-  const { data, error } = await authRefreshToken({
+  const { data, error } = await refreshToken({
     body: { refresh_token: refresh },
   });
   if (error || !data) {

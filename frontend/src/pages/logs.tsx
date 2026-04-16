@@ -1,7 +1,8 @@
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ClipboardListIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
 
-import { logsListLogs, type ActivityLogResponse } from "@/api";
+import { listLogsOptions } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,20 +38,16 @@ const actionVariant: Record<
 };
 
 export function LogsPage() {
-  const [logs, setLogs] = React.useState<ActivityLogResponse[]>([]);
-  const [loading, setLoading] = React.useState(true);
   const [searchQuery, setSearchQuery] = React.useState("");
 
-  const fetchLogs = React.useCallback(async () => {
-    setLoading(true);
-    const { data } = await logsListLogs({ query: { limit: 100 } });
-    setLogs(data ?? []);
-    setLoading(false);
-  }, []);
-
-  React.useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
+  const {
+    data: logs = [],
+    isLoading,
+    refetch,
+  } = useQuery({
+    ...listLogsOptions({ query: { limit: 100 } }),
+    select: (data) => data ?? [],
+  });
 
   const filtered = logs.filter((log) => {
     const q = searchQuery.toLowerCase();
@@ -61,7 +58,7 @@ export function LogsPage() {
     );
   });
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <Spinner className="size-8" />
@@ -78,22 +75,20 @@ export function LogsPage() {
             Audit trail of actions in the system
           </Typography>
         </div>
-        <Button variant="outline" onClick={fetchLogs}>
+        <Button variant="outline" onClick={() => refetch()}>
           <RefreshCwIcon className="size-4" data-icon="inline-start" />
           Refresh
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="relative max-w-sm min-w-[200px] flex-1">
-          <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-          <Input
-            placeholder="Search by action, detail, or resource..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <div className="relative max-w-sm min-w-[200px]">
+        <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+        <Input
+          placeholder="Search by action, detail, or resource..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
       </div>
 
       {logs.length === 0 ? (
