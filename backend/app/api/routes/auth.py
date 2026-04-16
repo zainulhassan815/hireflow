@@ -1,6 +1,7 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
 
 from app.api.deps import (
+    ActivityServiceDep,
     AuthServiceDep,
     CurrentUser,
     PasswordResetServiceDep,
@@ -57,10 +58,20 @@ async def register(request: RegisterRequest, auth: AuthServiceDep) -> UserRespon
     },
 )
 async def login(
-    request: LoginRequest, auth: AuthServiceDep, session: SessionServiceDep
+    request: LoginRequest,
+    http_request: Request,
+    auth: AuthServiceDep,
+    session: SessionServiceDep,
+    activity: ActivityServiceDep,
 ) -> TokenResponse:
     user = await auth.authenticate(email=request.email, password=request.password)
     pair = session.issue(user)
+    await activity.log(
+        actor_id=user.id,
+        action="login",
+        detail=f"Login from {request.email}",
+        ip_address=http_request.client.host if http_request.client else None,
+    )
     return TokenResponse(access_token=pair.access, refresh_token=pair.refresh)
 
 

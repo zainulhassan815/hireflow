@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query, UploadFile
 from fastapi.responses import Response
 
-from app.api.deps import CurrentUser, DocumentServiceDep
+from app.api.deps import ActivityServiceDep, CurrentUser, DocumentServiceDep
 from app.schemas.document import DocumentMetadataResponse, DocumentResponse
 from app.worker.tasks import extract_document_text
 
@@ -33,6 +33,7 @@ async def upload_document(
     file: UploadFile,
     current_user: CurrentUser,
     documents: DocumentServiceDep,
+    activity: ActivityServiceDep,
 ) -> DocumentResponse:
     data = await file.read()
     doc = await documents.upload(
@@ -42,6 +43,13 @@ async def upload_document(
         data=data,
     )
     extract_document_text.delay(str(doc.id))
+    await activity.log(
+        actor_id=current_user.id,
+        action="document_upload",
+        resource_type="document",
+        resource_id=str(doc.id),
+        detail=f"Uploaded {doc.filename}",
+    )
     return DocumentResponse.model_validate(doc)
 
 
@@ -160,5 +168,12 @@ async def delete_document(
     document_id: UUID,
     current_user: CurrentUser,
     documents: DocumentServiceDep,
+    activity: ActivityServiceDep,
 ) -> None:
     await documents.delete(document_id, actor=current_user)
+    await activity.log(
+        actor_id=current_user.id,
+        action="document_delete",
+        resource_type="document",
+        resource_id=str(document_id),
+    )

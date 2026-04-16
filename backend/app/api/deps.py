@@ -40,10 +40,12 @@ from app.core.db import get_db
 from app.core.redis import get_redis
 from app.domain.exceptions import InvalidToken
 from app.models import User, UserRole
+from app.repositories.activity_log import ActivityLogRepository
 from app.repositories.candidate import ApplicationRepository, CandidateRepository
 from app.repositories.document import DocumentRepository
 from app.repositories.job import JobRepository
 from app.repositories.user import UserRepository
+from app.services.activity_service import ActivityService
 from app.services.auth_service import AuthService
 from app.services.candidate_service import CandidateService
 from app.services.document_service import DocumentService
@@ -132,6 +134,15 @@ def get_blob_storage() -> BlobStorage:
 
 def get_user_repository(db: DbSession) -> UserRepository:
     return UserRepository(db)
+
+
+def get_activity_log_repository(db: DbSession) -> ActivityLogRepository:
+    return ActivityLogRepository(db)
+
+
+ActivityLogRepositoryDep = Annotated[
+    ActivityLogRepository, Depends(get_activity_log_repository)
+]
 
 
 def get_document_repository(db: DbSession) -> DocumentRepository:
@@ -242,6 +253,10 @@ def get_matching_service(
     return MatchingService(candidates, applications, jobs, _vector_store)
 
 
+def get_activity_service(logs: ActivityLogRepositoryDep) -> ActivityService:
+    return ActivityService(logs)
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
 PasswordResetServiceDep = Annotated[
@@ -254,6 +269,7 @@ RagServiceDep = Annotated[RagService | None, Depends(get_rag_service)]
 JobServiceDep = Annotated[JobService, Depends(get_job_service)]
 CandidateServiceDep = Annotated[CandidateService, Depends(get_candidate_service)]
 MatchingServiceDep = Annotated[MatchingService, Depends(get_matching_service)]
+ActivityServiceDep = Annotated[ActivityService, Depends(get_activity_service)]
 
 
 # ---------- Auth context ----------

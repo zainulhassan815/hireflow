@@ -1,6 +1,16 @@
 from fastapi import APIRouter
 
-from app.api.routes import auth, candidates, documents, health, jobs, rag, search, users
+from app.api.routes import (
+    auth,
+    candidates,
+    documents,
+    health,
+    jobs,
+    logs,
+    rag,
+    search,
+    users,
+)
 
 api_router = APIRouter()
 
@@ -13,3 +23,4 @@ api_router.include_router(rag.router, prefix="/rag", tags=["rag"])
 
 api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 api_router.include_router(candidates.router, prefix="/candidates", tags=["candidates"])
+api_router.include_router(logs.router, prefix="/logs", tags=["logs"])

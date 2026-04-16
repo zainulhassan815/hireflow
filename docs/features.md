@@ -200,7 +200,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
 
 ## Phase 6 — Observability & Admin (FR19, FR20, UC-10, UC-11)
 
-- [ ] **F60 · Activity log / audit trail**
+- [x] **F60 · Activity log / audit trail**
   SRS: FR19, UC-10, §Privacy and Security · Depends on: F14
   - `ActivityLog` table (actor, action, resource, at, ip)
   - Middleware captures auth + document + job + email events

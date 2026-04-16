@@ -48,8 +48,12 @@ def create_app() -> FastAPI:
                 ),
             },
             {
-                "name": "applications",
-                "description": "Job applications and candidate management.",
+                "name": "candidates",
+                "description": "Candidate management and job applications.",
+            },
+            {
+                "name": "logs",
+                "description": "Activity audit trail.",
             },
         ],
     )
