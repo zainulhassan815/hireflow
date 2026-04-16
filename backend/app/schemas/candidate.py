@@ -56,6 +56,37 @@ class CandidateWithScoreResponse(CandidateResponse):
     )
 
 
+class MatchBreakdown(BaseModel):
+    """Breakdown of how the match score was computed."""
+
+    skill_match: float = Field(
+        ..., ge=0, le=1, description="Required + preferred skill overlap"
+    )
+    experience_fit: float = Field(
+        ..., ge=0, le=1, description="Experience years vs job range"
+    )
+    vector_similarity: float = Field(
+        ..., ge=0, le=1, description="Semantic similarity from embeddings"
+    )
+
+
+class MatchResultItem(BaseModel):
+    """A candidate's match result against a job."""
+
+    candidate: CandidateResponse
+    score: float = Field(..., ge=0, le=1, description="Combined match score")
+    breakdown: MatchBreakdown
+    application_status: ApplicationStatus = Field(..., description="Application status")
+
+
+class MatchResponse(BaseModel):
+    """Results of matching candidates against a job."""
+
+    job_id: str = Field(..., description="Job that candidates were matched against")
+    results: list[MatchResultItem] = Field(..., description="Ranked candidates")
+    total: int = Field(..., description="Total candidates matched")
+
+
 class UpdateApplicationStatusRequest(BaseModel):
     """Update an application's status."""
 

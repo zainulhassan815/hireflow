@@ -164,7 +164,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
   - `Candidate` (derived from processed resumes: name, email, skills[], experience, source_document_id)
   - `Application` join table (candidate ↔ job, status: new/shortlisted/rejected, score)
 
-- [ ] **F42 · Resume ↔ job matching & ranking**
+- [x] **F42 · Resume ↔ job matching & ranking**
   SRS: FR13, FR14 · Depends on: F41, F30
   - Score candidates per job (embedding similarity + skill overlap + heuristics)
   - `GET /jobs/{id}/candidates` sorted by score

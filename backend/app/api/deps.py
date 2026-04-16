@@ -48,6 +48,7 @@ from app.services.auth_service import AuthService
 from app.services.candidate_service import CandidateService
 from app.services.document_service import DocumentService
 from app.services.job_service import JobService
+from app.services.matching_service import MatchingService
 from app.services.password_reset_service import PasswordResetService
 from app.services.rag_service import RagService
 from app.services.search_service import SearchService
@@ -233,6 +234,14 @@ def get_candidate_service(
     return CandidateService(candidates, applications)
 
 
+def get_matching_service(
+    candidates: CandidateRepositoryDep,
+    applications: ApplicationRepositoryDep,
+    jobs: JobRepositoryDep,
+) -> MatchingService:
+    return MatchingService(candidates, applications, jobs, _vector_store)
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
 PasswordResetServiceDep = Annotated[
@@ -244,6 +253,7 @@ SearchServiceDep = Annotated[SearchService, Depends(get_search_service)]
 RagServiceDep = Annotated[RagService | None, Depends(get_rag_service)]
 JobServiceDep = Annotated[JobService, Depends(get_job_service)]
 CandidateServiceDep = Annotated[CandidateService, Depends(get_candidate_service)]
+MatchingServiceDep = Annotated[MatchingService, Depends(get_matching_service)]
 
 
 # ---------- Auth context ----------

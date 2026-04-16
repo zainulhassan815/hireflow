@@ -4,8 +4,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query
 
-from app.api.deps import CurrentUser, JobServiceDep
+from app.api.deps import CurrentUser, JobServiceDep, MatchingServiceDep
 from app.models.job import JobStatus
+from app.schemas.candidate import (
+    CandidateResponse,
+    MatchBreakdown,
+    MatchResponse,
+    MatchResultItem,
+)
 from app.schemas.job import CreateJobRequest, JobResponse, UpdateJobRequest
 
 router = APIRouter()
@@ -120,3 +126,41 @@ async def delete_job(
     jobs: JobServiceDep,
 ) -> None:
     await jobs.delete(job_id, actor=current_user)
+
+
+@router.post(
+    "/{job_id}/match",
+    response_model=MatchResponse,
+    summary="Match candidates to a job",
+    description=(
+        "Score all candidates against the job using skill overlap, "
+        "experience fit, and vector similarity. Creates or updates "
+        "application records with computed scores. Returns ranked results."
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not the job owner or an admin"},
+        404: {"description": "Job not found"},
+    },
+)
+async def match_candidates(
+    job_id: UUID,
+    current_user: CurrentUser,
+    jobs: JobServiceDep,
+    matching: MatchingServiceDep,
+) -> MatchResponse:
+    await jobs.get(job_id, actor=current_user)
+    results = await matching.match_candidates_to_job(job_id, current_user.id)
+    return MatchResponse(
+        job_id=str(job_id),
+        results=[
+            MatchResultItem(
+                candidate=CandidateResponse.model_validate(r["candidate"]),
+                score=r["score"],
+                breakdown=MatchBreakdown(**r["breakdown"]),
+                application_status=r["application"].status,
+            )
+            for r in results
+        ],
+        total=len(results),
+    )
