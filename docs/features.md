@@ -153,7 +153,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
 
 ## Phase 4 — Jobs & Candidates (FR11–FR16, UC-06, UC-07, UC-12)
 
-- [ ] **F40 · Jobs CRUD**
+- [x] **F40 · Jobs CRUD**
   SRS: FR11, FR12 · Depends on: F14
   - `Job` model (title, description, required_skills[], experience_min, education, status)
   - `GET/POST/PATCH/DELETE /jobs`

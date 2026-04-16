@@ -41,9 +41,11 @@ from app.core.redis import get_redis
 from app.domain.exceptions import InvalidToken
 from app.models import User, UserRole
 from app.repositories.document import DocumentRepository
+from app.repositories.job import JobRepository
 from app.repositories.user import UserRepository
 from app.services.auth_service import AuthService
 from app.services.document_service import DocumentService
+from app.services.job_service import JobService
 from app.services.password_reset_service import PasswordResetService
 from app.services.rag_service import RagService
 from app.services.search_service import SearchService
@@ -133,6 +135,13 @@ def get_document_repository(db: DbSession) -> DocumentRepository:
     return DocumentRepository(db)
 
 
+def get_job_repository(db: DbSession) -> JobRepository:
+    return JobRepository(db)
+
+
+JobRepositoryDep = Annotated[JobRepository, Depends(get_job_repository)]
+
+
 UserRepositoryDep = Annotated[UserRepository, Depends(get_user_repository)]
 DocumentRepositoryDep = Annotated[DocumentRepository, Depends(get_document_repository)]
 
@@ -196,6 +205,10 @@ def get_rag_service(documents: DocumentRepositoryDep) -> RagService | None:
     return RagService(documents, _vector_store, _llm_provider)
 
 
+def get_job_service(jobs: JobRepositoryDep) -> JobService:
+    return JobService(jobs)
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
 PasswordResetServiceDep = Annotated[
@@ -205,6 +218,7 @@ UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
 SearchServiceDep = Annotated[SearchService, Depends(get_search_service)]
 RagServiceDep = Annotated[RagService | None, Depends(get_rag_service)]
+JobServiceDep = Annotated[JobService, Depends(get_job_service)]
 
 
 # ---------- Auth context ----------
