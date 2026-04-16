@@ -4,7 +4,7 @@ import { authRefreshToken } from "./generated/sdk.gen";
 const ACCESS_TOKEN_KEY = "hireflow.access_token";
 const REFRESH_TOKEN_KEY = "hireflow.refresh_token";
 
-const baseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const baseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
 client.setConfig({
   baseUrl,

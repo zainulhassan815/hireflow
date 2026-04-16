@@ -35,8 +35,8 @@ services-logs: ## Tail Docker service logs
 backend-install: ## Install backend dependencies
 	cd $(BACKEND) && uv sync --extra dev
 
-backend-dev: ## Start FastAPI dev server (port 8000)
-	cd $(BACKEND) && uv run uvicorn app.main:app --reload
+backend-dev: ## Start FastAPI dev server (port 8080)
+	cd $(BACKEND) && uv run uvicorn app.main:app --reload --port 8080
 
 backend-worker: ## Start Celery worker
 	cd $(BACKEND) && uv run celery -A app.worker.celery_app worker --loglevel=info
