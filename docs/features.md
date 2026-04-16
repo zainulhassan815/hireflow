@@ -144,7 +144,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
   - Integrated as tab in search page with `ragQueryDocuments`
   - Show answer + source citations with model info
 
-- [ ] **F28 · Dashboard**
+- [x] **F28 · Dashboard**
   Depends on: F25
   - Real counts (documents, recent uploads)
   - Replace all mock data with API calls
