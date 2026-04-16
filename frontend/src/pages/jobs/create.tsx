@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { ArrowLeftIcon } from "lucide-react";
 
+import { jobsCreateJob } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Typography } from "@/components/ui/typography";
 import { JobForm, type JobFormData } from "@/components/jobs/job-form";
@@ -10,9 +11,27 @@ export function CreateJobPage() {
   const navigate = useNavigate();
 
   const handleSubmit = async (data: JobFormData) => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    console.log("Creating job:", data);
+    const { error } = await jobsCreateJob({
+      body: {
+        title: data.title,
+        description: data.description,
+        required_skills: data.requiredSkills,
+        preferred_skills:
+          data.preferredSkills.length > 0 ? data.preferredSkills : undefined,
+        education_level: data.educationLevel || undefined,
+        experience_min: data.experienceMin,
+        experience_max: data.experienceMax || undefined,
+        location: data.location || undefined,
+      },
+    });
+    if (error) {
+      const message =
+        typeof error === "object" && "detail" in error
+          ? (error as { detail: string }).detail
+          : "Failed to create job";
+      toast.error(message);
+      return;
+    }
     toast.success("Job created successfully");
     navigate("/jobs");
   };

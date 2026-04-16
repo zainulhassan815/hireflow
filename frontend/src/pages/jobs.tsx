@@ -1,12 +1,14 @@
-import { Link, useNavigate } from "react-router-dom";
+import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import {
+  BriefcaseIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PlusIcon,
   TrashIcon,
-  UsersIcon,
 } from "lucide-react";
 
+import { jobsDeleteJob, jobsListJobs, type JobResponse } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -17,97 +19,50 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Spinner } from "@/components/ui/spinner";
 import { Typography } from "@/components/ui/typography";
+import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 
-type JobStatus = "active" | "closed" | "draft";
-
-const jobs: {
-  id: string;
-  title: string;
-  department: string;
-  location: string;
-  type: string;
-  status: JobStatus;
-  applicants: number;
-  postedAt: string;
-}[] = [
-  {
-    id: "1",
-    title: "Senior Frontend Developer",
-    department: "Engineering",
-    location: "Remote",
-    type: "Full-time",
-    status: "active",
-    applicants: 45,
-    postedAt: "2024-01-15",
-  },
-  {
-    id: "2",
-    title: "Backend Engineer",
-    department: "Engineering",
-    location: "New York, NY",
-    type: "Full-time",
-    status: "active",
-    applicants: 32,
-    postedAt: "2024-01-10",
-  },
-  {
-    id: "3",
-    title: "Product Manager",
-    department: "Product",
-    location: "San Francisco, CA",
-    type: "Full-time",
-    status: "active",
-    applicants: 28,
-    postedAt: "2024-01-08",
-  },
-  {
-    id: "4",
-    title: "DevOps Engineer",
-    department: "Engineering",
-    location: "Remote",
-    type: "Full-time",
-    status: "active",
-    applicants: 19,
-    postedAt: "2024-01-05",
-  },
-  {
-    id: "5",
-    title: "UI/UX Designer",
-    department: "Design",
-    location: "Austin, TX",
-    type: "Full-time",
-    status: "closed",
-    applicants: 67,
-    postedAt: "2023-12-20",
-  },
-  {
-    id: "6",
-    title: "Data Analyst",
-    department: "Analytics",
-    location: "Remote",
-    type: "Contract",
-    status: "draft",
-    applicants: 0,
-    postedAt: "2024-01-18",
-  },
-];
-
-const statusVariant: Record<JobStatus, "default" | "secondary" | "outline"> = {
-  active: "default",
-  closed: "secondary",
+const statusVariant: Record<
+  string,
+  "default" | "secondary" | "outline" | "destructive"
+> = {
+  open: "default",
   draft: "outline",
+  closed: "secondary",
+  archived: "destructive",
 };
 
 export function JobsPage() {
   const navigate = useNavigate();
+  const [jobs, setJobs] = React.useState<JobResponse[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const handleDeleteJob = (jobId: string) => {
-    // Mock delete action
-    toast.success("Job deleted successfully");
-    console.log("Deleting job:", jobId);
+  React.useEffect(() => {
+    jobsListJobs().then(({ data }) => {
+      setJobs(data ?? []);
+      setLoading(false);
+    });
+  }, []);
+
+  const handleDelete = async (job: JobResponse) => {
+    const { error } = await jobsDeleteJob({ path: { job_id: job.id } });
+    if (error) {
+      toast.error("Failed to delete job");
+      return;
+    }
+    toast.success(`${job.title} deleted`);
+    setJobs((prev) => prev.filter((j) => j.id !== job.id));
   };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Spinner className="size-8" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -115,7 +70,7 @@ export function JobsPage() {
         <div>
           <Typography variant="h3">Jobs</Typography>
           <Typography variant="muted">
-            Manage your job postings and view applicants
+            Manage your job postings and match candidates
           </Typography>
         </div>
         <Button onClick={() => navigate("/jobs/create")}>
@@ -124,77 +79,87 @@ export function JobsPage() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {jobs.map((job) => (
-          <Card key={job.id}>
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                  <Typography variant="h6">
-                    <Link
-                      to={`/jobs/${job.id}/edit`}
-                      className="hover:underline"
-                    >
-                      {job.title}
-                    </Link>
-                  </Typography>
-                  <Typography variant="muted">
-                    {job.department} · {job.location}
-                  </Typography>
+      {jobs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <BriefcaseIcon className="text-muted-foreground size-12" />
+          <Typography variant="h4" className="mt-4">
+            No jobs yet
+          </Typography>
+          <Typography variant="muted" className="mt-1">
+            Create your first job posting to start screening candidates
+          </Typography>
+          <Button className="mt-4" onClick={() => navigate("/jobs/create")}>
+            <PlusIcon className="size-4" data-icon="inline-start" />
+            Create Job
+          </Button>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {jobs.map((job) => (
+            <Card key={job.id}>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <Typography variant="h6">{job.title}</Typography>
+                    <Typography variant="muted">
+                      {job.location || "No location"} · Min {job.experience_min}
+                      yr
+                    </Typography>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon-sm">
+                        <MoreHorizontalIcon className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => navigate(`/jobs/${job.id}/edit`)}
+                      >
+                        <PencilIcon className="mr-2 size-4" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-destructive"
+                        onClick={() => handleDelete(job)}
+                      >
+                        <TrashIcon className="mr-2 size-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger>
-                    <Button variant="ghost" size="icon-sm">
-                      <MoreHorizontalIcon className="size-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => navigate(`/jobs/${job.id}/edit`)}
-                    >
-                      <PencilIcon className="mr-2 size-4" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => navigate(`/candidates?job=${job.id}`)}
-                    >
-                      <UsersIcon className="mr-2 size-4" />
-                      View Applicants
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="text-destructive"
-                      onClick={() => handleDeleteJob(job.id)}
-                    >
-                      <TrashIcon className="mr-2 size-4" />
-                      Delete Job
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Badge variant={statusVariant[job.status]}>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-1">
+                  {job.required_skills.slice(0, 4).map((skill) => (
+                    <Badge key={skill} variant="secondary" className="text-xs">
+                      {skill}
+                    </Badge>
+                  ))}
+                  {job.required_skills.length > 4 && (
+                    <Badge variant="outline" className="text-xs">
+                      +{job.required_skills.length - 4}
+                    </Badge>
+                  )}
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <Badge
+                    variant={statusVariant[job.status] ?? "outline"}
+                    className="capitalize"
+                  >
                     {job.status}
                   </Badge>
-                  <Typography variant="muted" as="span">
-                    {job.type}
+                  <Typography variant="muted" className="text-xs">
+                    {formatDate(job.created_at)}
                   </Typography>
                 </div>
-                <div className="text-muted-foreground flex items-center gap-1 text-sm">
-                  <UsersIcon className="size-4" />
-                  {job.applicants}
-                </div>
-              </div>
-              <Typography variant="muted" className="mt-3 text-xs">
-                Posted {new Date(job.postedAt).toLocaleDateString()}
-              </Typography>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
