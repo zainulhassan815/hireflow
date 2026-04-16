@@ -60,8 +60,9 @@ class Settings(BaseSettings):
     vision_model: str | None = None
     ollama_base_url: str = "http://localhost:11434"
 
-    # LLM / Embeddings (F33 — optional until that phase)
+    # LLM / Embeddings
     llm_provider: str = "anthropic"
+    llm_model: str = "claude-3-haiku-20240307"
     anthropic_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"

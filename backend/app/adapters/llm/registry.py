@@ -1,8 +1,7 @@
 """Runtime LLM provider factory.
 
-Shares the same config keys as the vision provider (``llm_provider``,
-``anthropic_api_key``, ``ollama_base_url``) so operators configure one
-provider and it serves vision, classification, and RAG.
+Uses ``llm_provider`` and ``llm_model`` from settings. Each provider
+type has its own sensible default model if ``llm_model`` isn't set.
 """
 
 from __future__ import annotations
@@ -13,6 +12,8 @@ from app.adapters.protocols import LlmProvider
 
 if TYPE_CHECKING:
     from app.core.config import Settings
+
+_OLLAMA_DEFAULT_MODEL = "llama3:8b"
 
 
 def get_llm_provider(settings: Settings) -> LlmProvider | None:
@@ -26,7 +27,7 @@ def get_llm_provider(settings: Settings) -> LlmProvider | None:
 
         return ClaudeLlmProvider(
             api_key=settings.anthropic_api_key,
-            model=settings.vision_model or "claude-sonnet-4-5-20250514",
+            model=settings.llm_model,
         )
 
     if name == "ollama":
@@ -34,7 +35,9 @@ def get_llm_provider(settings: Settings) -> LlmProvider | None:
 
         return OllamaLlmProvider(
             base_url=settings.ollama_base_url,
-            model=settings.vision_model or "llama3:8b",
+            model=settings.llm_model
+            if settings.llm_provider == "ollama"
+            else _OLLAMA_DEFAULT_MODEL,
         )
 
     return None
