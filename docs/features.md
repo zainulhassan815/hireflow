@@ -134,15 +134,15 @@ Wire existing frontend pages to the real backend API. All pages must follow
   - Download, delete, metadata view against real API
   - Loading/empty/error states
 
-- [ ] **F26 · Search page**
+- [x] **F26 · Search page**
   Depends on: F31
   - Wire to `searchSearchDocuments` with filter controls
   - Display ranked results with highlights and metadata
 
-- [ ] **F27 · RAG chat page**
+- [x] **F27 · RAG chat page**
   Depends on: F33
-  - New page or panel with `ragQueryDocuments`
-  - Show answer + source citations with links to documents
+  - Integrated as tab in search page with `ragQueryDocuments`
+  - Show answer + source citations with model info
 
 - [ ] **F28 · Dashboard**
   Depends on: F25

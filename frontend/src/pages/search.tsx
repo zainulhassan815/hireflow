@@ -1,7 +1,6 @@
 import * as React from "react";
 import {
   BotIcon,
-  DownloadIcon,
   FileTextIcon,
   SearchIcon,
   SendIcon,
@@ -9,6 +8,12 @@ import {
   UserIcon,
 } from "lucide-react";
 
+import {
+  searchSearchDocuments,
+  ragQueryDocuments,
+  type SearchResultItem,
+  type SourceCitation,
+} from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -21,94 +26,25 @@ import { Textarea } from "@/components/ui/textarea";
 import { Typography } from "@/components/ui/typography";
 import { toast } from "sonner";
 
-interface SearchResult {
-  id: string;
-  documentName: string;
-  documentType: string;
-  snippet: string;
-  relevanceScore: number;
-  matchedKeywords: string[];
-}
-
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
-  sources?: { documentName: string; snippet: string }[];
-  timestamp: Date;
+  sources?: SourceCitation[];
+  model?: string;
+  queryTimeMs?: number;
 }
-
-const mockSearchResults: SearchResult[] = [
-  {
-    id: "1",
-    documentName: "John_Doe_Resume.pdf",
-    documentType: "resume",
-    snippet:
-      "...5+ years of experience in **React**, **Node.js**, and **Python**. Led development of scalable microservices architecture...",
-    relevanceScore: 95,
-    matchedKeywords: ["React", "Node.js", "Python"],
-  },
-  {
-    id: "2",
-    documentName: "Sarah_Smith_CV.pdf",
-    documentType: "resume",
-    snippet:
-      "...Senior Frontend Developer with expertise in **React**, TypeScript, and modern web technologies. Experience with large-scale applications...",
-    relevanceScore: 88,
-    matchedKeywords: ["React", "TypeScript"],
-  },
-  {
-    id: "3",
-    documentName: "Q4_Financial_Report.pdf",
-    documentType: "report",
-    snippet:
-      "...The engineering team expanded significantly, with focus on **React** and **Node.js** technologies for the new platform...",
-    relevanceScore: 72,
-    matchedKeywords: ["React", "Node.js"],
-  },
-  {
-    id: "4",
-    documentName: "Technical_Requirements.docx",
-    documentType: "other",
-    snippet:
-      "...Preferred stack includes **React** for frontend, **Node.js** or **Python** for backend services...",
-    relevanceScore: 65,
-    matchedKeywords: ["React", "Node.js", "Python"],
-  },
-];
-
-const mockChatHistory: ChatMessage[] = [
-  {
-    id: "1",
-    role: "user",
-    content: "Find candidates with React and Node.js experience",
-    timestamp: new Date(Date.now() - 60000),
-  },
-  {
-    id: "2",
-    role: "assistant",
-    content:
-      "I found 2 candidates matching your criteria:\n\n1. **John Doe** - 5+ years experience with React, Node.js, and Python. Strong background in microservices.\n\n2. **Sarah Smith** - Senior Frontend Developer specializing in React and TypeScript.",
-    sources: [
-      {
-        documentName: "John_Doe_Resume.pdf",
-        snippet: "5+ years experience in React, Node.js, and Python...",
-      },
-      {
-        documentName: "Sarah_Smith_CV.pdf",
-        snippet: "Senior Frontend Developer with expertise in React...",
-      },
-    ],
-    timestamp: new Date(Date.now() - 55000),
-  },
-];
 
 export function SearchPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [isSearching, setIsSearching] = React.useState(false);
-  const [searchResults, setSearchResults] = React.useState<SearchResult[]>([]);
-  const [chatMessages, setChatMessages] =
-    React.useState<ChatMessage[]>(mockChatHistory);
+  const [searchResults, setSearchResults] = React.useState<SearchResultItem[]>(
+    []
+  );
+  const [queryTimeMs, setQueryTimeMs] = React.useState<number | null>(null);
+  const [hasSearched, setHasSearched] = React.useState(false);
+
+  const [chatMessages, setChatMessages] = React.useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = React.useState("");
   const [isSending, setIsSending] = React.useState(false);
   const chatEndRef = React.useRef<HTMLDivElement>(null);
@@ -118,9 +54,24 @@ export function SearchPage() {
     if (!searchQuery.trim()) return;
 
     setIsSearching(true);
-    // Simulate search delay
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setSearchResults(mockSearchResults);
+    setHasSearched(true);
+
+    const { data, error } = await searchSearchDocuments({
+      body: { query: searchQuery },
+    });
+
+    if (error) {
+      const message =
+        typeof error === "object" && "detail" in error
+          ? (error as { detail: string }).detail
+          : "Search failed";
+      toast.error(message);
+      setIsSearching(false);
+      return;
+    }
+
+    setSearchResults(data?.results ?? []);
+    setQueryTimeMs(data?.query_time_ms ?? null);
     setIsSearching(false);
   };
 
@@ -132,28 +83,33 @@ export function SearchPage() {
       id: crypto.randomUUID(),
       role: "user",
       content: chatInput,
-      timestamp: new Date(),
     };
 
     setChatMessages((prev) => [...prev, userMessage]);
     setChatInput("");
     setIsSending(true);
 
-    // Simulate AI response
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const { data, error } = await ragQueryDocuments({
+      body: { question: chatInput, max_chunks: 5 },
+    });
+
+    if (error) {
+      const message =
+        typeof error === "object" && "detail" in error
+          ? (error as { detail: string }).detail
+          : "Failed to get an answer";
+      toast.error(message);
+      setIsSending(false);
+      return;
+    }
 
     const assistantMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "assistant",
-      content:
-        "Based on my analysis of your documents, I found relevant information that matches your query. The documents contain detailed information about the topics you mentioned.",
-      sources: [
-        {
-          documentName: "Sample_Document.pdf",
-          snippet: "Relevant excerpt from the document...",
-        },
-      ],
-      timestamp: new Date(),
+      content: data?.answer ?? "No answer generated.",
+      sources: data?.citations ?? [],
+      model: data?.model,
+      queryTimeMs: data?.query_time_ms,
     };
 
     setChatMessages((prev) => [...prev, assistantMessage]);
@@ -164,22 +120,10 @@ export function SearchPage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  const handleExport = () => {
-    toast.success("Search results exported to Excel");
-  };
-
-  const highlightKeywords = (text: string) => {
-    return text.replace(
-      /\*\*(.*?)\*\*/g,
-      '<mark class="bg-yellow-200 dark:bg-yellow-900 px-0.5 rounded">$1</mark>'
-    );
-  };
-
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
       <div>
-        <Typography variant="h3">Search & RAG</Typography>
+        <Typography variant="h3">Search & Q&A</Typography>
         <Typography variant="muted">
           Search documents using natural language or ask questions
         </Typography>
@@ -200,7 +144,6 @@ export function SearchPage() {
         {/* Semantic Search Tab */}
         <TabsContent value="search" className="mt-6">
           <div className="space-y-6">
-            {/* Search Form */}
             <form onSubmit={handleSearch} className="flex gap-2">
               <div className="relative flex-1">
                 <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
@@ -216,22 +159,22 @@ export function SearchPage() {
               </Button>
             </form>
 
-            {/* Search Results */}
             {searchResults.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <Typography variant="h5">
-                    {searchResults.length} Results Found
+                    {searchResults.length} Results
+                    {queryTimeMs != null && (
+                      <span className="text-muted-foreground ml-2 text-sm font-normal">
+                        ({queryTimeMs}ms)
+                      </span>
+                    )}
                   </Typography>
-                  <Button variant="outline" size="sm" onClick={handleExport}>
-                    <DownloadIcon className="size-4" data-icon="inline-start" />
-                    Export to Excel
-                  </Button>
                 </div>
 
                 <div className="space-y-3">
                   {searchResults.map((result) => (
-                    <Card key={result.id}>
+                    <Card key={result.document_id}>
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex items-start gap-3">
@@ -244,43 +187,64 @@ export function SearchPage() {
                                   variant="small"
                                   className="font-medium"
                                 >
-                                  {result.documentName}
+                                  {result.filename}
                                 </Typography>
-                                <Badge variant="outline" className="text-xs">
-                                  {result.documentType}
-                                </Badge>
-                              </div>
-                              <Typography
-                                variant="muted"
-                                className="mt-1 text-sm"
-                                dangerouslySetInnerHTML={{
-                                  __html: highlightKeywords(result.snippet),
-                                }}
-                              />
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {result.matchedKeywords.map((keyword) => (
+                                {result.document_type && (
                                   <Badge
-                                    key={keyword}
-                                    variant="secondary"
-                                    className="text-xs"
+                                    variant="outline"
+                                    className="text-xs capitalize"
                                   >
-                                    {keyword}
+                                    {result.document_type}
                                   </Badge>
-                                ))}
+                                )}
                               </div>
+                              {result.highlights.length > 0 && (
+                                <Typography
+                                  variant="muted"
+                                  className="mt-1 line-clamp-3 text-sm"
+                                >
+                                  {result.highlights[0].text}
+                                </Typography>
+                              )}
+                              {result.metadata &&
+                                Array.isArray(
+                                  (result.metadata as Record<string, unknown>)
+                                    .skills
+                                ) && (
+                                  <div className="mt-2 flex flex-wrap gap-1">
+                                    {(
+                                      (
+                                        result.metadata as Record<
+                                          string,
+                                          unknown
+                                        >
+                                      ).skills as string[]
+                                    )
+                                      .slice(0, 8)
+                                      .map((skill: string) => (
+                                        <Badge
+                                          key={skill}
+                                          variant="secondary"
+                                          className="text-xs"
+                                        >
+                                          {skill}
+                                        </Badge>
+                                      ))}
+                                  </div>
+                                )}
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1">
                             <div className="flex items-center gap-2">
                               <Progress
-                                value={result.relevanceScore}
+                                value={result.score * 100}
                                 className="h-2 w-16"
                               />
                               <Typography
                                 variant="small"
                                 className="font-medium"
                               >
-                                {result.relevanceScore}%
+                                {Math.round(result.score * 100)}%
                               </Typography>
                             </div>
                             <Typography variant="muted" className="text-xs">
@@ -295,14 +259,14 @@ export function SearchPage() {
               </div>
             )}
 
-            {searchResults.length === 0 && searchQuery && !isSearching && (
+            {hasSearched && searchResults.length === 0 && !isSearching && (
               <div className="py-12 text-center">
                 <SearchIcon className="text-muted-foreground mx-auto size-12 opacity-50" />
                 <Typography variant="h5" className="mt-4">
                   No results found
                 </Typography>
                 <Typography variant="muted" className="mt-1">
-                  Try different keywords or phrases
+                  Try different keywords or upload more documents
                 </Typography>
               </div>
             )}
@@ -318,14 +282,23 @@ export function SearchPage() {
                 <Typography variant="h5">Ask about your documents</Typography>
               </div>
               <Typography variant="muted" className="text-sm">
-                Ask questions and get AI-powered answers based on your document
-                collection
+                Ask questions and get AI-powered answers with source citations
               </Typography>
             </CardHeader>
 
-            {/* Chat Messages */}
             <ScrollArea className="flex-1 p-4">
               <div className="space-y-4">
+                {chatMessages.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <SparklesIcon className="text-muted-foreground size-12 opacity-50" />
+                    <Typography variant="h5" className="mt-4">
+                      Ask anything about your documents
+                    </Typography>
+                    <Typography variant="muted" className="mt-1">
+                      e.g. &ldquo;Who has Kubernetes experience?&rdquo;
+                    </Typography>
+                  </div>
+                )}
                 {chatMessages.map((message) => (
                   <div
                     key={message.id}
@@ -349,8 +322,8 @@ export function SearchPage() {
                         variant="small"
                         className={
                           message.role === "user"
-                            ? "text-primary-foreground"
-                            : ""
+                            ? "text-primary-foreground whitespace-pre-wrap"
+                            : "whitespace-pre-wrap"
                         }
                       >
                         {message.content}
@@ -368,15 +341,23 @@ export function SearchPage() {
                                 className="bg-background/50 rounded p-2 text-xs"
                               >
                                 <span className="font-medium">
-                                  {source.documentName}
+                                  {source.filename}
                                 </span>
-                                <p className="text-muted-foreground mt-0.5">
-                                  {source.snippet}
+                                <p className="text-muted-foreground mt-0.5 line-clamp-2">
+                                  {source.text}
                                 </p>
                               </div>
                             ))}
                           </div>
                         </>
+                      )}
+                      {message.queryTimeMs != null && (
+                        <Typography
+                          variant="muted"
+                          className="mt-1 text-xs opacity-60"
+                        >
+                          {message.model} · {message.queryTimeMs}ms
+                        </Typography>
                       )}
                     </div>
                     {message.role === "user" && (
@@ -393,9 +374,9 @@ export function SearchPage() {
                     </div>
                     <div className="bg-muted rounded-lg p-3">
                       <div className="flex gap-1">
-                        <span className="bg-foreground/30 size-2 animate-bounce rounded-full"></span>
-                        <span className="bg-foreground/30 size-2 animate-bounce rounded-full [animation-delay:0.1s]"></span>
-                        <span className="bg-foreground/30 size-2 animate-bounce rounded-full [animation-delay:0.2s]"></span>
+                        <span className="bg-foreground/30 size-2 animate-bounce rounded-full" />
+                        <span className="bg-foreground/30 size-2 animate-bounce rounded-full [animation-delay:0.1s]" />
+                        <span className="bg-foreground/30 size-2 animate-bounce rounded-full [animation-delay:0.2s]" />
                       </div>
                     </div>
                   </div>
@@ -404,7 +385,6 @@ export function SearchPage() {
               </div>
             </ScrollArea>
 
-            {/* Chat Input */}
             <div className="border-t p-4">
               <form onSubmit={handleSendMessage} className="flex gap-2">
                 <Textarea
