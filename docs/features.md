@@ -206,11 +206,11 @@ Wire existing frontend pages to the real backend API. All pages must follow
   - Middleware captures auth + document + job + email events
   - `GET /logs` with filters; `logs.tsx` wired
 
-- [~] **F61 · Settings & profile**
+- [x] **F61 · Settings & profile**
   Depends on: F13
   - Profile edit, password change, Gmail connection status, LLM/embedding provider selection
 
-- [ ] **F62 · Dashboard metrics**
+- [x] **F62 · Dashboard metrics**
   Depends on: F20, F40, F41
   - Real counts (documents, jobs, candidates, recent activity) replacing mocks
 

@@ -1,15 +1,22 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  BriefcaseIcon,
   FileTextIcon,
   CheckCircleIcon,
-  ClockIcon,
-  AlertCircleIcon,
   UploadIcon,
+  UsersIcon,
   SearchIcon,
 } from "lucide-react";
 
-import { documentsListDocuments, type DocumentResponse } from "@/api";
+import {
+  candidatesListCandidates,
+  documentsListDocuments,
+  jobsListJobs,
+  type CandidateResponse,
+  type DocumentResponse,
+  type JobResponse,
+} from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,22 +37,29 @@ export function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [documents, setDocuments] = React.useState<DocumentResponse[]>([]);
+  const [jobs, setJobs] = React.useState<JobResponse[]>([]);
+  const [candidates, setCandidates] = React.useState<CandidateResponse[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    documentsListDocuments().then(({ data }) => {
-      setDocuments(data ?? []);
+    Promise.all([
+      documentsListDocuments(),
+      jobsListJobs(),
+      candidatesListCandidates(),
+    ]).then(([docRes, jobRes, candRes]) => {
+      setDocuments(docRes.data ?? []);
+      setJobs(jobRes.data ?? []);
+      setCandidates(candRes.data ?? []);
       setLoading(false);
     });
   }, []);
 
   const stats = {
-    total: documents.length,
-    ready: documents.filter((d) => d.status === "ready").length,
-    processing: documents.filter(
-      (d) => d.status === "processing" || d.status === "pending"
-    ).length,
-    failed: documents.filter((d) => d.status === "failed").length,
+    documents: documents.length,
+    jobs: jobs.length,
+    candidates: candidates.length,
+    openJobs: jobs.filter((j) => j.status === "open").length,
+    processed: documents.filter((d) => d.status === "ready").length,
   };
 
   const recent = documents.slice(0, 5);
@@ -87,12 +101,12 @@ export function DashboardPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <Typography variant="muted" className="text-xs">
-                Total Documents
+                Documents
               </Typography>
               <FileTextIcon className="text-muted-foreground size-4" />
             </div>
             <Typography variant="h3" className="mt-2">
-              {stats.total}
+              {stats.documents}
             </Typography>
           </CardContent>
         </Card>
@@ -100,38 +114,41 @@ export function DashboardPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <Typography variant="muted" className="text-xs">
-                Ready
+                Jobs
+              </Typography>
+              <BriefcaseIcon className="text-muted-foreground size-4" />
+            </div>
+            <Typography variant="h3" className="mt-2">
+              {stats.jobs}
+            </Typography>
+            <Typography variant="muted" className="text-xs">
+              {stats.openJobs} open
+            </Typography>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <Typography variant="muted" className="text-xs">
+                Candidates
+              </Typography>
+              <UsersIcon className="text-muted-foreground size-4" />
+            </div>
+            <Typography variant="h3" className="mt-2">
+              {stats.candidates}
+            </Typography>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <Typography variant="muted" className="text-xs">
+                Processed
               </Typography>
               <CheckCircleIcon className="size-4 text-green-500" />
             </div>
             <Typography variant="h3" className="mt-2">
-              {stats.ready}
-            </Typography>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <Typography variant="muted" className="text-xs">
-                Processing
-              </Typography>
-              <ClockIcon className="size-4 text-yellow-500" />
-            </div>
-            <Typography variant="h3" className="mt-2">
-              {stats.processing}
-            </Typography>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <Typography variant="muted" className="text-xs">
-                Failed
-              </Typography>
-              <AlertCircleIcon className="size-4 text-red-500" />
-            </div>
-            <Typography variant="h3" className="mt-2">
-              {stats.failed}
+              {stats.processed}
             </Typography>
           </CardContent>
         </Card>
