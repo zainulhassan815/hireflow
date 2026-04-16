@@ -26,11 +26,14 @@ scripts/
 
 ```bash
 # Services
-docker compose up -d postgres redis chromadb
+docker compose up -d postgres redis chromadb minio
 
 # Backend (from backend/)
 uv sync
 uv run uvicorn app.main:app --reload
+
+# Celery worker (from backend/, separate terminal)
+uv run celery -A app.worker.celery_app worker --loglevel=info
 
 # Frontend (from frontend/)
 npm install

@@ -7,6 +7,7 @@ from fastapi.responses import Response
 
 from app.api.deps import CurrentUser, DocumentServiceDep
 from app.schemas.document import DocumentResponse
+from app.worker.tasks import extract_document_text
 
 router = APIRouter()
 
@@ -40,6 +41,7 @@ async def upload_document(
         mime_type=file.content_type or "application/octet-stream",
         data=data,
     )
+    extract_document_text.delay(str(doc.id))
     return DocumentResponse.model_validate(doc)
 
 

@@ -108,3 +108,25 @@ class BlobStorage(Protocol):
     async def delete(self, key: str) -> None: ...
 
     async def presigned_url(self, key: str, expires_seconds: int = 3600) -> str: ...
+
+
+# ---------- Text extraction ----------
+
+
+@dataclass(frozen=True, slots=True)
+class ExtractionResult:
+    text: str
+    page_count: int | None = None
+
+
+@runtime_checkable
+class TextExtractor(Protocol):
+    def extract(self, data: bytes, mime_type: str) -> ExtractionResult:
+        """Extract text from a document. Runs synchronously (called from a
+        Celery worker, not the async event loop).
+
+        Raises ``UnsupportedFileType`` if the MIME type is not handled.
+        """
+        ...
+
+    def supports(self, mime_type: str) -> bool: ...

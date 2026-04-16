@@ -83,7 +83,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - Drag-and-drop + batch upload on `documents.tsx` wired to real API
   - List/preview/download/delete endpoints
 
-- [~] **F22 · Text extraction pipeline (OCR + PDF/DOCX)**
+- [x] **F22 · Text extraction pipeline (Celery + OCR + PDF/DOCX)**
   SRS: FR05, FR06 · Depends on: F21
   - Background worker (Redis + RQ/Arq or FastAPI `BackgroundTasks` initially)
   - PyMuPDF for PDFs, python-docx for Word, Tesseract for images/scanned PDFs

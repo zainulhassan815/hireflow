@@ -74,3 +74,12 @@ class MinioBlobStorage:
             key,
             expires=timedelta(seconds=expires_seconds),
         )
+
+    def get_sync(self, key: str) -> bytes:
+        """Synchronous variant for use in Celery workers."""
+        response = self._client.get_object(self._bucket, key)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()
