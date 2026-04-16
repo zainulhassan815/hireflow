@@ -125,6 +125,26 @@ class VisionProvider(Protocol):
     ) -> str: ...
 
 
+# ---------- Document classification ----------
+
+
+@dataclass(frozen=True, slots=True)
+class ClassificationResult:
+    document_type: str  # matches DocumentType enum values
+    confidence: float  # 0.0–1.0
+    metadata: dict[str, Any]  # skills, experience, education, etc.
+
+
+@runtime_checkable
+class DocumentClassifier(Protocol):
+    def classify(self, text: str, filename: str) -> ClassificationResult:
+        """Classify a document and extract structured metadata from its text.
+
+        Runs synchronously (called from a Celery worker).
+        """
+        ...
+
+
 # ---------- Text extraction ----------
 
 

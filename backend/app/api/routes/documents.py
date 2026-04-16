@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query, UploadFile
 from fastapi.responses import Response
 
 from app.api.deps import CurrentUser, DocumentServiceDep
-from app.schemas.document import DocumentResponse
+from app.schemas.document import DocumentMetadataResponse, DocumentResponse
 from app.worker.tasks import extract_document_text
 
 router = APIRouter()
@@ -116,6 +116,30 @@ async def download_document(
         media_type=doc.mime_type,
         headers={"Content-Disposition": f'attachment; filename="{doc.filename}"'},
     )
+
+
+@router.get(
+    "/{document_id}/metadata",
+    response_model=DocumentMetadataResponse,
+    summary="Get document classification and extracted metadata",
+    description=(
+        "Return the classification result, extracted metadata (skills, "
+        "experience, education for resumes), and full extracted text. "
+        "Only available after processing completes (status = ready)."
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not the document owner or an admin"},
+        404: {"description": "Document not found"},
+    },
+)
+async def get_document_metadata(
+    document_id: UUID,
+    current_user: CurrentUser,
+    documents: DocumentServiceDep,
+) -> DocumentMetadataResponse:
+    doc = await documents.get(document_id, actor=current_user)
+    return DocumentMetadataResponse.model_validate(doc)
 
 
 @router.delete(

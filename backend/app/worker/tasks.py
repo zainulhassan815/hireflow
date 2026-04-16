@@ -22,12 +22,12 @@ logger = logging.getLogger(__name__)
     acks_late=True,
 )
 def extract_document_text(self, document_id: str) -> None:
-    """Fetch a document's blob, extract text, and update the DB record.
+    """Fetch a document's blob, extract text, classify, extract metadata.
 
-    The vision provider is resolved fresh from settings on every invocation
-    so the operator can switch providers at runtime without restarting the
-    worker.
+    All providers (vision, classifier) are resolved fresh from settings on
+    every invocation so operators can switch at runtime.
     """
+    from app.adapters.classifiers.registry import get_document_classifier
     from app.adapters.minio_storage import MinioBlobStorage
     from app.adapters.text_extractors import CompositeExtractor
     from app.adapters.vision.registry import get_vision_provider
@@ -44,12 +44,14 @@ def extract_document_text(self, document_id: str) -> None:
     )
 
     vision = get_vision_provider(settings)
+    classifier = get_document_classifier(settings)
 
     session = get_sync_db()
     try:
         service = ExtractionService(
             session=session,
             extractor=CompositeExtractor(vision=vision),
+            classifier=classifier,
             storage_get=storage.get_sync,
         )
         service.process(UUID(document_id))

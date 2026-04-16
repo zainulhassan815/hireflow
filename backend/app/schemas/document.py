@@ -43,3 +43,26 @@ class DocumentResponse(BaseModel):
     )
     created_at: datetime = Field(..., description="Upload timestamp (UTC)")
     updated_at: datetime = Field(..., description="Last modification timestamp (UTC)")
+
+
+class DocumentMetadataResponse(BaseModel):
+    """Extracted metadata and classification for a processed document."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID = Field(..., description="Document identifier")
+    filename: str = Field(..., description="Original filename")
+    document_type: DocumentType | None = Field(
+        None, description="Classified document category"
+    )
+    status: DocumentStatus = Field(..., description="Processing status")
+    metadata: dict | None = Field(
+        None,
+        description=(
+            "Structured metadata extracted from the document. "
+            "For resumes: skills, experience_years, education, emails, phones, "
+            "classification_confidence. For other types: varies."
+        ),
+        alias="metadata_",
+    )
+    extracted_text: str | None = Field(None, description="Full extracted text content")

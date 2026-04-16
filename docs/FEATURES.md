@@ -89,7 +89,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - PyMuPDF for PDFs, python-docx for Word, Tesseract for images/scanned PDFs
   - Persist extracted text + status transitions (`pending → processing → ready/failed`)
 
-- [ ] **F23 · Classification + metadata extraction**
+- [x] **F23 · Classification + metadata extraction**
   SRS: FR20, UC-11 · Depends on: F22
   - Classifier (rule-based first, LLM fallback): resume / report / contract / letter
   - Extract resume metadata (skills, experience years, education) into JSONB
