@@ -1,6 +1,7 @@
 import * as React from "react";
 import { CloudUploadIcon, FileIcon, XIcon } from "lucide-react";
 
+import { documentsUploadDocument, type DocumentResponse } from "@/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,20 +13,34 @@ import {
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Typography } from "@/components/ui/typography";
+import { formatFileSize } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface UploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onUploaded?: (doc: DocumentResponse) => void;
 }
 
 interface UploadingFile {
   file: File;
-  progress: number;
   status: "uploading" | "completed" | "error";
 }
 
-export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
+const VALID_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "image/png",
+  "image/jpeg",
+  "image/tiff",
+];
+
+export function UploadDialog({
+  open,
+  onOpenChange,
+  onUploaded,
+}: UploadDialogProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [uploadingFiles, setUploadingFiles] = React.useState<UploadingFile[]>(
     []
@@ -45,74 +60,66 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    handleFiles(files);
+    handleFiles(Array.from(e.dataTransfer.files));
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const files = Array.from(e.target.files);
-      handleFiles(files);
+      handleFiles(Array.from(e.target.files));
     }
   };
 
   const handleFiles = (files: File[]) => {
-    const validTypes = [
-      "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "image/png",
-      "image/jpeg",
-      "image/tiff",
-    ];
-
     const validFiles = files.filter((file) => {
-      if (!validTypes.includes(file.type)) {
-        toast.error(`${file.name}: Invalid file type`);
+      if (!VALID_TYPES.includes(file.type)) {
+        toast.error(`${file.name}: Unsupported file type`);
         return false;
       }
-      if (file.size > 25 * 1024 * 1024) {
-        toast.error(`${file.name}: File too large (max 25MB)`);
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name}: File too large (max 10MB)`);
         return false;
       }
       return true;
     });
 
-    if (validFiles.length === 0) return;
-
-    const newFiles: UploadingFile[] = validFiles.map((file) => ({
-      file,
-      progress: 0,
-      status: "uploading" as const,
-    }));
-
-    setUploadingFiles((prev) => [...prev, ...newFiles]);
-
-    // Simulate upload progress
-    newFiles.forEach((uploadFile, index) => {
-      simulateUpload(uploadingFiles.length + index);
-    });
+    for (const file of validFiles) {
+      uploadFile(file);
+    }
   };
 
-  const simulateUpload = (index: number) => {
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 15;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        setUploadingFiles((prev) =>
-          prev.map((f, i) =>
-            i === index ? { ...f, progress: 100, status: "completed" } : f
-          )
-        );
-        toast.success(`File uploaded successfully`);
-      } else {
-        setUploadingFiles((prev) =>
-          prev.map((f, i) => (i === index ? { ...f, progress } : f))
-        );
-      }
-    }, 200);
+  const uploadFile = async (file: File) => {
+    setUploadingFiles((prev) => [
+      ...prev,
+      { file, status: "uploading" as const },
+    ]);
+
+    const { data, error } = await documentsUploadDocument({
+      body: { file },
+    });
+
+    if (error) {
+      setUploadingFiles((prev) =>
+        prev.map((f) =>
+          f.file === file ? { ...f, status: "error" as const } : f
+        )
+      );
+      const message =
+        typeof error === "object" && "detail" in error
+          ? (error as { detail: string }).detail
+          : "Upload failed";
+      toast.error(`${file.name}: ${message}`);
+      return;
+    }
+
+    setUploadingFiles((prev) =>
+      prev.map((f) =>
+        f.file === file ? { ...f, status: "completed" as const } : f
+      )
+    );
+    toast.success(`${file.name} uploaded`);
+    if (data) {
+      onUploaded?.(data);
+    }
   };
 
   const removeFile = (index: number) => {
@@ -128,12 +135,6 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
     onOpenChange(false);
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
@@ -144,7 +145,6 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
           </DialogDescription>
         </DialogHeader>
 
-        {/* Drop Zone */}
         <div
           className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
             isDragging
@@ -179,17 +179,17 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
             className="hidden"
           />
           <Typography variant="muted" className="mt-4 text-center text-xs">
-            Supported: PDF, DOC, DOCX, PNG, JPG, TIFF (max 25MB each)
+            Supported: PDF, DOC, DOCX, PNG, JPG, TIFF (max 10MB each)
           </Typography>
         </div>
 
-        {/* Uploading Files */}
         {uploadingFiles.length > 0 && (
           <div className="max-h-48 space-y-2 overflow-auto">
             {uploadingFiles.map((upload, index) => (
               <div
                 key={index}
                 className="flex items-center gap-3 rounded-lg border p-3"
+                data-uploading={upload.status === "uploading" || undefined}
               >
                 <div className="bg-muted flex size-10 items-center justify-center rounded">
                   <FileIcon className="text-muted-foreground size-5" />
@@ -199,15 +199,13 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
                     {upload.file.name}
                   </Typography>
                   <div className="flex items-center gap-2">
-                    <Progress
-                      value={upload.progress}
-                      className="h-1.5 flex-1"
-                    />
-                    <Typography variant="muted" className="text-xs">
-                      {upload.status === "completed"
-                        ? "Done"
-                        : `${Math.round(upload.progress)}%`}
-                    </Typography>
+                    {upload.status === "uploading" ? (
+                      <Progress value={50} className="h-1.5 flex-1 animate-pulse" />
+                    ) : (
+                      <Typography variant="muted" className="text-xs">
+                        {upload.status === "completed" ? "Done" : "Failed"}
+                      </Typography>
+                    )}
                   </div>
                   <Typography variant="muted" className="text-xs">
                     {formatFileSize(upload.file.size)}

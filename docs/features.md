@@ -128,7 +128,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 Wire existing frontend pages to the real backend API. All pages must follow
 `docs/frontend-api-rules.md`: SDK types only, no mock data, no custom types.
 
-- [~] **F25 · Documents page**
+- [x] **F25 · Documents page**
   Depends on: F21
   - Upload via `documentsUploadDocument`, list via `documentsListDocuments`
   - Download, delete, metadata view against real API
