@@ -105,7 +105,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
   - Write to Chroma with `document_id` + metadata
   - Re-index on document update/delete
 
-- [ ] **F31 · Semantic search endpoint**
+- [x] **F31 · Hybrid search endpoint (vector + metadata)**
   SRS: FR07, FR09 · Depends on: F30
   - `POST /search` — natural-language query → ranked chunks + parent docs
   - Return snippets with highlights

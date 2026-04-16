@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Document, DocumentStatus
+from app.models import Document, DocumentStatus, DocumentType
 
 
 class DocumentRepository:
@@ -69,3 +70,52 @@ class DocumentRepository:
             .where(Document.owner_id == owner_id)
         )
         return result.scalar_one()
+
+    async def search_by_metadata(
+        self,
+        *,
+        document_type: DocumentType | None = None,
+        skills: list[str] | None = None,
+        min_experience_years: int | None = None,
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        limit: int = 50,
+    ) -> list[Document]:
+        """Filter documents by structured metadata fields."""
+        stmt = select(Document).where(Document.status == DocumentStatus.READY)
+
+        if document_type is not None:
+            stmt = stmt.where(Document.document_type == document_type)
+
+        if skills:
+            for skill in skills:
+                stmt = stmt.where(
+                    Document.metadata_["skills"].astext.ilike(f"%{skill}%")
+                )
+
+        if min_experience_years is not None:
+            stmt = stmt.where(
+                Document.metadata_["experience_years"].as_integer()
+                >= min_experience_years
+            )
+
+        if date_from is not None:
+            stmt = stmt.where(Document.created_at >= date_from)
+
+        if date_to is not None:
+            stmt = stmt.where(Document.created_at <= date_to)
+
+        stmt = stmt.order_by(Document.created_at.desc()).limit(limit)
+
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_many(self, document_ids: list[UUID]) -> dict[UUID, Document]:
+        """Fetch multiple documents by ID. Returns a dict keyed by ID."""
+        if not document_ids:
+            return {}
+        result = await self._db.execute(
+            select(Document).where(Document.id.in_(document_ids))
+        )
+        docs = result.scalars().all()
+        return {doc.id: doc for doc in docs}

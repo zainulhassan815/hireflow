@@ -44,6 +44,7 @@ from app.repositories.user import UserRepository
 from app.services.auth_service import AuthService
 from app.services.document_service import DocumentService
 from app.services.password_reset_service import PasswordResetService
+from app.services.search_service import SearchService
 from app.services.session_service import SessionService
 from app.services.user_service import UserService
 
@@ -179,6 +180,10 @@ def get_document_service(
     )
 
 
+def get_search_service(documents: DocumentRepositoryDep) -> SearchService:
+    return SearchService(documents, _vector_store)
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
 PasswordResetServiceDep = Annotated[
@@ -186,6 +191,7 @@ PasswordResetServiceDep = Annotated[
 ]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
+SearchServiceDep = Annotated[SearchService, Depends(get_search_service)]
 
 
 # ---------- Auth context ----------
