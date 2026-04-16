@@ -227,7 +227,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
   - pytest: auth, documents, search, ranking
   - Playwright: login → upload → search happy path
 
-- [ ] **F72 · Dockerfile + production compose**
+- [x] **F72 · Dockerfile + production compose**
   Depends on: F00
   - Backend + frontend Dockerfiles; reverse proxy (Caddy/Nginx); HTTPS
   - Separate `docker-compose.prod.yml`

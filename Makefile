@@ -40,8 +40,17 @@ generate: ## Regenerate frontend API client
 stop: ## Stop Docker services
 	docker compose down
 
+prod-up: ## Build + start production stack
+	docker compose -f docker-compose.prod.yml up -d --build
+
+prod-down: ## Stop production stack
+	docker compose -f docker-compose.prod.yml down
+
+prod-logs: ## Tail production logs
+	docker compose -f docker-compose.prod.yml logs -f --tail=50
+
 clean: stop ## Stop services + remove caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	rm -rf backend/.ruff_cache frontend/dist
 
-.PHONY: help setup dev lint migrate generate stop clean
+.PHONY: help setup dev lint migrate generate stop prod-up prod-down prod-logs clean
