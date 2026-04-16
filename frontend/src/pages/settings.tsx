@@ -1,13 +1,79 @@
+import * as React from "react";
+
+import { authChangePassword, authUpdateProfile } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import { Typography } from "@/components/ui/typography";
-import { EmailConnection } from "@/components/settings/email-connection";
+import { useAuth } from "@/providers/use-auth";
+import { toast } from "sonner";
 
 export function SettingsPage() {
+  const { user } = useAuth();
+
+  const [fullName, setFullName] = React.useState(user?.full_name ?? "");
+  const [email, setEmail] = React.useState(user?.email ?? "");
+  const [savingProfile, setSavingProfile] = React.useState(false);
+
+  const [currentPassword, setCurrentPassword] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [savingPassword, setSavingPassword] = React.useState(false);
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    const { error } = await authUpdateProfile({
+      body: {
+        full_name: fullName || undefined,
+        email: email !== user?.email ? email : undefined,
+      },
+    });
+    setSavingProfile(false);
+    if (error) {
+      const message =
+        typeof error === "object" && "detail" in error
+          ? (error as { detail: string }).detail
+          : "Failed to update profile";
+      toast.error(message);
+      return;
+    }
+    toast.success("Profile updated");
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    setSavingPassword(true);
+    const { error } = await authChangePassword({
+      body: {
+        current_password: currentPassword,
+        new_password: newPassword,
+      },
+    });
+    setSavingPassword(false);
+    if (error) {
+      const message =
+        typeof error === "object" && "detail" in error
+          ? (error as { detail: string }).detail
+          : "Failed to change password";
+      toast.error(message);
+      return;
+    }
+    toast.success("Password changed");
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -22,122 +88,88 @@ export function SettingsPage() {
         <Card>
           <CardHeader>
             <Typography variant="h5">Profile</Typography>
-            <Typography variant="muted">
-              Your personal information and account details
-            </Typography>
+            <Typography variant="muted">Your personal information</Typography>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input id="name" defaultValue="HR Manager" />
+                <Label htmlFor="name">Full Name</Label>
+                <Input
+                  id="name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue="hr@company.com" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="company">Company</Label>
-              <Input id="company" defaultValue="Acme Corporation" />
+              <Label>Role</Label>
+              <Input value={user?.role ?? ""} disabled className="capitalize" />
             </div>
-            <Button>Save Changes</Button>
+            <Button onClick={handleSaveProfile} disabled={savingProfile}>
+              {savingProfile ? "Saving..." : "Save Changes"}
+            </Button>
           </CardContent>
         </Card>
 
-        {/* Email Integration */}
-        <EmailConnection />
+        <Separator />
 
-        {/* Notifications */}
+        {/* Password */}
         <Card>
           <CardHeader>
-            <Typography variant="h5">Notifications</Typography>
-            <Typography variant="muted">
-              Configure how you receive notifications
-            </Typography>
+            <Typography variant="h5">Change Password</Typography>
+            <Typography variant="muted">Update your password</Typography>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Typography variant="label">New Applications</Typography>
-                <Typography variant="muted">
-                  Get notified when a new candidate applies
-                </Typography>
+          <CardContent>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="current-password">Current Password</Label>
+                <Input
+                  id="current-password"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                />
               </div>
-              <Switch defaultChecked />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Typography variant="label">Daily Digest</Typography>
-                <Typography variant="muted">
-                  Receive a daily summary of applications
-                </Typography>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">New Password</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    autoComplete="new-password"
+                    minLength={8}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm Password</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    autoComplete="new-password"
+                  />
+                </div>
               </div>
-              <Switch defaultChecked />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Typography variant="label">AI Recommendations</Typography>
-                <Typography variant="muted">
-                  Get notified about high-match candidates
-                </Typography>
-              </div>
-              <Switch defaultChecked />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* API Configuration */}
-        <Card>
-          <CardHeader>
-            <Typography variant="h5">API Configuration</Typography>
-            <Typography variant="muted">
-              Configure API keys for AI services
-            </Typography>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="openai-key">OpenAI API Key</Label>
-              <Input
-                id="openai-key"
-                type="password"
-                placeholder="sk-..."
-                defaultValue="sk-••••••••••••••••••••"
-              />
-              <Typography variant="muted" className="text-xs">
-                Used for embeddings and AI-powered search
-              </Typography>
-            </div>
-            <Button>Update API Key</Button>
-          </CardContent>
-        </Card>
-
-        {/* Danger Zone */}
-        <Card className="border-destructive/50">
-          <CardHeader>
-            <Typography variant="h5" className="text-destructive">
-              Danger Zone
-            </Typography>
-            <Typography variant="muted">
-              Irreversible actions for your account
-            </Typography>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Typography variant="small" className="font-medium">
-                  Delete All Data
-                </Typography>
-                <Typography variant="muted">
-                  Permanently delete all jobs, candidates, and applications
-                </Typography>
-              </div>
-              <Button variant="destructive" size="sm">
-                Delete All
+              <Button type="submit" disabled={savingPassword}>
+                {savingPassword ? "Changing..." : "Change Password"}
               </Button>
-            </div>
+            </form>
           </CardContent>
         </Card>
       </div>

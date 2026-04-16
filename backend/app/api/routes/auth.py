@@ -16,6 +16,7 @@ from app.schemas.auth import (
     TokenResponse,
     UserResponse,
 )
+from app.schemas.profile import ChangePasswordRequest, UpdateProfileRequest
 
 router = APIRouter()
 
@@ -153,3 +154,47 @@ async def reset_password(
 )
 async def read_me(current_user: CurrentUser) -> UserResponse:
     return UserResponse.model_validate(current_user)
+
+
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+    summary="Update profile",
+    description="Update the current user's name or email.",
+    responses={
+        401: {"description": "Not authenticated"},
+        409: {"description": "Email already taken"},
+    },
+)
+async def update_profile(
+    request: UpdateProfileRequest,
+    current_user: CurrentUser,
+    auth: AuthServiceDep,
+) -> UserResponse:
+    user = await auth.update_profile(
+        current_user,
+        full_name=request.full_name,
+        email=request.email,
+    )
+    return UserResponse.model_validate(user)
+
+
+@router.post(
+    "/me/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Change password",
+    description="Change the current user's password. Requires the current password for verification.",
+    responses={
+        401: {"description": "Current password is incorrect"},
+    },
+)
+async def change_password(
+    request: ChangePasswordRequest,
+    current_user: CurrentUser,
+    auth: AuthServiceDep,
+) -> None:
+    await auth.change_password(
+        current_user,
+        current_password=request.current_password,
+        new_password=request.new_password,
+    )

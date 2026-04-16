@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from app.adapters.protocols import PasswordHasher
-from app.domain.exceptions import AccountDisabled, InvalidCredentials
+from app.domain.exceptions import (
+    AccountDisabled,
+    EmailAlreadyRegistered,
+    InvalidCredentials,
+)
 from app.models import User, UserRole
 from app.repositories.user import UserRepository
 
@@ -42,6 +46,26 @@ class AuthService:
             await self._users.save(user)
 
         return user
+
+    async def update_profile(
+        self, user: User, *, full_name: str | None = None, email: str | None = None
+    ) -> User:
+        if full_name is not None:
+            user.full_name = full_name
+        if email is not None and email.lower() != user.email:
+            existing = await self._users.get_by_email(email)
+            if existing is not None:
+                raise EmailAlreadyRegistered("A user with this email already exists.")
+            user.email = email.lower()
+        return await self._users.save(user)
+
+    async def change_password(
+        self, user: User, *, current_password: str, new_password: str
+    ) -> User:
+        if not self._hasher.verify(current_password, user.hashed_password):
+            raise InvalidCredentials("Current password is incorrect.")
+        user.hashed_password = self._hasher.hash(new_password)
+        return await self._users.save(user)
 
 
 # A known-valid Argon2id hash whose plaintext is unguessable. Verifying
