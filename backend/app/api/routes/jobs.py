@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Query
+from fastapi.responses import Response
 
 from app.api.deps import CurrentUser, JobServiceDep, MatchingServiceDep
 from app.models.job import JobStatus
@@ -13,6 +14,7 @@ from app.schemas.candidate import (
     MatchResultItem,
 )
 from app.schemas.job import CreateJobRequest, JobResponse, UpdateJobRequest
+from app.services.export_service import export_candidates_to_csv
 
 router = APIRouter()
 
@@ -163,4 +165,35 @@ async def match_candidates(
             for r in results
         ],
         total=len(results),
+    )
+
+
+@router.get(
+    "/{job_id}/candidates/export",
+    summary="Export matched candidates to CSV",
+    description=(
+        "Run matching and export the ranked candidate list as a CSV file "
+        "with scores, skills, and status breakdown. Opens in Excel, "
+        "Google Sheets, or any spreadsheet tool."
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not the job owner or an admin"},
+        404: {"description": "Job not found"},
+    },
+)
+async def export_candidates(
+    job_id: UUID,
+    current_user: CurrentUser,
+    jobs: JobServiceDep,
+    matching: MatchingServiceDep,
+) -> Response:
+    job = await jobs.get(job_id, actor=current_user)
+    results = await matching.match_candidates_to_job(job_id, current_user.id)
+    csv_content = export_candidates_to_csv(results)
+    filename = f"{job.title.replace(' ', '_')}_candidates.csv"
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

@@ -170,9 +170,9 @@ Wire existing frontend pages to the real backend API. All pages must follow
   - `GET /jobs/{id}/candidates` sorted by score
   - Shortlist / reject actions (FR14, FR15)
 
-- [ ] **F43 · Excel export**
+- [x] **F43 · CSV export**
   SRS: FR16, UC-05 · Depends on: F42
-  - `GET /jobs/{id}/candidates/export` → xlsx (openpyxl)
+  - `GET /jobs/{id}/candidates/export` → CSV (stdlib, no deps)
   - Frontend export buttons on candidates + search pages
 
 ---
