@@ -1,101 +1,47 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-# ── Colors ──────────────────────────────────────────────
-CYAN  := \033[36m
-GREEN := \033[32m
-RESET := \033[0m
-
-# ── Config ──────────────────────────────────────────────
-BACKEND  := backend
-FRONTEND := frontend
-
-.PHONY: help
 help: ## Show this help
-	@printf "$(GREEN)Hireflow$(RESET) — AI-Powered HR Screening System\n\n"
-	@printf "Usage: make $(CYAN)<target>$(RESET)\n\n"
-	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ { printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
-# ── Infrastructure ──────────────────────────────────────
-.PHONY: services services-down services-logs
-
-services: ## Start all Docker services (postgres, redis, minio, chromadb)
+setup: ## First-time setup (install, env, services, migrate, seed)
+	cd backend && uv sync --extra dev
+	cd frontend && npm install --silent
+	@test -f backend/.env || (cp backend/.env.example backend/.env && \
+		sed -i "s/^JWT_SECRET_KEY=$$/JWT_SECRET_KEY=$$(openssl rand -hex 32)/" backend/.env && \
+		echo "Created backend/.env")
+	@test -f frontend/.env || (cp frontend/.env.example frontend/.env && echo "Created frontend/.env")
 	docker compose up -d postgres redis minio chromadb
 	@docker compose up minio-setup 2>/dev/null || true
+	@echo "Waiting for services..." && sleep 3
+	cd backend && uv run alembic upgrade head
+	cd backend && ADMIN_EMAIL=admin@hireflow.io ADMIN_PASSWORD=admin123 uv run python scripts/create_admin.py
+	@echo "\nReady. Run: make dev"
+	@echo "Admin: admin@hireflow.io / admin123"
 
-services-down: ## Stop all Docker services
+dev: ## Start API + worker + frontend (use Ctrl-C to stop)
+	@docker compose up -d postgres redis minio chromadb >/dev/null 2>&1
+	@trap 'kill 0' EXIT; \
+		cd backend && uv run uvicorn app.main:app --reload --port 8080 & \
+		cd backend && uv run celery -A app.worker.celery_app worker --loglevel=warning --concurrency=1 & \
+		cd frontend && npm run dev & \
+		wait
+
+lint: ## Lint + format everything
+	cd backend && uv run ruff check --fix . && uv run ruff format .
+	cd frontend && npm run lint && npm run format
+
+migrate: ## Run database migrations
+	cd backend && uv run alembic upgrade head
+
+generate: ## Regenerate frontend API client
+	cd frontend && npm run generate-api
+
+stop: ## Stop Docker services
 	docker compose down
 
-services-logs: ## Tail Docker service logs
-	docker compose logs -f --tail=50
-
-# ── Backend ─────────────────────────────────────────────
-.PHONY: backend-install backend-dev backend-worker backend-lint backend-migrate backend-seed
-
-backend-install: ## Install backend dependencies
-	cd $(BACKEND) && uv sync --extra dev
-
-backend-dev: ## Start FastAPI dev server (port 8080)
-	cd $(BACKEND) && uv run uvicorn app.main:app --reload --port 8080
-
-backend-worker: ## Start Celery worker
-	cd $(BACKEND) && uv run celery -A app.worker.celery_app worker --loglevel=info
-
-backend-lint: ## Lint + format backend (ruff)
-	cd $(BACKEND) && uv run ruff check --fix . && uv run ruff format .
-
-backend-migrate: ## Run Alembic migrations to head
-	cd $(BACKEND) && uv run alembic upgrade head
-
-backend-migration: ## Generate a new Alembic migration (usage: make backend-migration msg="add foo table")
-	cd $(BACKEND) && uv run alembic revision --autogenerate -m "$(msg)"
-
-backend-seed: ## Create/promote admin user (set ADMIN_EMAIL + ADMIN_PASSWORD)
-	cd $(BACKEND) && uv run python scripts/create_admin.py
-
-backend-test: ## Run backend tests
-	cd $(BACKEND) && uv run pytest
-
-# ── Frontend ────────────────────────────────────────────
-.PHONY: frontend-install frontend-dev frontend-lint frontend-build frontend-generate
-
-frontend-install: ## Install frontend dependencies
-	cd $(FRONTEND) && npm install
-
-frontend-dev: ## Start Vite dev server (port 5173)
-	cd $(FRONTEND) && npm run dev
-
-frontend-lint: ## Lint + format frontend (eslint + prettier)
-	cd $(FRONTEND) && npm run lint && npm run format
-
-frontend-build: ## Production build
-	cd $(FRONTEND) && npm run build
-
-frontend-generate: ## Regenerate TypeScript API client from OpenAPI spec
-	cd $(FRONTEND) && npm run generate-api
-
-# ── Compound ────────────────────────────────────────────
-.PHONY: install dev lint generate clean reset
-
-install: backend-install frontend-install ## Install all dependencies
-
-dev: ## Start everything for local development (services + backend + worker + frontend)
-	@echo "Starting services..."
-	@$(MAKE) services
-	@echo ""
-	@echo "Run these in separate terminals:"
-	@echo "  $(CYAN)make backend-dev$(RESET)     — FastAPI on :8000"
-	@echo "  $(CYAN)make backend-worker$(RESET)  — Celery worker"
-	@echo "  $(CYAN)make frontend-dev$(RESET)    — Vite on :5173"
-
-lint: backend-lint frontend-lint ## Lint + format everything
-
-generate: frontend-generate ## Regenerate API client
-
-clean: ## Remove build artifacts and caches
+clean: stop ## Stop services + remove caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
-	rm -rf $(BACKEND)/.ruff_cache $(FRONTEND)/dist
+	rm -rf backend/.ruff_cache frontend/dist
 
-reset: services-down clean ## Stop services + clean caches
-	@echo "$(GREEN)Reset complete.$(RESET) Run 'make install && make dev' to start fresh."
+.PHONY: help setup dev lint migrate generate stop clean

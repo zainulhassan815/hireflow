@@ -39,6 +39,9 @@ postgres_data/
 redis_data/
 chroma_data/
 
+# Dev process PIDs/logs
+.pids/
+
 # Drafts
 drafts/
 
