@@ -22,17 +22,19 @@ logger = logging.getLogger(__name__)
     acks_late=True,
 )
 def extract_document_text(self, document_id: str) -> None:
-    """Fetch a document's blob, extract text, classify, extract metadata.
+    """Full document processing pipeline.
 
-    All providers (vision, classifier) are resolved fresh from settings on
-    every invocation so operators can switch at runtime.
+    Extract text → classify → index embeddings. All providers resolved
+    fresh from settings on every invocation for runtime flexibility.
     """
+    from app.adapters.chroma_store import ChromaVectorStore
     from app.adapters.classifiers.registry import get_document_classifier
     from app.adapters.minio_storage import MinioBlobStorage
     from app.adapters.text_extractors import CompositeExtractor
     from app.adapters.vision.registry import get_vision_provider
     from app.core.config import settings
     from app.core.db import get_sync_db
+    from app.services.embedding_service import EmbeddingService
     from app.services.extraction_service import ExtractionService
 
     storage = MinioBlobStorage(
@@ -46,6 +48,15 @@ def extract_document_text(self, document_id: str) -> None:
     vision = get_vision_provider(settings)
     classifier = get_document_classifier(settings)
 
+    try:
+        vector_store = ChromaVectorStore(
+            host=settings.chroma_host, port=settings.chroma_port
+        )
+        embedding = EmbeddingService(vector_store)
+    except Exception:
+        logger.warning("ChromaDB unavailable, skipping embedding indexing")
+        embedding = None
+
     session = get_sync_db()
     try:
         service = ExtractionService(
@@ -53,6 +64,7 @@ def extract_document_text(self, document_id: str) -> None:
             extractor=CompositeExtractor(vision=vision),
             classifier=classifier,
             storage_get=storage.get_sync,
+            embedding=embedding,
         )
         service.process(UUID(document_id))
     except Exception as exc:

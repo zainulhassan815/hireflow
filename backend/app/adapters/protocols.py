@@ -145,6 +145,43 @@ class DocumentClassifier(Protocol):
         ...
 
 
+# ---------- Vector store ----------
+
+
+@dataclass(frozen=True, slots=True)
+class VectorHit:
+    chunk_id: str
+    document_id: str
+    text: str
+    metadata: dict[str, Any]
+    distance: float
+
+
+@runtime_checkable
+class VectorStore(Protocol):
+    def upsert(
+        self,
+        document_id: str,
+        chunks: list[str],
+        metadatas: list[dict[str, Any]],
+    ) -> None:
+        """Index text chunks for a document. Replaces existing chunks."""
+        ...
+
+    def delete(self, document_id: str) -> None:
+        """Remove all chunks for a document."""
+        ...
+
+    def query(
+        self,
+        query_text: str,
+        n_results: int = 10,
+        where: dict[str, Any] | None = None,
+    ) -> list[VectorHit]:
+        """Semantic search. Returns chunks ranked by relevance."""
+        ...
+
+
 # ---------- Text extraction ----------
 
 

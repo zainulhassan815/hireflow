@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID, uuid4
 
-from app.adapters.protocols import BlobStorage
+from app.adapters.protocols import BlobStorage, VectorStore
 from app.domain.exceptions import (
     FileTooLarge,
     Forbidden,
@@ -13,6 +14,8 @@ from app.domain.exceptions import (
 )
 from app.models import Document, User
 from app.repositories.document import DocumentRepository
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_MIME_TYPES = frozenset(
     {
@@ -33,10 +36,12 @@ class DocumentService:
         storage: BlobStorage,
         *,
         max_file_size_bytes: int,
+        vector_store: VectorStore | None = None,
     ) -> None:
         self._documents = documents
         self._storage = storage
         self._max_size = max_file_size_bytes
+        self._vector_store = vector_store
 
     async def upload(
         self,
@@ -82,6 +87,11 @@ class DocumentService:
     async def delete(self, document_id: UUID, *, actor: User) -> None:
         doc = await self.get(document_id, actor=actor)
         await self._storage.delete(doc.storage_key)
+        if self._vector_store:
+            try:
+                self._vector_store.delete(str(document_id))
+            except Exception:
+                logger.warning("failed to remove embeddings for %s", document_id)
         await self._documents.delete(doc)
 
     async def list_for_user(

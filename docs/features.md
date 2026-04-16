@@ -99,7 +99,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## Phase 3 — Search & RAG (FR07–FR10, UC-03, UC-04)
 
-- [ ] **F30 · Embeddings + ChromaDB ingestion**
+- [x] **F30 · Embeddings + ChromaDB ingestion**
   Depends on: F22
   - Chunk + embed extracted text (sentence-transformers or OpenAI embeddings, configurable)
   - Write to Chroma with `document_id` + metadata

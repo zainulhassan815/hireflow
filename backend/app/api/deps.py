@@ -7,6 +7,7 @@ service reaches for things through the annotated aliases defined here.
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from typing import Annotated
 from uuid import UUID
@@ -17,6 +18,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.argon2_hasher import Argon2Hasher
+from app.adapters.chroma_store import ChromaVectorStore
 from app.adapters.email_sender import LoggingEmailSender
 from app.adapters.jwt_token_issuer import JwtTokenIssuer
 from app.adapters.minio_storage import MinioBlobStorage
@@ -28,6 +30,7 @@ from app.adapters.protocols import (
     RevocationStore,
     TokenIssuer,
     TokenType,
+    VectorStore,
 )
 from app.adapters.reset_token_store import RedisResetTokenStore
 from app.adapters.revocation_store import RedisRevocationStore
@@ -43,6 +46,8 @@ from app.services.document_service import DocumentService
 from app.services.password_reset_service import PasswordResetService
 from app.services.session_service import SessionService
 from app.services.user_service import UserService
+
+_logger = logging.getLogger(__name__)
 
 # ---------- HTTP primitives ----------
 
@@ -70,6 +75,14 @@ _blob_storage = MinioBlobStorage(
     region=settings.storage_region,
 )
 
+try:
+    _vector_store: VectorStore | None = ChromaVectorStore(
+        host=settings.chroma_host, port=settings.chroma_port
+    )
+except Exception:
+    _logger.warning("ChromaDB unavailable at startup; vector search disabled")
+    _vector_store = None
+
 
 # ---------- Adapter providers ----------
 
@@ -92,6 +105,10 @@ def get_revocation_store(redis: RedisDep) -> RevocationStore:
 
 def get_reset_token_store(redis: RedisDep) -> ResetTokenStore:
     return RedisResetTokenStore(redis)
+
+
+def get_vector_store() -> VectorStore | None:
+    return _vector_store
 
 
 def get_blob_storage() -> BlobStorage:
@@ -158,6 +175,7 @@ def get_document_service(
         documents,
         storage,
         max_file_size_bytes=settings.max_file_size_mb * 1024 * 1024,
+        vector_store=_vector_store,
     )
 
 

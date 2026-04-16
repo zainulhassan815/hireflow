@@ -1,9 +1,9 @@
-"""Document text-extraction and classification orchestration.
+"""Document processing pipeline.
 
 Called by a Celery task, not by a FastAPI route. Runs synchronously inside
 the worker process. Uses its own DB session (not request-scoped).
 
-Pipeline: fetch blob → extract text → classify → extract metadata → commit.
+Pipeline: fetch blob → extract text → classify → index embeddings → commit.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters.protocols import DocumentClassifier, TextExtractor
 from app.models import Document, DocumentStatus, DocumentType
+from app.services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +29,13 @@ class ExtractionService:
         extractor: TextExtractor,
         classifier: DocumentClassifier,
         storage_get: Callable[[str], bytes],
+        embedding: EmbeddingService | None = None,
     ) -> None:
         self._session = session
         self._extractor = extractor
         self._classifier = classifier
         self._storage_get = storage_get
+        self._embedding = embedding
 
     def process(self, document_id: UUID) -> None:
         doc = self._session.execute(
@@ -53,6 +56,7 @@ class ExtractionService:
         try:
             self._extract(doc)
             self._classify(doc)
+            self._index(doc)
             doc.status = DocumentStatus.READY
             logger.info(
                 "document %s processed: type=%s, %d chars",
@@ -92,3 +96,13 @@ class ExtractionService:
             "classification_confidence": result.confidence,
         }
         doc.metadata_ = merged
+
+    def _index(self, doc: Document) -> None:
+        if self._embedding is None:
+            return
+        try:
+            self._embedding.index_document(doc)
+        except Exception:
+            # Indexing failure is non-fatal — the document is still usable
+            # without search. Log and continue so status reaches READY.
+            logger.exception("embedding indexing failed for document %s", doc.id)
