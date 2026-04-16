@@ -1,40 +1,48 @@
 # System Architecture
 
-Reference for how Hireflow's backend is structured. Read this before
-touching any backend code.
+Reference for how Hireflow is structured. Read this before touching code.
 
 ---
 
 ## 1. Infrastructure topology
 
+### Development
+
 ```
-┌────────────┐   HTTP    ┌────────────┐   async   ┌──────────────┐
-│  Frontend   │ ────────→ │  FastAPI    │ ────────→ │  PostgreSQL  │
-│  (React)    │ ←──────── │  (uvicorn)  │ ←──────── │  (SQLAlchemy)│
-└────────────┘           └─────┬──────┘           └──────────────┘
-                               │                          ↑
-                    enqueue    │                     sync │
-                    ┌──────────▼──────────┐               │
-                    │  Redis              │          ┌────┴─────────┐
-                    │  • Celery broker    │          │  Celery      │
-                    │  • JWT revocation   │ ◄────────│  Worker      │
-                    │  • Reset tokens     │          │  (sync DB)   │
-                    └─────────────────────┘          └──────┬───────┘
-                                                           │
-                                                    ┌──────▼───────┐
-                                                    │  MinIO (S3)  │
-                                                    │  blob store  │
-                                                    └──────────────┘
+Host machine
+  ├── :5173  Vite dev server (frontend)
+  ├── :8080  uvicorn (backend API)
+  ├── Celery worker (background tasks)
+  │
+  └── Docker services (ports exposed to host for dev):
+        ├── :5432  PostgreSQL 15
+        ├── :6379  Redis 7
+        ├── :9000  MinIO S3 API
+        ├── :9001  MinIO console
+        └── :8000  ChromaDB
 ```
 
-| Service | Port | Purpose |
-|---------|------|---------|
-| PostgreSQL 15 | 5432 | Users, documents, metadata (SQLAlchemy async) |
-| Redis 7 | 6379 | Celery broker/backend, JWT denylist, reset tokens |
-| MinIO | 9000 (API), 9001 (console) | Document blob storage (S3-compatible) |
-| ChromaDB | 8000 | Vector embeddings (Phase 3) |
+### Production (`docker-compose.prod.yml`)
 
-All services run via `docker-compose.yml`. MinIO includes a one-shot `minio-setup` container that creates the `hireflow-documents` bucket on first boot.
+```
+Internet
+  │
+  :80 ──→ nginx (frontend static + /api/ reverse proxy)
+              │
+              ├──→ backend:8080  (uvicorn)
+              ├──→ worker         (celery, same Docker image)
+              │
+              └── internal network (no host ports) ──┐
+                    postgres:5432 (password required) │
+                    redis:6379 (password required)    │
+                    minio:9000                        │
+                    chromadb:8000                     │
+                    ──────────────────────────────────┘
+```
+
+Only nginx port 80 is exposed. All data stores are on a private Docker
+network. Redis and Postgres require passwords via env vars with `:?`
+fail-fast guards.
 
 ---
 
@@ -43,11 +51,14 @@ All services run via `docker-compose.yml`. MinIO includes a one-shot `minio-setu
 ```
 app/
 ├── domain/          ← pure business rules, no infra imports
-├── models/          ← SQLAlchemy ORM
+├── models/          ← SQLAlchemy ORM (7 models)
 ├── schemas/         ← Pydantic request/response DTOs
 ├── repositories/    ← data access (one class per aggregate)
 ├── adapters/        ← Protocol definitions + concrete implementations
-├── services/        ← application orchestration
+│   ├── vision/      ← pluggable OCR (Claude, Ollama, Tesseract)
+│   ├── classifiers/ ← document classification (rule-based + LLM)
+│   └── llm/         ← text LLM providers (Claude, Ollama)
+├── services/        ← application orchestration (10 services)
 ├── api/             ← HTTP layer (routes, deps, error handlers)
 ├── worker/          ← Celery tasks
 └── core/            ← cross-cutting (config, db, redis)
@@ -57,16 +68,18 @@ app/
 
 | Layer | May import | Must NOT import |
 |-------|-----------|-----------------|
-| `domain/` | stdlib only | anything infra, FastAPI, SQLAlchemy |
+| `domain/` | stdlib only | anything infra |
 | `models/` | stdlib, sqlalchemy, `domain/` | services, routes, adapters |
 | `schemas/` | stdlib, pydantic, `models/` (enums only) | services, routes |
 | `repositories/` | `models/`, `domain/`, sqlalchemy | services, routes, adapters |
-| `adapters/` | `core/`, stdlib, 3rd-party clients, `adapters/protocols` | services, repositories, routes |
+| `adapters/` | `core/`, stdlib, 3rd-party clients, `adapters/protocols` | services, repos, routes |
 | `services/` | `repositories/`, `adapters/` (Protocols only), `domain/` | routes, FastAPI, HTTPException |
-| `api/routes/` | `services/`, `schemas/`, `api/deps` | sqlalchemy, adapters (concrete), repositories |
+| `api/routes/` | `services/`, `schemas/`, `api/deps` | sqlalchemy, adapters (concrete), repos |
 | `worker/tasks` | `services/`, `adapters/`, `core/` | routes, FastAPI |
 
-**Key invariant:** services never import FastAPI or HTTPException. They raise `DomainError` subclasses; the error handler in `api/error_handlers.py` translates them to HTTP status codes.
+**Key invariant:** services raise `DomainError` subclasses, never
+`HTTPException`. The error handler in `api/error_handlers.py` maps
+them to HTTP status codes.
 
 ---
 
@@ -74,28 +87,21 @@ app/
 
 ### Exceptions (`domain/exceptions.py`)
 
-All expected, user-facing errors. Services raise these; `api/error_handlers.py` maps them to HTTP responses in one place.
-
 | Exception | HTTP | When |
 |-----------|------|------|
 | `InvalidCredentials` | 401 | Wrong email/password |
-| `InvalidToken` | 401 | Expired/revoked/malformed JWT or reset token |
-| `AccountDisabled` | 403 | User exists but `is_active=False` |
+| `InvalidToken` | 401 | Expired/revoked/malformed token |
+| `AccountDisabled` | 403 | User deactivated |
 | `Forbidden` | 403 | Role/ownership check failed |
 | `NotFound` | 404 | Resource doesn't exist |
 | `EmailAlreadyRegistered` | 409 | Duplicate registration |
 | `FileTooLarge` | 413 | Upload exceeds `MAX_FILE_SIZE_MB` |
-| `UnsupportedFileType` | 415 | MIME type not in allowed set |
+| `UnsupportedFileType` | 415 | MIME type not allowed |
 
 ### Authorizer (`domain/authorization.py`)
 
-Business-level permission checks. Called from services so the policy holds regardless of entry point (HTTP, CLI, worker). Methods raise `Forbidden` on denial.
-
-```python
-Authorizer.ensure_can_manage_users(actor)  # raises Forbidden if not admin
-```
-
-The HTTP-layer `require_role()` dependency in `api/deps.py` provides defense-in-depth. Both exist; neither is redundant.
+Business-level permission checks called from services. HTTP-layer
+`require_role()` in `api/deps.py` provides defense-in-depth.
 
 ---
 
@@ -103,53 +109,39 @@ The HTTP-layer `require_role()` dependency in `api/deps.py` provides defense-in-
 
 ### Protocols (`adapters/protocols.py`)
 
-One Protocol per swappable collaborator. Single-implementation things (repositories) don't get a Protocol.
-
 | Protocol | Implementations | Purpose |
 |----------|----------------|---------|
 | `PasswordHasher` | `Argon2Hasher` | Hash/verify passwords |
-| `TokenIssuer` | `JwtTokenIssuer` | Issue/decode JWT access + refresh tokens |
-| `RevocationStore` | `RedisRevocationStore` | Denylist refresh JTIs (TTL = remaining token life) |
-| `ResetTokenStore` | `RedisResetTokenStore` | One-time password-reset tokens (SHA-256 hashed) |
-| `EmailSender` | `LoggingEmailSender` | Send emails (dev stub → swap for SES/SMTP) |
-| `BlobStorage` | `MinioBlobStorage` | Object storage (MinIO → swap endpoint for S3/GCS) |
-| `VisionProvider` | `ClaudeVisionProvider`, `OllamaVisionProvider`, `TesseractVisionProvider` | OCR for scanned PDFs and images |
-| `DocumentClassifier` | `RuleBasedClassifier`, `LlmClassifier`, `CompositeClassifier` | Classify documents + extract metadata |
-| `TextExtractor` | `PdfExtractor`, `DocxExtractor`, `ImageExtractor`, `CompositeExtractor` | Extract text from files |
+| `TokenIssuer` | `JwtTokenIssuer` | Issue/decode JWT tokens |
+| `RevocationStore` | `RedisRevocationStore` | Denylist refresh JTIs |
+| `ResetTokenStore` | `RedisResetTokenStore` | One-time password-reset tokens |
+| `EmailSender` | `LoggingEmailSender` | Email delivery (stub → SES/SMTP) |
+| `BlobStorage` | `MinioBlobStorage` | Object storage (MinIO → S3/GCS) |
+| `VisionProvider` | Claude, Ollama, Tesseract | OCR for scanned documents |
+| `DocumentClassifier` | RuleBased, Llm, Composite | Document classification |
+| `TextExtractor` | Pdf, Docx, Image, Composite | Text extraction from files |
+| `VectorStore` | `ChromaVectorStore` | Vector embeddings for search |
+| `LlmProvider` | Claude, Ollama | Text completion for RAG |
 
 ### Shared data objects (frozen dataclasses)
 
-| Name | Fields | Used by |
-|------|--------|---------|
-| `TokenPayload` | `sub`, `jti`, `type`, `exp`, `extra`, `remaining_ttl_seconds` | TokenIssuer, SessionService |
-| `StoredBlob` | `key`, `size`, `etag` | BlobStorage, DocumentService |
-| `ExtractionResult` | `text`, `page_count` | TextExtractor, ExtractionService |
-| `ClassificationResult` | `document_type`, `confidence`, `metadata` | DocumentClassifier, ExtractionService |
+`TokenPayload`, `StoredBlob`, `ExtractionResult`, `ClassificationResult`,
+`VectorHit`
 
 ### Vision provider system (`adapters/vision/`)
 
-Runtime-selectable OCR via `VISION_PROVIDER` config:
+Runtime-selectable via `VISION_PROVIDER`: `claude`, `ollama`, `tesseract`, `none`.
+Resolved at Celery task execution time for runtime switching.
 
-| Value | Provider | Requires | Use case |
-|-------|----------|----------|----------|
-| `claude` | Claude API vision | `ANTHROPIC_API_KEY` | Best accuracy, SaaS OK |
-| `ollama` | Local multimodal (LLaVA etc.) | Ollama running | Air-gapped / budget |
-| `tesseract` | Tesseract OCR | `tesseract-ocr` system package | Simple docs, no network |
-| `none` | No-op | — | Skip OCR entirely |
+### LLM provider system (`adapters/llm/`)
 
-`adapters/vision/registry.py::get_vision_provider(settings)` resolves the provider. Called at Celery task execution time (not import time) so switching is runtime-dynamic.
+Runtime-selectable via `LLM_PROVIDER` + `LLM_MODEL`. Used for RAG
+question-answering and LLM-based document classification fallback.
 
 ### Classifier system (`adapters/classifiers/`)
 
-Two-stage classification pipeline:
-
-1. **`RuleBasedClassifier`** — keyword density for document type (resume/report/contract/letter/other). Regex patterns extract skills, experience years, education, emails, phones from resumes. Free, instant.
-
-2. **`LlmClassifier`** — Claude or Ollama fallback. Sends extracted text with a structured JSON prompt. Parses response tolerantly (handles markdown fences, malformed JSON).
-
-3. **`CompositeClassifier`** — rule-based first. If confidence < 0.4, tries LLM. Picks the higher-confidence result.
-
-`adapters/classifiers/registry.py::get_document_classifier(settings)` builds the chain. LLM fallback only wired when `VISION_PROVIDER` is `claude` or `ollama`.
+Two-stage: rule-based first (keyword density + regex), LLM fallback
+when confidence < 0.4. `CompositeClassifier` chains them.
 
 ---
 
@@ -168,7 +160,7 @@ users
 
 documents
 ├── id              UUID PK
-├── owner_id        UUID FK→users.id ON DELETE CASCADE INDEX
+├── owner_id        UUID FK→users ON DELETE CASCADE INDEX
 ├── filename        VARCHAR(512)
 ├── mime_type       VARCHAR(128)
 ├── size_bytes      BIGINT
@@ -177,19 +169,60 @@ documents
 ├── document_type   ENUM(resume, report, contract, letter, other) NULLABLE
 ├── extracted_text  TEXT NULLABLE
 ├── metadata        JSONB NULLABLE
-├── created_at      TIMESTAMPTZ DEFAULT now()
-└── updated_at      TIMESTAMPTZ DEFAULT now()
+├── created_at/updated_at TIMESTAMPTZ
+
+jobs
+├── id              UUID PK
+├── owner_id        UUID FK→users ON DELETE CASCADE INDEX
+├── title           VARCHAR(255)
+├── description     TEXT
+├── required_skills VARCHAR[] (PG ARRAY)
+├── preferred_skills VARCHAR[] NULLABLE
+├── education_level VARCHAR(100) NULLABLE
+├── experience_min  INTEGER
+├── experience_max  INTEGER NULLABLE
+├── location        VARCHAR(255) NULLABLE
+├── status          ENUM(draft, open, closed, archived) INDEX
+├── created_at/updated_at TIMESTAMPTZ
+
+candidates
+├── id                  UUID PK
+├── owner_id            UUID FK→users ON DELETE CASCADE INDEX
+├── source_document_id  UUID FK→documents ON DELETE SET NULL UNIQUE INDEX
+├── name                VARCHAR(255) NULLABLE
+├── email               VARCHAR(320) NULLABLE
+├── phone               VARCHAR(50) NULLABLE
+├── skills              VARCHAR[] (PG ARRAY)
+├── experience_years    INTEGER NULLABLE
+├── education           VARCHAR[] NULLABLE
+├── created_at/updated_at TIMESTAMPTZ
+
+applications
+├── id              UUID PK
+├── candidate_id    UUID FK→candidates ON DELETE CASCADE INDEX
+├── job_id          UUID FK→jobs ON DELETE CASCADE INDEX
+├── status          ENUM(new, shortlisted, rejected, interviewed, hired) INDEX
+├── score           FLOAT NULLABLE
+├── created_at/updated_at TIMESTAMPTZ
+
+activity_logs
+├── id              UUID PK
+├── actor_id        UUID FK→users ON DELETE SET NULL INDEX
+├── action          ENUM(14 action types) INDEX
+├── resource_type   VARCHAR(50) NULLABLE
+├── resource_id     VARCHAR(255) NULLABLE
+├── detail          TEXT NULLABLE
+├── ip_address      VARCHAR(45) NULLABLE
+├── created_at/updated_at TIMESTAMPTZ
 ```
 
-All models inherit `UUIDPrimaryKeyMixin` (uuid4 PK) + `TimestampMixin` (server-default `now()`, `onupdate=now()`).
-
-Migrations managed by Alembic (async, autogenerate). `alembic/env.py` reads DB URL from `Settings`, enables `compare_type` + `compare_server_default`. Downgrade scripts explicitly `DROP TYPE` for PG enums.
+All models inherit `UUIDPrimaryKeyMixin` + `TimestampMixin`.
+Migrations: Alembic async. Downgrade scripts explicitly `DROP TYPE`
+for PG enums.
 
 ---
 
 ## 6. Authentication system
-
-### Token lifecycle
 
 ```
 Register → Login → Access Token (30m) + Refresh Token (7d)
@@ -201,19 +234,11 @@ Register → Login → Access Token (30m) + Refresh Token (7d)
                  auto-refresh (FE)        rotation prevents reuse
 ```
 
-- **Access token**: short-lived JWT (`type=access`), carries `sub` (user UUID), `role`, `jti`
-- **Refresh token**: long-lived JWT (`type=refresh`), carries `sub`, `jti`
-- **`decode()` enforces the `type` claim** — a refresh token cannot be used where access is expected, and vice versa
-- **Rotation**: `/auth/refresh` revokes the presented refresh token's JTI in Redis, issues a new pair. Prevents stolen-token reuse.
-- **Logout**: revokes the refresh token's JTI. Idempotent for undecodable input.
-- **Redis denylist**: key `revoked_jti:<uuid>` with TTL = remaining token lifetime. Auto-expires; no cleanup job.
-
-### Password security
-
-- **Argon2id** (OWASP recommended) via `argon2-cffi` library defaults
-- **Transparent rehash on login**: if `needs_rehash()` returns true (params tightened), the hash is upgraded automatically
-- **Timing-safe for missing users**: `authenticate()` still calls `verify()` against a dummy hash so the latency doesn't reveal whether an email is registered
-- **Password reset**: opaque token (`secrets.token_urlsafe`), stored as SHA-256 hash in Redis with 15-minute TTL. Single-use via atomic `GET+DEL` pipeline.
+- **Argon2id** hashing with transparent rehash on login
+- **Timing-safe** auth (dummy hash for missing users)
+- **Type claim** on JWT prevents cross-use of access/refresh tokens
+- **Redis denylist** for revoked JTIs (auto-expire with TTL)
+- **Password reset**: opaque token, SHA-256 hashed in Redis, 15min TTL, atomic GET+DEL
 
 ---
 
@@ -221,157 +246,180 @@ Register → Login → Access Token (30m) + Refresh Token (7d)
 
 ```
 Upload (POST /documents)
-    │
-    ▼
-Store blob in MinIO → Create DB row (status=pending) → Return 201
-    │
-    ▼
-Celery task: extract_document_text.delay(doc_id)
-    │
-    ▼
-Worker picks up task
-    │
-    ├─ 1. Fetch blob from MinIO (sync)
-    ├─ 2. Extract text
-    │      ├─ PDF: PyMuPDF (text pages) + VisionProvider (scanned pages < 50 chars)
-    │      ├─ DOCX: python-docx
-    │      └─ Image: VisionProvider directly
-    ├─ 3. Classify document
-    │      ├─ RuleBasedClassifier (keyword density + regex)
-    │      └─ LlmClassifier fallback (if confidence < 0.4 and LLM configured)
-    ├─ 4. Update DB: extracted_text, document_type, metadata, status=ready
-    │
-    ▼
-Document ready for search/RAG (Phase 3)
+    → Store blob in MinIO → DB row (status=pending) → 201
+    → Celery: extract_document_text.delay(doc_id)
+
+Worker pipeline:
+    1. Fetch blob from MinIO (sync)
+    2. Extract text (PyMuPDF / python-docx / VisionProvider)
+    3. Classify (RuleBased → LLM fallback)
+    4. Index chunks in ChromaDB (non-fatal)
+    5. Update DB: text, type, metadata, status=ready
 ```
 
-**Status transitions**: `pending → processing → ready | failed`
-
-**Retry policy**: 3 retries, 30s delay, `acks_late=True`. Permanent failures (corrupt file, unsupported format) set `status=failed` without retrying.
-
-**Metadata JSONB** (populated for resumes):
-```json
-{
-  "page_count": 2,
-  "skills": ["python", "react", "docker"],
-  "experience_years": 7,
-  "education": ["Master's"],
-  "emails": ["alice@example.com"],
-  "phones": ["+1 555-1234"],
-  "classification_confidence": 0.68
-}
-```
+Retry: 3x, 30s delay, `acks_late=True`. Indexing failure is non-fatal.
 
 ---
 
-## 8. Composition root (`api/deps.py`)
+## 8. Search & RAG
 
-Single file that wires concrete adapters to Protocol abstractions and builds services. Every route reaches for things through `Annotated` aliases defined here.
+### Hybrid search (`POST /search`)
+
+Two retrieval paths merged by Reciprocal Rank Fusion (k=60):
+1. **Vector search** — ChromaDB cosine similarity on chunked text
+2. **SQL metadata filter** — document_type, skills JSONB, experience_years, date range
+
+Scores normalized to 0–1. Results hydrated with full document metadata.
+
+### RAG (`POST /rag/query`)
+
+1. Retrieve top-N chunks from ChromaDB
+2. Build prompt: system instructions + context chunks with filenames
+3. Send to LLM (Claude/Ollama via `LlmProvider`)
+4. Return answer + source citations
+
+### Candidate matching (`POST /jobs/{id}/match`)
+
+Three-signal scoring per candidate:
+- **Skill overlap (45%)**: jaccard on required + preferred skills
+- **Experience fit (20%)**: 1.0 if in range, linear decay outside
+- **Vector similarity (35%)**: ChromaDB cosine vs job description
+
+Creates/updates `Application` records with computed scores.
+
+---
+
+## 9. Composition root (`api/deps.py`)
+
+Wires adapters → services. Every route uses `Annotated` dep aliases.
 
 ```python
-# Singletons (stateless, created once at import time)
-_hasher = Argon2Hasher()
-_token_issuer = JwtTokenIssuer(...)
-_email_sender = LoggingEmailSender()
-_blob_storage = MinioBlobStorage(...)
+# Singletons
+_hasher, _token_issuer, _email_sender, _blob_storage, _vector_store, _llm_provider
 
-# Provider functions (called per-request by FastAPI's DI)
-def get_auth_service(users, hasher) -> AuthService
-def get_session_service(users, tokens, revocation) -> SessionService
-def get_password_reset_service(users, hasher, tokens, email) -> PasswordResetService
-def get_document_service(documents, storage) -> DocumentService
-def get_user_service(users) -> UserService
+# Service factories (called per-request)
+get_auth_service, get_session_service, get_password_reset_service,
+get_document_service, get_search_service, get_rag_service,
+get_job_service, get_candidate_service, get_matching_service,
+get_user_service, get_activity_service
 
-# Annotated aliases for routes
-AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
-SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
-DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
-# ... etc
+# Dep aliases
+AuthServiceDep, SessionServiceDep, DocumentServiceDep, SearchServiceDep,
+RagServiceDep, JobServiceDep, CandidateServiceDep, MatchingServiceDep,
+ActivityServiceDep, UserServiceDep, CurrentUser, RequireAdmin
 ```
-
-**Swapping an implementation** = change one line in `deps.py`. Example: replace `LoggingEmailSender()` with `SesEmailSender(region="us-east-1")`.
 
 ---
 
-## 9. API surface
+## 10. API surface
 
-All routes under `/api`. Tags map 1:1 to frontend SDK services.
+All routes under `/api`.
 
-### Auth (`/api/auth`)
-| Method | Path | Summary | Auth |
-|--------|------|---------|------|
-| POST | `/register` | Register a new account | — |
-| POST | `/login` | Log in | — |
-| POST | `/refresh` | Refresh tokens | — |
-| POST | `/logout` | Log out | — |
-| POST | `/forgot-password` | Request password reset | — |
-| POST | `/reset-password` | Reset password | — |
-| GET | `/me` | Get current user | Bearer |
+| Tag | Endpoints | Key operations |
+|-----|-----------|----------------|
+| auth | 9 | register, login, refresh, logout, forgot/reset password, me, update profile, change password |
+| documents | 6 | upload, list, get, metadata, download, delete |
+| search | 1 | hybrid search with filters |
+| rag | 1 | question-answering with citations |
+| jobs | 6 | CRUD + match candidates + CSV export |
+| candidates | 6 | create from doc, list, get, apply to job, list apps, update status |
+| users | 1 | list all (admin) |
+| logs | 1 | activity audit trail with filters |
 
-### Documents (`/api/documents`)
-| Method | Path | Summary | Auth |
-|--------|------|---------|------|
-| POST | `/` | Upload a document | Bearer |
-| GET | `/` | List my documents | Bearer |
-| GET | `/{id}` | Get document metadata | Bearer (owner/admin) |
-| GET | `/{id}/metadata` | Get classification + extracted metadata | Bearer (owner/admin) |
-| GET | `/{id}/download` | Download file bytes | Bearer (owner/admin) |
-| DELETE | `/{id}` | Delete document + blob | Bearer (owner/admin) |
-
-### Users (`/api/users`)
-| Method | Path | Summary | Auth |
-|--------|------|---------|------|
-| GET | `/` | List all users | Bearer (admin) |
+**Total: 31 endpoints.**
 
 ---
 
-## 10. Frontend integration
+## 11. Frontend architecture
 
+### Stack
+React 19, TypeScript, Vite, Tailwind v4, shadcn/ui, TanStack Query
+
+### SDK generation
 ```
-backend OpenAPI spec
-    → scripts/export_openapi.py (dumps JSON without running server)
-        → hey-api/openapi-ts generates TypeScript SDK
-            → frontend imports from @/api
-
-npm run generate-api  # runs both steps
+backend OpenAPI spec → hey-api/openapi-ts → TypeScript SDK + React Query hooks
 ```
 
-- `src/api/client.ts` — configured fetch client with base URL from `VITE_API_URL`, request interceptor for `Authorization: Bearer`, response interceptor for 401 → auto-refresh (single-flight)
-- `src/providers/auth-provider.tsx` — manages auth state, calls real SDK methods
-- Generated SDK methods have JSDoc from `Field(description=...)` annotations
+Operation IDs use route function names only (no tag prefix):
+`listDocuments`, `uploadDocument`, `searchDocuments`, `queryDocuments`
+
+### Data fetching pattern
+```tsx
+// Queries (GET endpoints) — auto-generated queryOptions
+const { data, isLoading } = useQuery({
+  ...listDocumentsOptions(),
+  select: (data) => data ?? [],
+});
+
+// Mutations (POST/PATCH/DELETE) — with cache invalidation
+const deleteMut = useMutation({
+  mutationFn: (doc) => deleteDocument({ path: { document_id: doc.id } }),
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: listDocumentsOptions().queryKey }),
+});
+```
+
+### Auth flow
+- `AuthProvider` calls `readMe()` on mount to hydrate user
+- `src/api/client.ts` has request interceptor (Bearer token) + response interceptor (401 → single-flight refresh → replay)
+- `PublicOnlyRoute` redirects authenticated users away from auth pages
+
+### Pages wired to real API
+Dashboard, Documents (CRUD + upload + preview), Search (hybrid + RAG chat),
+Jobs (CRUD), Candidates (list), Logs (activity trail), Settings (profile + password)
 
 ---
 
-## 11. Configuration
+## 12. Configuration
 
-All settings in `core/config.py` via `pydantic-settings`. Read from env vars and `.env` file. Fails fast on import if required vars are missing.
+All settings via `pydantic-settings` (`core/config.py`). Fails fast on missing required vars.
 
 | Category | Key vars | Required |
 |----------|----------|----------|
-| App | `DEBUG`, `ALLOWED_ORIGINS` | No (has defaults) |
-| DB | `DATABASE_URL` | No (default: local postgres) |
-| Redis | `REDIS_URL` | No (default: localhost:6379) |
+| App | `DEBUG`, `ALLOWED_ORIGINS` | No |
+| DB | `DATABASE_URL` | No (default: local) |
+| Redis | `REDIS_URL` | No (default: local) |
 | JWT | `JWT_SECRET_KEY` | **Yes** (min 32 chars) |
-| Storage | `STORAGE_ENDPOINT`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_BUCKET` | No (defaults: local MinIO) |
+| Storage | `STORAGE_ENDPOINT`, `_ACCESS_KEY`, `_SECRET_KEY`, `_BUCKET` | No (default: local MinIO) |
 | Vision | `VISION_PROVIDER`, `VISION_MODEL`, `OLLAMA_BASE_URL` | No (default: tesseract) |
-| LLM | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | No (needed when used) |
+| LLM | `LLM_PROVIDER`, `LLM_MODEL`, `ANTHROPIC_API_KEY` | No (needed for RAG) |
+| Upload | `MAX_FILE_SIZE_MB` | No (default: 10) |
+| ChromaDB | `CHROMA_HOST`, `CHROMA_PORT` | No (default: localhost:8000) |
+| Reset | `PASSWORD_RESET_TOKEN_EXPIRE_MINUTES` | No (default: 15) |
 
 ---
 
-## 12. Adding a new feature
+## 13. Deployment
 
-Follow the checklist from `docs/features.md`. For code:
+### Dev
+```bash
+make setup   # first time: deps, .env, services, migrate, seed
+make dev     # daily: API + worker + frontend in one terminal
+```
 
-1. **Schema** — request/response DTOs in `schemas/`. Follow `docs/openapi-standards.md`.
-2. **Model + migration** — in `models/`. Run `alembic revision --autogenerate`. Add explicit `DROP TYPE` in downgrade for new enums.
-3. **Protocol** (if the feature needs a swappable collaborator) — in `adapters/protocols.py`.
-4. **Adapter** — concrete implementation in `adapters/`.
-5. **Repository** (if new DB aggregate) — in `repositories/`.
-6. **Service** — in `services/`. Takes repos + protocols in constructor. Raises domain errors. Takes `actor: User` parameter for authorized operations.
-7. **Composition root** — add provider + factory + `Annotated` alias in `api/deps.py`.
-8. **Route** — thin wrapper in `api/routes/`. ≤ 5 lines per handler. `summary`, `description`, `responses` on every decorator.
-9. **Error handler** — if new domain error, add to `_STATUS` dict in `api/error_handlers.py`.
-10. **Ruff** — `uv run ruff check --fix && uv run ruff format` before commit. Zero `noqa`.
-11. **Regenerate SDK** — `npm run generate-api` from `frontend/`.
+### Production
+```bash
+cp .env.prod.example .env.prod   # fill secrets
+make prod-up                     # docker compose build + up
+```
 
-**Acceptance bar for a service class**: instantiable in a test with fakes passed in — no Docker, no Redis, no MinIO needed.
+Production stack: nginx serves frontend static files + proxies `/api/`
+to backend. All data stores on internal Docker network. No ports
+exposed except :80.
+
+---
+
+## 14. Adding a new feature
+
+1. **Schema** — `schemas/`. Follow `docs/openapi-standards.md`.
+2. **Model + migration** — `models/`. `DROP TYPE` in downgrade for enums.
+3. **Protocol** (if swappable) — `adapters/protocols.py`.
+4. **Adapter** — `adapters/`.
+5. **Repository** — `repositories/`.
+6. **Service** — `services/`. Raises domain errors. Takes `actor: User`.
+7. **Wiring** — `api/deps.py`. Factory + `Annotated` alias.
+8. **Route** — `api/routes/`. ≤ 5 lines per handler.
+9. **Error handler** — add to `_STATUS` dict if new domain error.
+10. **Ruff** — `make lint` before commit. Zero `noqa`.
+11. **SDK** — `make generate` from root.
+
+**Acceptance bar**: service instantiable in a test with fakes — no Docker needed.
