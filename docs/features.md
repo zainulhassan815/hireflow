@@ -232,7 +232,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
   - Backend + frontend Dockerfiles; reverse proxy (Caddy/Nginx); HTTPS
   - Separate `docker-compose.prod.yml`
 
-- [ ] **F73 · Encryption at rest for sensitive fields**
+- [x] **F73 · Encryption at rest for sensitive fields**
   SRS: §Privacy and Security · Depends on: F50
   - OAuth refresh tokens + any PII columns encrypted (app-level or pgcrypto)
 

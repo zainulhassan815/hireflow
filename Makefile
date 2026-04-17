@@ -10,6 +10,11 @@ setup: ## First-time setup (install, env, services, migrate, seed)
 	@test -f backend/.env || (cp backend/.env.example backend/.env && \
 		sed -i "s/^JWT_SECRET_KEY=$$/JWT_SECRET_KEY=$$(openssl rand -hex 32)/" backend/.env && \
 		echo "Created backend/.env")
+	@grep -q '^ENCRYPTION_KEYS=.\+' backend/.env || (cd backend && \
+		KEY=$$(uv run python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())") && \
+		sed -i "s|^ENCRYPTION_KEYS=.*|ENCRYPTION_KEYS=$$KEY|" .env && \
+		(grep -q '^ENCRYPTION_KEYS=' .env || echo "ENCRYPTION_KEYS=$$KEY" >> .env) && \
+		echo "Generated ENCRYPTION_KEYS in backend/.env")
 	@test -f frontend/.env || (cp frontend/.env.example frontend/.env && echo "Created frontend/.env")
 	docker compose up -d postgres redis minio chromadb
 	@docker compose up minio-setup 2>/dev/null || true

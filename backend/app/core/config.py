@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
 
+    # Field-level encryption (Fernet). Newest key first; older keys still
+    # decrypt. Generate with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    encryption_keys: Annotated[list[SecretStr], NoDecode] = Field(default_factory=list)
+
     # Password reset
     password_reset_token_expire_minutes: int = 15
 
@@ -72,6 +77,13 @@ class Settings(BaseSettings):
     def _split_origins(cls, v: object) -> object:
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
+    @field_validator("encryption_keys", mode="before")
+    @classmethod
+    def _split_keys(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [k.strip() for k in v.split(",") if k.strip()]
         return v
 
 

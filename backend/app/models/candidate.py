@@ -9,6 +9,7 @@ from sqlalchemy import Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.encryption import EncryptedString
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
@@ -46,7 +47,7 @@ class Candidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
-    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    phone: Mapped[str | None] = mapped_column(EncryptedString, nullable=True)
     skills: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, default=list
     )

@@ -11,10 +11,13 @@ from app.api.error_handlers import (
 from app.api.router import api_router
 from app.core.api_config import custom_generate_unique_id
 from app.core.config import settings
+from app.core.encryption import get_cipher
 from app.domain.exceptions import DomainError
 
 
 def create_app() -> FastAPI:
+    get_cipher()  # fail-fast if ENCRYPTION_KEYS is unset
+
     app = FastAPI(
         title=settings.app_name,
         description="AI-Powered HR Screening and Document Retrieval System Using RAG",
