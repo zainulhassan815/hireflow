@@ -25,6 +25,8 @@ class ActivityAction(StrEnum):
     CANDIDATE_CREATE = "candidate_create"
     CANDIDATE_MATCH = "candidate_match"
     APPLICATION_STATUS_CHANGE = "application_status_change"
+    GMAIL_CONNECT = "gmail_connect"
+    GMAIL_DISCONNECT = "gmail_disconnect"
 
 
 class ActivityLog(UUIDPrimaryKeyMixin, TimestampMixin, Base):

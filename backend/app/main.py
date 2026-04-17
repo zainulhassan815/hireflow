@@ -64,6 +64,13 @@ def create_app() -> FastAPI:
                 "name": "logs",
                 "description": "Activity audit trail.",
             },
+            {
+                "name": "gmail",
+                "description": (
+                    "Gmail OAuth: connect, disconnect, status. Actual resume "
+                    "syncing and email sending land in later features."
+                ),
+            },
         ],
     )
 

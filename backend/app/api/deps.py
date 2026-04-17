@@ -20,12 +20,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.argon2_hasher import Argon2Hasher
 from app.adapters.chroma_store import ChromaVectorStore
 from app.adapters.email_sender import LoggingEmailSender
+from app.adapters.gmail_oauth import GoogleGmailOAuth
 from app.adapters.jwt_token_issuer import JwtTokenIssuer
 from app.adapters.llm.registry import get_llm_provider
 from app.adapters.minio_storage import MinioBlobStorage
 from app.adapters.protocols import (
     BlobStorage,
     EmailSender,
+    GmailOAuth,
     PasswordHasher,
     ResetTokenStore,
     RevocationStore,
@@ -43,12 +45,14 @@ from app.models import User, UserRole
 from app.repositories.activity_log import ActivityLogRepository
 from app.repositories.candidate import ApplicationRepository, CandidateRepository
 from app.repositories.document import DocumentRepository
+from app.repositories.gmail_connection import GmailConnectionRepository
 from app.repositories.job import JobRepository
 from app.repositories.user import UserRepository
 from app.services.activity_service import ActivityService
 from app.services.auth_service import AuthService
 from app.services.candidate_service import CandidateService
 from app.services.document_service import DocumentService
+from app.services.gmail_service import GmailService
 from app.services.job_service import JobService
 from app.services.matching_service import MatchingService
 from app.services.password_reset_service import PasswordResetService
@@ -96,6 +100,22 @@ except Exception:
 _llm_provider = get_llm_provider(settings)
 if _llm_provider:
     _logger.info("LLM provider: %s", _llm_provider.model_name)
+
+_gmail_oauth: GmailOAuth | None
+if (
+    settings.gmail_client_id
+    and settings.gmail_client_secret
+    and settings.gmail_redirect_uri
+):
+    _gmail_oauth = GoogleGmailOAuth(
+        client_id=settings.gmail_client_id,
+        client_secret=settings.gmail_client_secret.get_secret_value(),
+        redirect_uri=settings.gmail_redirect_uri,
+    )
+    _logger.info("Gmail OAuth configured (redirect=%s)", settings.gmail_redirect_uri)
+else:
+    _gmail_oauth = None
+    _logger.info("Gmail OAuth not configured; /api/gmail endpoints will 503")
 
 
 # ---------- Adapter providers ----------
@@ -257,6 +277,28 @@ def get_activity_service(logs: ActivityLogRepositoryDep) -> ActivityService:
     return ActivityService(logs)
 
 
+def get_gmail_connection_repository(db: DbSession) -> GmailConnectionRepository:
+    return GmailConnectionRepository(db)
+
+
+def get_gmail_service(
+    db: DbSession, redis: RedisDep, activity: ActivityServiceDep
+) -> GmailService:
+    from app.domain.exceptions import ServiceUnavailable
+
+    if _gmail_oauth is None:
+        raise ServiceUnavailable(
+            "Gmail OAuth is not configured. Set GMAIL_CLIENT_ID, "
+            "GMAIL_CLIENT_SECRET, and GMAIL_REDIRECT_URI."
+        )
+    return GmailService(
+        oauth=_gmail_oauth,
+        connections=GmailConnectionRepository(db),
+        redis=redis,
+        activity=activity,
+    )
+
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
 PasswordResetServiceDep = Annotated[
@@ -270,6 +312,7 @@ JobServiceDep = Annotated[JobService, Depends(get_job_service)]
 CandidateServiceDep = Annotated[CandidateService, Depends(get_candidate_service)]
 MatchingServiceDep = Annotated[MatchingService, Depends(get_matching_service)]
 ActivityServiceDep = Annotated[ActivityService, Depends(get_activity_service)]
+GmailServiceDep = Annotated[GmailService, Depends(get_gmail_service)]
 
 
 # ---------- Auth context ----------

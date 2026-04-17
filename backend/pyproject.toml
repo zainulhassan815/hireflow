@@ -13,6 +13,7 @@ dependencies = [
     "chromadb>=1.5.7",
     "cryptography>=43.0.0",
     "fastapi[standard]>=0.127.0",
+    "httpx>=0.28.0",
     "minio>=7.2.20",
     "pillow",
     "psycopg2-binary>=2.9.11",

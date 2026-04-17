@@ -62,3 +62,7 @@ class Forbidden(DomainError):
 
 class ServiceUnavailable(DomainError):
     """A required downstream provider (LLM, vision, storage) is not configured or reachable."""
+
+
+class GmailAuthError(DomainError):
+    """OAuth flow with Google failed (bad state, denied consent, exchange error)."""

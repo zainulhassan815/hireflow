@@ -26,6 +26,7 @@ from app.domain.exceptions import (
     EmailAlreadyRegistered,
     FileTooLarge,
     Forbidden,
+    GmailAuthError,
     InvalidCredentials,
     InvalidToken,
     NotFound,
@@ -45,6 +46,7 @@ _STATUS: dict[type[DomainError], int] = {
     FileTooLarge: 413,
     UnsupportedFileType: 415,
     ServiceUnavailable: 503,
+    GmailAuthError: 400,
 }
 
 

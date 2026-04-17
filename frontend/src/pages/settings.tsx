@@ -1,6 +1,8 @@
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { changePassword, updateProfile } from "@/api";
+import { EmailConnection } from "@/components/settings/email-connection";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +12,13 @@ import { Typography } from "@/components/ui/typography";
 import { useAuth } from "@/providers/use-auth";
 import { extractApiError } from "@/lib/api-errors";
 import { toast } from "sonner";
+
+const GMAIL_ERROR_MESSAGES: Record<string, string> = {
+  denied: "Gmail connection cancelled.",
+  missing_params: "Gmail callback was missing required parameters.",
+  invalid_state: "Gmail connection expired. Please try again.",
+  exchange_failed: "Could not complete Gmail OAuth. Please try again.",
+};
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -22,6 +31,22 @@ export function SettingsPage() {
   const [newPassword, setNewPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [savingPassword, setSavingPassword] = React.useState(false);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  React.useEffect(() => {
+    const result = searchParams.get("gmail");
+    if (!result) return;
+    if (result === "connected") {
+      toast.success("Gmail connected");
+    } else if (result === "error") {
+      const reason = searchParams.get("reason") ?? "";
+      toast.error(GMAIL_ERROR_MESSAGES[reason] ?? "Gmail connection failed.");
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("gmail");
+    next.delete("reason");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const handleSaveProfile = async () => {
     setSavingProfile(true);
@@ -165,6 +190,10 @@ export function SettingsPage() {
             </form>
           </CardContent>
         </Card>
+
+        <Separator />
+
+        <EmailConnection />
       </div>
     </div>
   );

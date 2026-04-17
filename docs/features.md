@@ -179,7 +179,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
 
 ## Phase 5 — Gmail Integration (FR17, FR18, UC-08, UC-09)
 
-- [ ] **F50 · Gmail OAuth connect**
+- [x] **F50 · Gmail OAuth connect**
   SRS: FR17 · Depends on: F14
   - OAuth 2.0 initiation + callback endpoints
   - Store refresh token encrypted per user

@@ -217,3 +217,29 @@ class TextExtractor(Protocol):
         ...
 
     def supports(self, mime_type: str) -> bool: ...
+
+
+# ---------- Gmail OAuth ----------
+
+
+@dataclass(frozen=True, slots=True)
+class OAuthTokens:
+    """What Google returns from the token endpoint."""
+
+    access_token: str
+    refresh_token: str | None
+    expires_in: int
+    scope: str
+
+
+@runtime_checkable
+class GmailOAuth(Protocol):
+    def build_authorize_url(self, state: str) -> str: ...
+
+    async def exchange_code(self, code: str) -> OAuthTokens: ...
+
+    async def refresh(self, refresh_token: str) -> OAuthTokens: ...
+
+    async def revoke(self, token: str) -> None: ...
+
+    async def fetch_email(self, access_token: str) -> str: ...
