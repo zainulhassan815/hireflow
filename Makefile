@@ -55,11 +55,20 @@ migrate: ## Run database migrations
 generate: ## Regenerate frontend API client
 	cd frontend && npm run generate-api
 
+# Env-var overrides baked in at the Make layer so pytest never touches
+# the dev database even if a conftest `pytest_configure` hook misfires.
+# The `_test` DB name is the last-line-of-defence check inside the
+# fixtures themselves.
+TEST_ENV = DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/hr_screening_test \
+           REDIS_URL=redis://localhost:6379/15 \
+           DEBUG=false \
+           ENCRYPTION_KEYS=bwKiCtnOedgvw_E3RtRehIznu_GR2i_8sAPM2oBRYv0=
+
 test: services ## Run backend tests (real postgres + redis; mocked Google HTTP)
-	cd backend && uv run pytest tests -xvs --ignore=tests/eval
+	cd backend && $(TEST_ENV) uv run pytest tests -xvs --ignore=tests/eval
 
 eval: services ## Run search quality eval (slower; hits real ChromaDB)
-	cd backend && uv run pytest tests/eval -xvs
+	cd backend && $(TEST_ENV) uv run pytest tests/eval -xvs
 
 stop: ## Stop Docker services
 	docker compose down

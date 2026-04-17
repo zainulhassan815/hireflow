@@ -58,8 +58,8 @@ def pytest_configure(config: pytest.Config) -> None:
         dev_env,
         "ENCRYPTION_KEYS",
         # A deterministic Fernet key for tests. Safe to check in — it
-        # never encrypts real data.
-        "dGVzdC1rZXktZm9yLWhpcmVmbG93LXVuaXR0ZXN0cy0wMDAwMA==",
+        # never encrypts real data. Generated via ``Fernet.generate_key()``.
+        "bwKiCtnOedgvw_E3RtRehIznu_GR2i_8sAPM2oBRYv0=",
     )
 
 
@@ -155,6 +155,22 @@ async def _create_test_database_if_missing() -> None:
 # --------------------------------------------------------------------------
 
 
+def _assert_test_database(database_url: str) -> None:
+    """Refuse to TRUNCATE any DB that isn't the ``*_test`` target.
+
+    If ``pytest_configure`` failed to swap env vars in time (for example
+    a test module imports ``app.*`` at module level before the hook
+    runs), this guard is the last line of defence against wiping a dev
+    database.
+    """
+    if "_test" not in database_url.rsplit("/", 1)[-1]:
+        raise RuntimeError(
+            f"Test harness refusing to TRUNCATE: database URL "
+            f"{database_url!r} does not target a *_test database. "
+            "Check env var ordering and test module imports."
+        )
+
+
 @pytest.fixture(autouse=True)
 async def clean_database() -> AsyncIterator[None]:
     """TRUNCATE every app table before each test.
@@ -164,8 +180,11 @@ async def clean_database() -> AsyncIterator[None]:
     """
     from sqlalchemy import text
 
+    from app.core.config import settings
     from app.core.db import SessionLocal
     from app.models import Base
+
+    _assert_test_database(settings.database_url)
 
     tables = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
 

@@ -49,12 +49,29 @@ def enqueued_tasks() -> Iterator[None]:
 # ---------------------------------------------------------------------------
 
 
+def _assert_test_database(database_url: str) -> None:
+    """Blow up loudly if the eval is pointed at a non-test database.
+
+    Hand-wired safety net after a previous run wiped the dev DB because
+    ``pytest_configure`` hadn't yet swapped env vars at the time the
+    ``settings`` module loaded. Runs on *every* entry point that could
+    delete rows — belt-and-braces against the same bug recurring.
+    """
+    if "_test" not in database_url.rsplit("/", 1)[-1]:
+        raise RuntimeError(
+            f"Eval harness refusing to run: database URL {database_url!r} "
+            "does not target a *_test database. Set DATABASE_URL explicitly "
+            "or use 'make eval' which handles it."
+        )
+
+
 @pytest.fixture(scope="session")
 async def eval_owner_id() -> UUID:
     """A deterministic owner user seeded for every eval run."""
     from sqlalchemy import delete
 
     from app.adapters.argon2_hasher import Argon2Hasher
+    from app.core.config import settings
     from app.core.db import SessionLocal
     from app.models import (
         ActivityLog,
@@ -67,6 +84,8 @@ async def eval_owner_id() -> UUID:
     from app.models import Document as DocumentModel
     from app.models import User as UserModel
     from app.repositories.user import UserRepository
+
+    _assert_test_database(settings.database_url)
 
     async with SessionLocal() as session:
         # Clean out the test DB exactly once at session start so a
@@ -118,9 +137,11 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
     from app.adapters.chroma_store import ChromaVectorStore
     from app.core.config import settings
     from app.core.db import SessionLocal
-    from app.models import Document, DocumentStatus
+    from app.models import Document, DocumentStatus, DocumentType
     from app.services.chunking import chunk_text
     from app.services.embedding_service import EmbeddingService
+
+    _assert_test_database(settings.database_url)
 
     store = ChromaVectorStore(host=settings.chroma_host, port=settings.chroma_port)
     embedder = EmbeddingService(store)
@@ -128,6 +149,7 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
     pairs: list[tuple[FixtureDoc, UUID]] = []
     async with SessionLocal() as session:
         for fixture in FIXTURE_DOCS:
+            doc_type = DocumentType(fixture.document_type)
             doc = Document(
                 id=uuid4(),
                 owner_id=eval_owner_id,
@@ -136,7 +158,7 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
                 size_bytes=len(fixture.text.encode()),
                 storage_key=f"eval/{fixture.slug}",
                 status=DocumentStatus.READY,
-                document_type=fixture.document_type,
+                document_type=doc_type,
                 extracted_text=fixture.text,
                 metadata_={
                     **fixture.metadata,
@@ -155,7 +177,7 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
                     "filename": fixture.filename,
                     "mime_type": "application/pdf",
                     "owner_id": str(eval_owner_id),
-                    "document_type": fixture.document_type.value,
+                    "document_type": doc_type.value,
                     "document_id": str(doc.id),
                     "chunk_index": i,
                     "total_chunks": len(chunks),

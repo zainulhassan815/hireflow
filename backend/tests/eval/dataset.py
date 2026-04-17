@@ -9,14 +9,19 @@ so the SQL filter path has something to match when a query provides
 Queries are grouped into buckets; per-bucket aggregates are printed
 alongside the overall numbers so we can see which query shapes we're
 weak on.
+
+NOTE: this module **must not** import anything from ``app.*`` at
+module level. Doing so triggers ``app.core.config`` to read env vars
+*before* pytest's ``pytest_configure`` hook can swap in the test DB
+URL. An earlier run of this module did exactly that and wiped a dev
+database. ``document_type`` is stored as a plain string here; the
+seeder converts it to the ``DocumentType`` enum at use time.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
-
-from app.models import DocumentType
 
 
 @dataclass(frozen=True)
@@ -25,7 +30,7 @@ class FixtureDoc:
 
     slug: str
     filename: str
-    document_type: DocumentType
+    document_type: str  # raw enum value; converted inside the seeder
     text: str
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -220,7 +225,7 @@ FIXTURE_DOCS: list[FixtureDoc] = [
     FixtureDoc(
         slug="resume_python_senior",
         filename="jane_doe_resume.pdf",
-        document_type=DocumentType.RESUME,
+        document_type="resume",
         text=_PYTHON_SENIOR,
         metadata={
             "name": "Jane Doe",
@@ -243,7 +248,7 @@ FIXTURE_DOCS: list[FixtureDoc] = [
     FixtureDoc(
         slug="resume_javascript_junior",
         filename="alex_smith_resume.pdf",
-        document_type=DocumentType.RESUME,
+        document_type="resume",
         text=_JAVASCRIPT_JUNIOR,
         metadata={
             "name": "Alex Smith",
@@ -264,7 +269,7 @@ FIXTURE_DOCS: list[FixtureDoc] = [
     FixtureDoc(
         slug="resume_data_scientist",
         filename="priya_patel_resume.pdf",
-        document_type=DocumentType.RESUME,
+        document_type="resume",
         text=_DATA_SCIENTIST,
         metadata={
             "name": "Priya Patel",
@@ -286,7 +291,7 @@ FIXTURE_DOCS: list[FixtureDoc] = [
     FixtureDoc(
         slug="resume_devops",
         filename="marcus_chen_resume.pdf",
-        document_type=DocumentType.RESUME,
+        document_type="resume",
         text=_DEVOPS_ENGINEER,
         metadata={
             "name": "Marcus Chen",
@@ -309,7 +314,7 @@ FIXTURE_DOCS: list[FixtureDoc] = [
     FixtureDoc(
         slug="contract_vendor_q3",
         filename="brightforge_msa.pdf",
-        document_type=DocumentType.CONTRACT,
+        document_type="contract",
         text=_VENDOR_CONTRACT,
         metadata={
             "document_category": "vendor_agreement",
@@ -319,14 +324,14 @@ FIXTURE_DOCS: list[FixtureDoc] = [
     FixtureDoc(
         slug="report_sales_q3",
         filename="q3_2025_sales.pdf",
-        document_type=DocumentType.REPORT,
+        document_type="report",
         text=_Q3_SALES_REPORT,
         metadata={"report_type": "sales", "period": "Q3 2025"},
     ),
     FixtureDoc(
         slug="letter_cover_jane",
         filename="jane_doe_cover_letter.pdf",
-        document_type=DocumentType.LETTER,
+        document_type="letter",
         text=_COVER_LETTER,
         metadata={"letter_type": "cover_letter", "applicant": "Jane Doe"},
     ),
