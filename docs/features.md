@@ -222,7 +222,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
   Depends on: F10
   - Consistent error envelope; frontend toast integration; Sentry hook (optional)
 
-- [ ] **F71 · Tests**
+- [x] **F71 · Tests**
   Depends on: F10+
   - pytest: auth, documents, search, ranking
   - Playwright: login → upload → search happy path
