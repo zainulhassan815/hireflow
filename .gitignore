@@ -30,6 +30,20 @@ logs/
 htmlcov/
 .pytest_cache/
 
+# Tool caches
+.ruff_cache/
+.mypy_cache/
+
+# Local databases / stray data files
+*.sqlite
+*.sqlite3
+*.db
+
+# Celery beat scheduler state (regenerated on every beat run)
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat.pid
+
 # Generated
 frontend/openapi.json
 frontend/src/api/generated/

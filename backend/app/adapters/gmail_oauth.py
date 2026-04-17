@@ -20,7 +20,7 @@ from urllib.parse import urlencode
 
 import httpx
 
-from app.adapters.protocols import OAuthTokens
+from app.adapters.protocols import InvalidGrant, OAuthTokens
 
 logger = logging.getLogger(__name__)
 
@@ -115,13 +115,16 @@ def _parse_tokens(response: httpx.Response) -> OAuthTokens:
     if response.status_code != 200:
         # Don't leak the response body: Google sometimes echoes the
         # client_id/secret back on certain failures.
-        logger.warning(
-            "gmail token endpoint returned %s: %s",
-            response.status_code,
+        error_code = (
             response.json().get("error", "unknown_error")
             if response.headers.get("content-type", "").startswith("application/json")
-            else "non-json",
+            else "non-json"
         )
+        logger.warning(
+            "gmail token endpoint returned %s: %s", response.status_code, error_code
+        )
+        if error_code == "invalid_grant":
+            raise InvalidGrant("refresh token revoked or expired")
         raise RuntimeError(f"google token exchange failed: {response.status_code}")
 
     payload = response.json()

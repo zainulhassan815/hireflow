@@ -43,6 +43,11 @@ class DocumentService:
         self._max_size = max_file_size_bytes
         self._vector_store = vector_store
 
+    @property
+    def max_size_bytes(self) -> int:
+        """Upload size cap; used by Gmail sync to pre-filter attachments."""
+        return self._max_size
+
     async def upload(
         self,
         *,

@@ -185,7 +185,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
   - Store refresh token encrypted per user
   - Settings page: connect/disconnect Gmail
 
-- [ ] **F51 · Resume sync worker**
+- [x] **F51 · Resume sync worker**
   SRS: FR18, UC-08, UC-09 · Depends on: F50, F22
   - Scheduled poll (or push via Pub/Sub later) fetches new emails with attachments
   - Dedup by message-id + attachment hash

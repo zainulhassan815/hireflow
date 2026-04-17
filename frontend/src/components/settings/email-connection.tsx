@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircleIcon, MailIcon, UnplugIcon } from "lucide-react";
+import {
+  CheckCircleIcon,
+  MailIcon,
+  RefreshCwIcon,
+  UnplugIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -7,6 +12,7 @@ import {
   gmailDisconnectMutation,
   gmailStatusOptions,
   gmailStatusQueryKey,
+  gmailSyncNowMutation,
 } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +22,13 @@ import { Typography } from "@/components/ui/typography";
 
 export function EmailConnection() {
   const queryClient = useQueryClient();
-  const { data: status, isLoading } = useQuery(gmailStatusOptions());
+  const { data: status, isLoading } = useQuery({
+    ...gmailStatusOptions(),
+    // Poll every 15s so last_synced_at updates shortly after a sync
+    // completes without requiring the user to refresh. Cheap (one
+    // authenticated GET) and only while the card is mounted.
+    refetchInterval: 15_000,
+  });
 
   const authorize = useMutation({
     ...gmailAuthorizeMutation(),
@@ -29,6 +41,14 @@ export function EmailConnection() {
     ...gmailDisconnectMutation(),
     onSuccess: () => {
       toast.success("Gmail disconnected");
+      queryClient.invalidateQueries({ queryKey: gmailStatusQueryKey() });
+    },
+  });
+
+  const syncNow = useMutation({
+    ...gmailSyncNowMutation(),
+    onSuccess: () => {
+      toast.success("Sync started — new resumes will appear shortly");
       queryClient.invalidateQueries({ queryKey: gmailStatusQueryKey() });
     },
   });
@@ -88,8 +108,9 @@ export function EmailConnection() {
                   </div>
                   <Typography variant="muted" className="text-sm">
                     {connectedAt && `Connected ${connectedAt.toLocaleString()}`}
-                    {lastSyncedAt &&
-                      ` · Last synced ${lastSyncedAt.toLocaleString()}`}
+                    {lastSyncedAt
+                      ? ` · Last synced ${lastSyncedAt.toLocaleString()}`
+                      : " · Never synced"}
                   </Typography>
                 </>
               ) : (
@@ -104,18 +125,32 @@ export function EmailConnection() {
               )}
             </div>
           </div>
-          <div className="shrink-0">
+          <div className="flex shrink-0 gap-2">
             {connected ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => disconnect.mutate({})}
-                disabled={disconnect.isPending}
-                className="text-destructive"
-              >
-                <UnplugIcon className="size-4" data-icon="inline-start" />
-                Disconnect
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => syncNow.mutate({})}
+                  disabled={syncNow.isPending}
+                >
+                  <RefreshCwIcon
+                    className={`size-4 ${syncNow.isPending ? "animate-spin" : ""}`}
+                    data-icon="inline-start"
+                  />
+                  {syncNow.isPending ? "Syncing..." : "Sync now"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => disconnect.mutate({})}
+                  disabled={disconnect.isPending}
+                  className="text-destructive"
+                >
+                  <UnplugIcon className="size-4" data-icon="inline-start" />
+                  Disconnect
+                </Button>
+              </>
             ) : (
               <Button
                 onClick={() => authorize.mutate({})}

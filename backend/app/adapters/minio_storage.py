@@ -83,3 +83,18 @@ class MinioBlobStorage:
         finally:
             response.close()
             response.release_conn()
+
+    def put_sync(self, key: str, data: bytes, content_type: str) -> StoredBlob:
+        """Synchronous variant for use in Celery workers."""
+        result = self._client.put_object(
+            self._bucket,
+            key,
+            BytesIO(data),
+            length=len(data),
+            content_type=content_type,
+        )
+        return StoredBlob(
+            key=key,
+            size=len(data),
+            etag=result.etag.strip('"'),
+        )

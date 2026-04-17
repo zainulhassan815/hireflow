@@ -30,12 +30,14 @@ class ExtractionService:
         classifier: DocumentClassifier,
         storage_get: Callable[[str], bytes],
         embedding: EmbeddingService | None = None,
+        on_ready: Callable[[Document], None] | None = None,
     ) -> None:
         self._session = session
         self._extractor = extractor
         self._classifier = classifier
         self._storage_get = storage_get
         self._embedding = embedding
+        self._on_ready = on_ready
 
     def process(self, document_id: UUID) -> None:
         doc = self._session.execute(
@@ -69,6 +71,12 @@ class ExtractionService:
             logger.exception("processing failed for document %s", document_id)
 
         self._session.commit()
+
+        # Ready-side hook fires after commit so downstream consumers
+        # (auto-candidate creation, notifications, etc.) see the final
+        # persisted state. Never runs on failure.
+        if doc.status == DocumentStatus.READY and self._on_ready is not None:
+            self._on_ready(doc)
 
     def _extract(self, doc: Document) -> None:
         data = self._storage_get(doc.storage_key)

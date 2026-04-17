@@ -243,3 +243,61 @@ class GmailOAuth(Protocol):
     async def revoke(self, token: str) -> None: ...
 
     async def fetch_email(self, access_token: str) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class GmailAttachmentRef:
+    """Reference to an attachment inside a Gmail message (pre-download)."""
+
+    attachment_id: str
+    filename: str
+    mime_type: str
+    size_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class GmailMessageSummary:
+    """Minimum info to decide whether to fetch a full message."""
+
+    message_id: str
+    thread_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class GmailMessage:
+    """Full message with flattened attachment metadata."""
+
+    message_id: str
+    thread_id: str
+    internal_date_ms: int
+    attachments: list[GmailAttachmentRef]
+
+
+@dataclass(frozen=True, slots=True)
+class GmailMessagePage:
+    """One page of message IDs from ``messages.list``."""
+
+    messages: list[GmailMessageSummary]
+    next_page_token: str | None
+
+
+class InvalidGrant(Exception):
+    """Raised by the OAuth refresh when Google returns ``invalid_grant``.
+
+    Signals that the user has revoked access at ``myaccount.google.com``
+    or the refresh token is otherwise dead. Not a domain error —
+    callers decide whether to auto-disconnect or propagate.
+    """
+
+
+@runtime_checkable
+class GmailApi(Protocol):
+    async def list_messages(
+        self, access_token: str, *, query: str, page_token: str | None = None
+    ) -> GmailMessagePage: ...
+
+    async def get_message(self, access_token: str, message_id: str) -> GmailMessage: ...
+
+    async def download_attachment(
+        self, access_token: str, message_id: str, attachment_id: str
+    ) -> bytes: ...

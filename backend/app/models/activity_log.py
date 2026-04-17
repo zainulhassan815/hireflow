@@ -27,6 +27,7 @@ class ActivityAction(StrEnum):
     APPLICATION_STATUS_CHANGE = "application_status_change"
     GMAIL_CONNECT = "gmail_connect"
     GMAIL_DISCONNECT = "gmail_disconnect"
+    GMAIL_SYNC_RUN = "gmail_sync_run"
 
 
 class ActivityLog(UUIDPrimaryKeyMixin, TimestampMixin, Base):

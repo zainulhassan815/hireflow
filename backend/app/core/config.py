@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     gmail_client_secret: SecretStr | None = None
     gmail_redirect_uri: str | None = None
 
+    # Gmail resume sync (F51)
+    gmail_sync_interval_minutes: int = 5
+    gmail_sync_max_messages_per_run: int = 100
+    gmail_sync_initial_window_days: int = 7
+    gmail_sync_claim_timeout_minutes: int = 15
+
     # Vision OCR provider: claude | ollama | tesseract | none
     vision_provider: str = "tesseract"
     vision_model: str | None = None

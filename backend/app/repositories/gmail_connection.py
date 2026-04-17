@@ -23,6 +23,14 @@ class GmailConnectionRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_id(self, connection_id: UUID) -> GmailConnection | None:
+        return await self._db.get(GmailConnection, connection_id)
+
+    async def list_all(self) -> list[GmailConnection]:
+        """Used by the sync fan-out task to iterate every active connection."""
+        result = await self._db.execute(select(GmailConnection))
+        return list(result.scalars().all())
+
     async def upsert(
         self,
         *,

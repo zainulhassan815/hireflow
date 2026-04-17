@@ -1,6 +1,7 @@
 """Gmail OAuth DTOs."""
 
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -37,4 +38,20 @@ class GmailConnectionStatus(BaseModel):
     scopes: list[str] = Field(
         default_factory=list,
         description="OAuth scopes the user granted.",
+    )
+
+
+class GmailSyncTriggerResponse(BaseModel):
+    """Returned by the manual sync trigger endpoint (202 Accepted)."""
+
+    connection_id: UUID = Field(
+        ..., description="The connection that was enqueued for sync."
+    )
+    queued: bool = Field(
+        default=True,
+        description=(
+            "Always true — the task was handed to the worker queue. "
+            "Watch ``last_synced_at`` on the status endpoint to know "
+            "when it finishes."
+        ),
     )

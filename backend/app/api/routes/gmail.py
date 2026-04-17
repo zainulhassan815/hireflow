@@ -7,9 +7,13 @@ from fastapi.responses import RedirectResponse
 
 from app.api.deps import CurrentUser, GmailServiceDep
 from app.core.config import settings
-from app.domain.exceptions import GmailAuthError
+from app.domain.exceptions import GmailAuthError, NotFound
 from app.schemas.errors import ErrorResponse
-from app.schemas.gmail import GmailAuthorizeResponse, GmailConnectionStatus
+from app.schemas.gmail import (
+    GmailAuthorizeResponse,
+    GmailConnectionStatus,
+    GmailSyncTriggerResponse,
+)
 
 router = APIRouter()
 
@@ -105,6 +109,38 @@ async def gmail_status(
         last_synced_at=connection.last_synced_at,
         scopes=connection.scopes,
     )
+
+
+@router.post(
+    "/sync",
+    response_model=GmailSyncTriggerResponse,
+    status_code=202,
+    summary="Trigger a Gmail sync now",
+    description=(
+        "Enqueues an immediate sync for the current user's Gmail "
+        "connection. Returns 202; the sync runs asynchronously in the "
+        "worker. Poll ``GET /api/auth/gmail`` to watch ``last_synced_at`` "
+        "update when it finishes."
+    ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        404: {"model": ErrorResponse, "description": "No Gmail connection"},
+    },
+)
+async def gmail_sync_now(
+    current_user: CurrentUser, gmail: GmailServiceDep
+) -> GmailSyncTriggerResponse:
+    connection = await gmail.get_connection(current_user.id)
+    if connection is None:
+        raise NotFound("No Gmail connection. Connect Gmail before syncing.")
+
+    # Import inside the handler: the worker package loads Celery eagerly,
+    # which we don't want at FastAPI import time in environments that
+    # haven't configured Redis yet (e.g. migration scripts).
+    from app.worker.tasks import sync_gmail_connection
+
+    sync_gmail_connection.delay(str(connection.id))
+    return GmailSyncTriggerResponse(connection_id=connection.id)
 
 
 @router.delete(

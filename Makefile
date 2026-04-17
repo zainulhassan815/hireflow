@@ -21,16 +21,29 @@ setup: ## First-time setup (install, env, services, migrate, seed)
 	@echo "Waiting for services..." && sleep 3
 	cd backend && uv run alembic upgrade head
 	cd backend && ADMIN_EMAIL=admin@hireflow.io ADMIN_PASSWORD=admin123 uv run python scripts/create_admin.py
-	@echo "\nReady. Run: make dev"
+	@echo ""
+	@echo "Ready. Open four terminals and run:"
+	@echo "  make api        # FastAPI    :8080"
+	@echo "  make worker     # Celery worker"
+	@echo "  make beat       # Celery beat (periodic tasks)"
+	@echo "  make web        # Vite       :5173"
+	@echo ""
 	@echo "Admin: admin@hireflow.io / admin123"
 
-dev: ## Start API + worker + frontend (use Ctrl-C to stop)
-	@docker compose up -d postgres redis minio chromadb >/dev/null 2>&1
-	@trap 'kill 0' EXIT; \
-		cd backend && uv run uvicorn app.main:app --reload --port 8080 & \
-		cd backend && uv run celery -A app.worker.celery_app worker --loglevel=warning --concurrency=1 & \
-		cd frontend && npm run dev & \
-		wait
+services: ## Start backing Docker services (postgres, redis, minio, chromadb)
+	docker compose up -d postgres redis minio chromadb
+
+api: services ## Run FastAPI on :8080 (foreground; one terminal)
+	cd backend && uv run uvicorn app.main:app --reload --port 8080
+
+worker: services ## Run Celery worker (foreground; one terminal)
+	cd backend && uv run celery -A app.worker.celery_app worker --loglevel=info --concurrency=1
+
+beat: services ## Run Celery beat scheduler (foreground; one terminal)
+	cd backend && uv run celery -A app.worker.celery_app beat --loglevel=info
+
+web: ## Run Vite dev server on :5173 (foreground; one terminal)
+	cd frontend && npm run dev
 
 lint: ## Lint + format everything
 	cd backend && uv run ruff check --fix . && uv run ruff format .
@@ -58,4 +71,4 @@ clean: stop ## Stop services + remove caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	rm -rf backend/.ruff_cache frontend/dist
 
-.PHONY: help setup dev lint migrate generate stop prod-up prod-down prod-logs clean
+.PHONY: help setup services api worker beat web lint migrate generate stop prod-up prod-down prod-logs clean
