@@ -71,6 +71,13 @@ class Settings(BaseSettings):
     vision_model: str | None = None
     ollama_base_url: str = "http://localhost:11434"
 
+    # Search relevance (F80). Defaults chosen for all-MiniLM-L6-v2 in
+    # ChromaDB's cosine space; retune via the eval harness.
+    search_max_distance: float = 0.6
+    search_confidence_high: float = 0.02
+    search_confidence_medium: float = 0.01
+    search_max_highlights_per_doc: int = 3
+
     # LLM / Embeddings
     llm_provider: str = "anthropic"
     llm_model: str = "claude-3-haiku-20240307"

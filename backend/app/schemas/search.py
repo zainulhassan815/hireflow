@@ -1,11 +1,14 @@
 """Search request and response DTOs."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.models.document import DocumentStatus, DocumentType
+
+Confidence = Literal["high", "medium", "low"]
 
 
 class SearchRequest(BaseModel):
@@ -53,8 +56,15 @@ class SearchResultItem(BaseModel):
         None, description="Classified document category"
     )
     status: DocumentStatus = Field(..., description="Processing status")
-    score: float = Field(
-        ..., ge=0, le=1, description="Relevance score (0–1, higher is better)"
+    confidence: Confidence = Field(
+        ...,
+        description=(
+            "Relevance band derived from the raw RRF score. ``high`` = strong "
+            "match, ``medium`` = probably relevant, ``low`` = weak. The raw "
+            "score is not exposed because its absolute value is not meaningful "
+            "to end users."
+        ),
+        examples=["high"],
     )
     highlights: list[SearchHighlight] = Field(
         ..., description="Matching text chunks ranked by relevance"

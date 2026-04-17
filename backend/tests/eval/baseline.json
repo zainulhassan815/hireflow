@@ -1,0 +1,250 @@
+{
+  "overall": {
+    "p@5": 0.175,
+    "r@5": 0.75,
+    "mrr": 0.6562
+  },
+  "cases": [
+    {
+      "bucket": "role_skill",
+      "query": "Python backend engineer with AWS experience",
+      "expected": [
+        "resume_data_scientist",
+        "resume_python_senior"
+      ],
+      "returned": [
+        "resume_python_senior",
+        "letter_cover_jane",
+        "resume_devops"
+      ],
+      "p@5": 0.2,
+      "r@5": 0.5,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": "Python + cloud; DS is also plausible"
+    },
+    {
+      "bucket": "role_skill",
+      "query": "React developer",
+      "expected": [
+        "resume_javascript_junior"
+      ],
+      "returned": [
+        "resume_javascript_junior"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": ""
+    },
+    {
+      "bucket": "role_skill",
+      "query": "Kubernetes SRE",
+      "expected": [
+        "resume_devops"
+      ],
+      "returned": [
+        "resume_devops"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": ""
+    },
+    {
+      "bucket": "role_skill",
+      "query": "machine learning engineer with PyTorch",
+      "expected": [
+        "resume_data_scientist"
+      ],
+      "returned": [
+        "resume_data_scientist"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": ""
+    },
+    {
+      "bucket": "role_skill",
+      "query": "senior engineer 10 years experience",
+      "expected": [
+        "resume_python_senior"
+      ],
+      "returned": [
+        "resume_javascript_junior"
+      ],
+      "p@5": 0.0,
+      "r@5": 0.0,
+      "mrr": 0.0,
+      "must_not_contain_violation": [],
+      "notes": "seniority implied"
+    },
+    {
+      "bucket": "doc_type",
+      "query": "vendor services agreement",
+      "expected": [
+        "contract_vendor_q3"
+      ],
+      "returned": [
+        "contract_vendor_q3"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": ""
+    },
+    {
+      "bucket": "doc_type",
+      "query": "quarterly sales report",
+      "expected": [
+        "report_sales_q3"
+      ],
+      "returned": [
+        "report_sales_q3"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": ""
+    },
+    {
+      "bucket": "doc_type",
+      "query": "cover letter for engineering role",
+      "expected": [
+        "letter_cover_jane"
+      ],
+      "returned": [],
+      "p@5": 0.0,
+      "r@5": 0.0,
+      "mrr": 0.0,
+      "must_not_contain_violation": [],
+      "notes": ""
+    },
+    {
+      "bucket": "negative",
+      "query": "quantum chromodynamics tensor networks",
+      "expected": [],
+      "returned": [],
+      "p@5": 0.0,
+      "r@5": 1.0,
+      "mrr": 0.0,
+      "must_not_contain_violation": [],
+      "notes": "irrelevant topic; threshold should drop everything"
+    },
+    {
+      "bucket": "negative",
+      "query": "recipe for sourdough bread",
+      "expected": [],
+      "returned": [],
+      "p@5": 0.0,
+      "r@5": 1.0,
+      "mrr": 0.0,
+      "must_not_contain_violation": [],
+      "notes": ""
+    },
+    {
+      "bucket": "filtered",
+      "query": "senior engineer",
+      "expected": [
+        "resume_devops",
+        "resume_python_senior"
+      ],
+      "returned": [
+        "resume_javascript_junior",
+        "resume_python_senior",
+        "resume_devops"
+      ],
+      "p@5": 0.4,
+      "r@5": 1.0,
+      "mrr": 0.5,
+      "must_not_contain_violation": [],
+      "notes": "semantic + skill filter"
+    },
+    {
+      "bucket": "filtered",
+      "query": "anyone",
+      "expected": [
+        "report_sales_q3"
+      ],
+      "returned": [
+        "report_sales_q3"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": "type filter dominates"
+    },
+    {
+      "bucket": "filtered",
+      "query": "python",
+      "expected": [
+        "resume_data_scientist",
+        "resume_devops",
+        "resume_python_senior"
+      ],
+      "returned": [
+        "resume_python_senior",
+        "resume_data_scientist",
+        "resume_devops"
+      ],
+      "p@5": 0.6,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": "seniority filter excludes junior"
+    },
+    {
+      "bucket": "edge",
+      "query": "python",
+      "expected": [
+        "resume_data_scientist",
+        "resume_devops",
+        "resume_python_senior"
+      ],
+      "returned": [],
+      "p@5": 0.0,
+      "r@5": 0.0,
+      "mrr": 0.0,
+      "must_not_contain_violation": [],
+      "notes": "single word"
+    },
+    {
+      "bucket": "edge",
+      "query": "Q3 EMEA revenue and deal slippage",
+      "expected": [
+        "report_sales_q3"
+      ],
+      "returned": [
+        "report_sales_q3"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": "specific phrase that should match only the report"
+    },
+    {
+      "bucket": "edge",
+      "query": "terraform",
+      "expected": [
+        "resume_devops",
+        "resume_python_senior"
+      ],
+      "returned": [
+        "resume_devops"
+      ],
+      "p@5": 0.2,
+      "r@5": 0.5,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": "single skill"
+    }
+  ]
+}

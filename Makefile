@@ -56,7 +56,10 @@ generate: ## Regenerate frontend API client
 	cd frontend && npm run generate-api
 
 test: services ## Run backend tests (real postgres + redis; mocked Google HTTP)
-	cd backend && uv run pytest -xvs
+	cd backend && uv run pytest tests -xvs --ignore=tests/eval
+
+eval: services ## Run search quality eval (slower; hits real ChromaDB)
+	cd backend && uv run pytest tests/eval -xvs
 
 stop: ## Stop Docker services
 	docker compose down
@@ -74,4 +77,4 @@ clean: stop ## Stop services + remove caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	rm -rf backend/.ruff_cache frontend/dist
 
-.PHONY: help setup services api worker beat web lint migrate generate test stop prod-up prod-down prod-logs clean
+.PHONY: help setup services api worker beat web lint migrate generate test eval stop prod-up prod-down prod-logs clean

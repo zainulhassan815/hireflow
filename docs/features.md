@@ -242,12 +242,18 @@ Wire existing frontend pages to the real backend API. All pages must follow
 
 Improve accuracy, relevance, and usefulness of core AI features.
 
-- [ ] **F80 · Search relevance tuning**
-  - Minimum similarity threshold — discard chunks below cosine threshold (e.g. 0.3) instead of returning everything
-  - Query expansion — detect intent ("how many resumes", "find candidates with Python") and route to structured query vs vector search
-  - Boost recent documents in RRF scoring
-  - Dedup results by document (currently can return multiple chunks from same doc as separate results)
-  - Faceted results: group by document_type, show counts per type
+- [x] **F80 · Search relevance tuning**
+  - Minimum similarity threshold — discard vector hits above cosine distance threshold (default 0.6) instead of returning everything
+  - SQL metadata path only contributes when structured filters are present (no more "recent documents for any query")
+  - Drop max-score normalization lie; expose a confidence band (`high`/`medium`/`low`) instead
+  - Dedup + cap highlights per document (max 3 per doc)
+  - Eval harness: 15-20 curated queries against fixture docs, precision@5 + MRR baseline via `make eval`
+  - Deferred to F80.5 (below): query expansion, RRF recency boost, faceted results
+
+- [ ] **F80.5 · Cross-encoder reranker**
+  - Rerank top-20 vector candidates with a local cross-encoder (e.g. `cross-encoder/ms-marco-MiniLM-L-6-v2`)
+  - Toggle via `SEARCH_RERANKER_ENABLED` env var for A/B
+  - Eval harness measures precision@5 before/after to justify the `sentence-transformers` dep weight
 
 - [ ] **F81 · RAG answer quality**
   - Structured answer templates: count queries → return number + list, comparison queries → table format, skill queries → bullet points

@@ -18,7 +18,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -228,21 +227,18 @@ export function SearchPage() {
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1">
-                            <div className="flex items-center gap-2">
-                              <Progress
-                                value={result.score * 100}
-                                className="h-2 w-16"
-                              />
-                              <Typography
-                                variant="small"
-                                className="font-medium"
-                              >
-                                {Math.round(result.score * 100)}%
-                              </Typography>
-                            </div>
-                            <Typography variant="muted" className="text-xs">
-                              Relevance
-                            </Typography>
+                            <Badge
+                              variant="outline"
+                              className={
+                                result.confidence === "high"
+                                  ? "border-green-500 text-green-700 dark:text-green-400"
+                                  : result.confidence === "medium"
+                                    ? "border-amber-500 text-amber-700 dark:text-amber-400"
+                                    : "border-muted-foreground text-muted-foreground"
+                              }
+                            >
+                              {result.confidence} relevance
+                            </Badge>
                           </div>
                         </div>
                       </CardContent>
