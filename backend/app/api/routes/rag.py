@@ -1,8 +1,10 @@
 """RAG question-answering endpoint."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 
 from app.api.deps import CurrentUser, RagServiceDep
+from app.domain.exceptions import ServiceUnavailable
+from app.schemas.errors import ErrorResponse
 from app.schemas.rag import RagRequest, RagResponse, SourceCitation
 
 router = APIRouter()
@@ -21,8 +23,11 @@ router = APIRouter()
         "configured."
     ),
     responses={
-        401: {"description": "Not authenticated"},
-        503: {"description": "RAG not available (ChromaDB or LLM not configured)"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        503: {
+            "model": ErrorResponse,
+            "description": "RAG not available (ChromaDB or LLM not configured)",
+        },
     },
 )
 async def query_documents(
@@ -31,9 +36,9 @@ async def query_documents(
     rag: RagServiceDep,
 ) -> RagResponse:
     if rag is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="RAG is not available. Configure an LLM provider (ANTHROPIC_API_KEY or Ollama) and ensure ChromaDB is running.",
+        raise ServiceUnavailable(
+            "RAG is not available. Configure an LLM provider "
+            "(ANTHROPIC_API_KEY or Ollama) and ensure ChromaDB is running."
         )
 
     result = await rag.query(

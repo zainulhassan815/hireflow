@@ -13,24 +13,13 @@ import {
   setAccessToken,
   setRefreshToken,
 } from "@/api";
+import { extractApiError } from "@/lib/api-errors";
 import { AuthError } from "@/providers/auth-errors";
 import {
   AuthContext,
   type AuthContextValue,
   type User,
 } from "@/providers/auth-context";
-
-function errorMessage(error: unknown, fallback: string): string {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "detail" in error &&
-    typeof (error as { detail: unknown }).detail === "string"
-  ) {
-    return (error as { detail: string }).detail;
-  }
-  return fallback;
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<User | null>(null);
@@ -66,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       body: { email, password },
     });
     if (error || !tokens) {
-      throw new AuthError(errorMessage(error, "Invalid email or password."));
+      throw new AuthError(extractApiError(error).message);
     }
     setAccessToken(tokens.access_token);
     setRefreshToken(tokens.refresh_token);
@@ -85,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: { email, password, full_name: fullName },
       });
       if (error) {
-        throw new AuthError(errorMessage(error, "Could not create account."));
+        throw new AuthError(extractApiError(error).message);
       }
     },
     []
@@ -103,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const forgotPassword = React.useCallback(async (email: string) => {
     const { error } = await apiForgotPassword({ body: { email } });
     if (error) {
-      throw new AuthError(errorMessage(error, "Could not send reset link."));
+      throw new AuthError(extractApiError(error).message);
     }
   }, []);
 
@@ -113,9 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: { token, new_password: newPassword },
       });
       if (error) {
-        throw new AuthError(
-          errorMessage(error, "Invalid or expired reset token.")
-        );
+        throw new AuthError(extractApiError(error).message);
       }
     },
     []

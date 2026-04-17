@@ -1,15 +1,31 @@
 """Domain exceptions.
 
-Services raise these; the api.error_handlers module maps them to HTTP
+Services raise these; `app.api.error_handlers` maps them to HTTP
 responses. Keeping service code HTTP-agnostic means the same services work
 from FastAPI, a CLI, a background worker, or a test.
+
+Every subclass gets a stable machine-readable `code` derived from its name
+(``InvalidCredentials`` → ``invalid_credentials``). The code is what the
+frontend switches on; messages are human-readable and may change.
 """
 
 from __future__ import annotations
 
+import re
+from typing import ClassVar
+
+_CAMEL_TO_SNAKE = re.compile(r"(?<!^)(?=[A-Z])")
+
 
 class DomainError(Exception):
     """Base class for all expected, user-facing domain errors."""
+
+    code: ClassVar[str] = "bad_request"
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        if "code" not in cls.__dict__:
+            cls.code = _CAMEL_TO_SNAKE.sub("_", cls.__name__).lower()
 
 
 class InvalidCredentials(DomainError):
@@ -42,3 +58,7 @@ class UnsupportedFileType(DomainError):
 
 class Forbidden(DomainError):
     """Caller is authenticated but not permitted to perform this action."""
+
+
+class ServiceUnavailable(DomainError):
+    """A required downstream provider (LLM, vision, storage) is not configured or reachable."""

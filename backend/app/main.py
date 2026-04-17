@@ -1,7 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.error_handlers import handle_domain_error
+from app.api.error_handlers import (
+    handle_domain_error,
+    handle_http_exception,
+    handle_unexpected,
+    handle_validation_error,
+)
 from app.api.router import api_router
 from app.core.api_config import custom_generate_unique_id
 from app.core.config import settings
@@ -67,6 +73,9 @@ def create_app() -> FastAPI:
     )
 
     app.add_exception_handler(DomainError, handle_domain_error)
+    app.add_exception_handler(HTTPException, handle_http_exception)
+    app.add_exception_handler(RequestValidationError, handle_validation_error)
+    app.add_exception_handler(Exception, handle_unexpected)
 
     app.include_router(api_router, prefix="/api")
 

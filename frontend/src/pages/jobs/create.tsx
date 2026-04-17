@@ -5,6 +5,7 @@ import { createJob } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Typography } from "@/components/ui/typography";
 import { JobForm, type JobFormData } from "@/components/jobs/job-form";
+import { extractApiError } from "@/lib/api-errors";
 import { toast } from "sonner";
 
 export function CreateJobPage() {
@@ -25,11 +26,7 @@ export function CreateJobPage() {
       },
     });
     if (error) {
-      const message =
-        typeof error === "object" && "detail" in error
-          ? (error as { detail: string }).detail
-          : "Failed to create job";
-      toast.error(message);
+      toast.error(extractApiError(error).message);
       return;
     }
     toast.success("Job created successfully");

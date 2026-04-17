@@ -218,7 +218,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
 
 ## Phase 7 — Hardening & Deploy
 
-- [ ] **F70 · Error handling & API error shape**
+- [x] **F70 · Error handling & API error shape**
   Depends on: F10
   - Consistent error envelope; frontend toast integration; Sentry hook (optional)
 
@@ -238,6 +238,107 @@ Wire existing frontend pages to the real backend API. All pages must follow
 
 ---
 
+## Phase 8 — Intelligence Enhancement
+
+Improve accuracy, relevance, and usefulness of core AI features.
+
+- [ ] **F80 · Search relevance tuning**
+  - Minimum similarity threshold — discard chunks below cosine threshold (e.g. 0.3) instead of returning everything
+  - Query expansion — detect intent ("how many resumes", "find candidates with Python") and route to structured query vs vector search
+  - Boost recent documents in RRF scoring
+  - Dedup results by document (currently can return multiple chunks from same doc as separate results)
+  - Faceted results: group by document_type, show counts per type
+
+- [ ] **F81 · RAG answer quality**
+  - Structured answer templates: count queries → return number + list, comparison queries → table format, skill queries → bullet points
+  - Context relevance filtering — drop chunks that are below similarity threshold before sending to LLM (reduces noise)
+  - System prompt tuning: be concise, format matters, answer the specific question asked
+  - Token budget management: prioritize high-relevance chunks, truncate low-relevance ones
+  - Answer confidence indicator: if context is thin, say so explicitly and suggest uploading more documents
+  - Support follow-up context (conversation memory within a session)
+
+- [ ] **F82 · Chunking strategy improvements**
+  - Semantic chunking: split on topic boundaries, not character count
+  - Overlap tuning per document type (resumes need different chunking than reports)
+  - Metadata-enriched chunks: each chunk carries its section header (Skills, Experience, Education) for better retrieval
+  - Re-index existing documents when chunking strategy changes
+
+- [ ] **F83 · Candidate matching accuracy**
+  - Skill normalization: "JS" = "JavaScript", "k8s" = "Kubernetes", "ML" = "Machine Learning"
+  - Weighted skill matching: required skills matter more than preferred, exact match > partial
+  - Experience range scoring refinement: penalize overqualified less than underqualified
+  - Education level hierarchy: PhD > Master's > Bachelor's > Associate's > Diploma
+  - Location matching: remote preference, city proximity
+  - Match explanation: human-readable sentence explaining why a score is high/low
+
+- [ ] **F84 · Document classification accuracy**
+  - Training data: curated examples per document type for the rule-based classifier
+  - Confidence calibration: rule-based confidence should reflect actual accuracy
+  - Multi-label support: a document can be both "resume" and "letter" (cover letter + CV combo)
+  - Classification audit: log classified vs actual type, track accuracy over time
+  - User correction: let HR override the classified type, feed back into the system
+
+- [ ] **F85 · Embedding quality**
+  - Evaluate embedding model options: all-MiniLM-L6-v2 vs all-mpnet-base-v2 vs instructor-xl
+  - Document-type-specific embedding prefixes: "resume: ..." vs "job description: ..."
+  - Hybrid retrieval: BM25 keyword search alongside vector search (not just SQL metadata)
+  - Embedding versioning: track which model generated each chunk's embedding, re-index on model change
+
+---
+
+## Phase 9 — UI/UX Polish
+
+Production-grade interface with attention to detail, accessibility, and delight.
+
+- [ ] **F90 · Design system audit**
+  - Consistent spacing, typography scale, color usage across all pages
+  - Dark mode: verify every component, fix contrast issues
+  - Responsive: test and fix all pages at mobile, tablet, desktop breakpoints
+  - Loading skeletons on every page (replace spinners with content-shaped placeholders)
+  - Transition animations: page transitions, list item enter/exit, modal open/close
+
+- [ ] **F91 · Documents page polish**
+  - Drag-and-drop upload zone on the main page (not just in dialog)
+  - Upload progress with real percentage (streaming upload)
+  - Document processing status: live polling or WebSocket for pending → ready transition
+  - Inline preview for PDFs (embedded viewer)
+  - Bulk actions: select multiple → delete, export, create candidates
+
+- [ ] **F92 · Search & RAG UX**
+  - Search-as-you-type with debounce
+  - Filter pills: visual chips for active filters, one-click remove
+  - Search result highlighting: bold matched terms in snippets
+  - RAG chat: streaming responses (SSE), typing indicator, copy answer button
+  - Source citation links: click citation → opens document preview at relevant section
+  - Suggested queries: show example queries when search is empty
+
+- [ ] **F93 · Jobs & candidates UX**
+  - Job detail page with description, requirements, and matched candidates list
+  - Candidate profile page: resume viewer + extracted info + application history
+  - Kanban board view for applications (drag between new/shortlisted/rejected/hired)
+  - Match score visualization: radar chart or bar breakdown (skills/experience/vector)
+  - One-click "create candidates from all resumes" batch action
+  - CSV export button directly on the candidates table
+
+- [ ] **F94 · Dashboard & navigation**
+  - Activity feed: recent actions as a timeline (not just table)
+  - Quick actions: upload, create job, search from dashboard
+  - Keyboard shortcuts: ⌘K for search, ⌘U for upload
+  - Breadcrumbs on nested pages (job detail, candidate profile)
+  - Empty states with illustrations, not just icons
+  - Toast notifications: success/error/info with consistent styling
+
+- [ ] **F95 · Accessibility & performance**
+  - ARIA labels on all interactive elements
+  - Keyboard navigation: tab order, focus rings, escape to close modals
+  - Screen reader testing on core flows (login, upload, search)
+  - Lighthouse audit: target 90+ on performance, accessibility, best practices
+  - Bundle analysis: lazy-load heavy pages (search, RAG chat)
+  - Image optimization: proper formats, lazy loading
+
+---
+
 ## Out of scope for v1
 - ERP integrations, video tutorials, print-friendly quick-start, mobile apps
 - GPU-optimized local LLM deployment (provider abstraction covers it later)
+- Gmail integration (Phase 5 — deferred, needs Google OAuth setup)

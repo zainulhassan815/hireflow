@@ -19,15 +19,3 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
     data: list[T]
     meta: PaginationMeta
-
-
-class ErrorResponse(BaseModel):
-    """Standard error response format."""
-
-    code: str = Field(
-        ..., description="Machine-readable error code", example="VALIDATION_ERROR"
-    )
-    message: str = Field(
-        ..., description="Human-readable error message", example="Invalid input"
-    )
-    details: dict | None = Field(None, description="Additional error context")

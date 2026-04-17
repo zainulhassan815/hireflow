@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Typography } from "@/components/ui/typography";
+import { extractApiError } from "@/lib/api-errors";
 import { formatFileSize } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -103,11 +104,7 @@ export function UploadDialog({
           f.file === file ? { ...f, status: "error" as const } : f
         )
       );
-      const message =
-        typeof error === "object" && "detail" in error
-          ? (error as { detail: string }).detail
-          : "Upload failed";
-      toast.error(`${file.name}: ${message}`);
+      toast.error(`${file.name}: ${extractApiError(error).message}`);
       return;
     }
 

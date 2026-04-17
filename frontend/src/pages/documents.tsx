@@ -87,7 +87,6 @@ export function DocumentsPage() {
         queryKey: listDocumentsOptions().queryKey,
       });
     },
-    onError: () => toast.error("Failed to delete document"),
   });
 
   const handleDownload = async (doc: DocumentResponse) => {

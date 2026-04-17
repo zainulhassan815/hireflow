@@ -24,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Typography } from "@/components/ui/typography";
+import { extractApiError } from "@/lib/api-errors";
 import { toast } from "sonner";
 
 interface ChatMessage {
@@ -61,11 +62,7 @@ export function SearchPage() {
     });
 
     if (error) {
-      const message =
-        typeof error === "object" && "detail" in error
-          ? (error as { detail: string }).detail
-          : "Search failed";
-      toast.error(message);
+      toast.error(extractApiError(error).message);
       setIsSearching(false);
       return;
     }
@@ -94,11 +91,7 @@ export function SearchPage() {
     });
 
     if (error) {
-      const message =
-        typeof error === "object" && "detail" in error
-          ? (error as { detail: string }).detail
-          : "Failed to get an answer";
-      toast.error(message);
+      toast.error(extractApiError(error).message);
       setIsSending(false);
       return;
     }

@@ -49,7 +49,6 @@ export function JobsPage() {
       toast.success(`${job.title} deleted`);
       queryClient.invalidateQueries({ queryKey: listJobsOptions().queryKey });
     },
-    onError: () => toast.error("Failed to delete job"),
   });
 
   if (isLoading) {

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Typography } from "@/components/ui/typography";
 import { useAuth } from "@/providers/use-auth";
+import { extractApiError } from "@/lib/api-errors";
 import { toast } from "sonner";
 
 export function SettingsPage() {
@@ -32,11 +33,7 @@ export function SettingsPage() {
     });
     setSavingProfile(false);
     if (error) {
-      const message =
-        typeof error === "object" && "detail" in error
-          ? (error as { detail: string }).detail
-          : "Failed to update profile";
-      toast.error(message);
+      toast.error(extractApiError(error).message);
       return;
     }
     toast.success("Profile updated");
@@ -61,11 +58,7 @@ export function SettingsPage() {
     });
     setSavingPassword(false);
     if (error) {
-      const message =
-        typeof error === "object" && "detail" in error
-          ? (error as { detail: string }).detail
-          : "Failed to change password";
-      toast.error(message);
+      toast.error(extractApiError(error).message);
       return;
     }
     toast.success("Password changed");

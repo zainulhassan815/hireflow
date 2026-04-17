@@ -12,7 +12,7 @@ from datetime import timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +38,7 @@ from app.adapters.revocation_store import RedisRevocationStore
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.redis import get_redis
-from app.domain.exceptions import InvalidToken
+from app.domain.exceptions import Forbidden, InvalidToken
 from app.models import User, UserRole
 from app.repositories.activity_log import ActivityLogRepository
 from app.repositories.candidate import ApplicationRepository, CandidateRepository
@@ -280,19 +280,11 @@ async def get_current_user(
     users: UserRepositoryDep,
     tokens: Annotated[TokenIssuer, Depends(get_token_issuer)],
 ) -> User:
-    unauthorized = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials.",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = tokens.decode(token, TokenType.ACCESS)
-    except InvalidToken as exc:
-        raise unauthorized from exc
+    payload = tokens.decode(token, TokenType.ACCESS)
     user_id: UUID = payload.sub
     user = await users.get(user_id)
     if user is None or not user.is_active:
-        raise unauthorized
+        raise InvalidToken("Could not validate credentials.")
     return user
 
 
@@ -305,10 +297,7 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 def require_role(*allowed: UserRole):
     async def _checker(current_user: CurrentUser) -> User:
         if current_user.role not in allowed:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to perform this action.",
-            )
+            raise Forbidden("You do not have permission to perform this action.")
         return current_user
 
     return _checker
