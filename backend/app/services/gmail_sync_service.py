@@ -37,9 +37,22 @@ from app.repositories.gmail_ingested_message import (
 )
 from app.repositories.user import UserRepository
 from app.services.activity_service import ActivityService
-from app.services.document_service import ALLOWED_MIME_TYPES, DocumentService
+from app.services.document_service import DocumentService
 
 logger = logging.getLogger(__name__)
+
+# Gmail sync is narrower than DocumentService's full MIME allowlist on
+# purpose: email bodies are littered with signature logos and screenshots
+# that F22's OCR would dutifully fail on and leave as 'failed'
+# documents. Resumes sent by email are overwhelmingly PDF or Word.
+# Someone sending a scanned-image resume can still upload manually.
+_SYNC_ALLOWED_MIME_TYPES = frozenset(
+    {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+    }
+)
 
 
 @dataclass
@@ -231,7 +244,7 @@ class GmailSyncService:
         return [
             a
             for a in message.attachments
-            if a.mime_type in ALLOWED_MIME_TYPES and 0 < a.size_bytes <= max_bytes
+            if a.mime_type in _SYNC_ALLOWED_MIME_TYPES and 0 < a.size_bytes <= max_bytes
         ]
 
     def _build_query(self, connection: GmailConnection) -> str:
