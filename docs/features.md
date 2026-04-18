@@ -284,10 +284,10 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - Classification audit: log classified vs actual type, track accuracy over time
   - User correction: let HR override the classified type, feed back into the system
 
-- [ ] **F85 · Embedding quality**
+- [~] **F85 · Embedding quality**
   - Evaluate embedding model options: all-MiniLM-L6-v2 vs all-mpnet-base-v2 vs instructor-xl
   - Document-type-specific embedding prefixes: "resume: ..." vs "job description: ..."
-  - Hybrid retrieval: BM25 keyword search alongside vector search (not just SQL metadata)
+  - [x] Hybrid retrieval: Postgres FTS (`ts_rank_cd`) folded into RRF — eval P@5 0.175→0.238 (+36%), `edge` bucket 0.0→0.4
   - Embedding versioning: track which model generated each chunk's embedding, re-index on model change
 
 ---

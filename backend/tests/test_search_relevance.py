@@ -64,9 +64,14 @@ def _document(doc_id: UUID, *, filename: str = "doc.pdf") -> Document:
     )
 
 
-def _mock_repo(docs: list[Document]) -> AsyncMock:
+def _mock_repo(
+    docs: list[Document],
+    *,
+    lexical_hits: list[tuple[Document, float]] | None = None,
+) -> AsyncMock:
     repo = AsyncMock()
     repo.search_by_metadata = AsyncMock(return_value=[])
+    repo.full_text_search = AsyncMock(return_value=lexical_hits or [])
     repo.get_many = AsyncMock(return_value={d.id: d for d in docs})
     return repo
 
@@ -193,3 +198,60 @@ async def test_highlights_are_deduped_and_capped(monkeypatch) -> None:
     highlights = results[0]["highlights"]
     assert len(highlights) == 3  # capped
     assert len({h["chunk_index"] for h in highlights}) == 3  # no dups
+
+
+# ---------------------------------------------------------------------------
+# F85 lexical / hybrid retrieval
+# ---------------------------------------------------------------------------
+
+
+async def test_lexical_only_doc_surfaces_when_vector_returns_nothing() -> None:
+    """The 'single-word python' eval failure: vector misses, lexical catches."""
+    lex_id = uuid4()
+    store = _FakeVectorStore([])  # vector returns nothing
+    repo = _mock_repo(
+        [_document(lex_id, filename="python_resume.pdf")],
+        lexical_hits=[(_document(lex_id), 0.42)],
+    )
+    service = SearchService(repo, store)
+
+    results, _ = await service.search(query="python")
+
+    assert len(results) == 1
+    assert results[0]["document_id"] == lex_id
+
+
+async def test_hybrid_doc_outranks_single_signal_doc() -> None:
+    """A doc surfaced by both vector + lexical must rank above a single-source doc."""
+    both = uuid4()
+    vector_only = uuid4()
+
+    store = _FakeVectorStore(
+        [
+            _vector_hit(doc_id=both, distance=0.1),
+            _vector_hit(doc_id=vector_only, distance=0.15),
+        ]
+    )
+    repo = _mock_repo(
+        [_document(both), _document(vector_only)],
+        # `both` is also the top lexical hit.
+        lexical_hits=[(_document(both), 0.5)],
+    )
+    service = SearchService(repo, store)
+
+    results, _ = await service.search(query="anything")
+
+    assert [r["document_id"] for r in results][:2] == [both, vector_only]
+
+
+async def test_lexical_search_called_with_user_query() -> None:
+    store = _FakeVectorStore([])
+    repo = _mock_repo([])
+    service = SearchService(repo, store)
+
+    await service.search(query="vendor services agreement")
+
+    repo.full_text_search.assert_awaited_once()
+    args, kwargs = repo.full_text_search.call_args
+    # Query is the first positional arg.
+    assert args[0] == "vendor services agreement"

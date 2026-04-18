@@ -4,9 +4,9 @@ import uuid
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, String, Text
+from sqlalchemy import BigInteger, FetchedValue, ForeignKey, String, Text
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -70,6 +70,16 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_: Mapped[dict | None] = mapped_column(
         "metadata", JSONB, nullable=True, default=None
+    )
+
+    # Read-only Postgres-generated tsvector over extracted_text. Populated
+    # automatically by the database on insert/update; never written from the
+    # ORM. Powers F85 lexical retrieval via ts_rank_cd in the search service.
+    extracted_text_tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        nullable=True,
+        server_default=FetchedValue(),
+        server_onupdate=FetchedValue(),
     )
 
     owner: Mapped[User] = relationship(lazy="selectin")

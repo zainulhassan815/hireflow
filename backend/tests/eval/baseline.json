@@ -1,8 +1,8 @@
 {
   "overall": {
-    "p@5": 0.175,
-    "r@5": 0.75,
-    "mrr": 0.6562
+    "p@5": 0.2375,
+    "r@5": 0.9062,
+    "mrr": 0.7812
   },
   "cases": [
     {
@@ -13,13 +13,13 @@
         "resume_python_senior"
       ],
       "returned": [
-        "resume_python_senior",
         "letter_cover_jane",
+        "resume_python_senior",
         "resume_devops"
       ],
       "p@5": 0.2,
       "r@5": 0.5,
-      "mrr": 1.0,
+      "mrr": 0.5,
       "must_not_contain_violation": [],
       "notes": "Python + cloud; DS is also plausible"
     },
@@ -75,11 +75,12 @@
         "resume_python_senior"
       ],
       "returned": [
+        "resume_python_senior",
         "resume_javascript_junior"
       ],
-      "p@5": 0.0,
-      "r@5": 0.0,
-      "mrr": 0.0,
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": "seniority implied"
     },
@@ -156,13 +157,14 @@
         "resume_python_senior"
       ],
       "returned": [
-        "resume_javascript_junior",
         "resume_python_senior",
-        "resume_devops"
+        "resume_javascript_junior",
+        "resume_devops",
+        "letter_cover_jane"
       ],
       "p@5": 0.4,
       "r@5": 1.0,
-      "mrr": 0.5,
+      "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": "semantic + skill filter"
     },
@@ -192,7 +194,8 @@
       "returned": [
         "resume_python_senior",
         "resume_data_scientist",
-        "resume_devops"
+        "resume_devops",
+        "letter_cover_jane"
       ],
       "p@5": 0.6,
       "r@5": 1.0,
@@ -208,10 +211,15 @@
         "resume_devops",
         "resume_python_senior"
       ],
-      "returned": [],
-      "p@5": 0.0,
-      "r@5": 0.0,
-      "mrr": 0.0,
+      "returned": [
+        "resume_python_senior",
+        "resume_data_scientist",
+        "resume_devops",
+        "letter_cover_jane"
+      ],
+      "p@5": 0.6,
+      "r@5": 1.0,
+      "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": "single word"
     },
@@ -238,10 +246,11 @@
         "resume_python_senior"
       ],
       "returned": [
-        "resume_devops"
+        "resume_devops",
+        "resume_python_senior"
       ],
-      "p@5": 0.2,
-      "r@5": 0.5,
+      "p@5": 0.4,
+      "r@5": 1.0,
       "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": "single skill"

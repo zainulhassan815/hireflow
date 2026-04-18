@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Document, DocumentStatus, DocumentType
@@ -119,3 +119,36 @@ class DocumentRepository:
         )
         docs = result.scalars().all()
         return {doc.id: doc for doc in docs}
+
+    async def full_text_search(
+        self,
+        query: str,
+        *,
+        limit: int = 30,
+    ) -> list[tuple[Document, float]]:
+        """Lexical retrieval via Postgres FTS, ranked by ts_rank_cd.
+
+        Uses ``plainto_tsquery`` so the user's natural-language query is
+        tokenized server-side with the same ``english`` analyzer that
+        powers the indexed tsvector — punctuation and stopwords are
+        handled consistently on both sides. Returns ``(doc, score)`` pairs
+        ordered by descending rank. Documents without indexable text or
+        with no term overlap are excluded.
+        """
+        query = query.strip()
+        if not query:
+            return []
+
+        ts_query = func.plainto_tsquery("english", query)
+        rank = func.ts_rank_cd(Document.extracted_text_tsv, ts_query).label("rank")
+
+        stmt = (
+            select(Document, rank)
+            .where(Document.status == DocumentStatus.READY)
+            .where(Document.extracted_text_tsv.op("@@")(ts_query))
+            .order_by(rank.desc())
+            .limit(limit)
+        )
+
+        result = await self._db.execute(stmt)
+        return [(row[0], float(row[1])) for row in result.all()]

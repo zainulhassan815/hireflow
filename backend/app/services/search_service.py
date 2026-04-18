@@ -1,16 +1,19 @@
-"""Hybrid search: vector similarity + metadata filtering with RRF merge.
+"""Hybrid search: vector similarity + lexical FTS + metadata filtering.
 
-F80 made the previously permissive scoring honest:
+Three retrieval signals contribute to the same RRF merge:
 
-* Vector hits above ``search_max_distance`` are discarded before
-  ranking (stops "every query returns everything").
-* The SQL metadata path only contributes when structured filters are
-  present (no more "recent documents for any query").
-* Raw RRF scores are not normalized up to 1.0 — an absolute
-  confidence band (``high`` / ``medium`` / ``low``) rides in the
-  response instead.
-* Highlights per document are deduped and capped so one multi-chunk
-  resume doesn't dominate the result card.
+* **Vector** (``_vector_search``) — semantic similarity from ChromaDB,
+  filtered to hits inside ``search_max_distance``. Chunk-level.
+* **Lexical** (``_lexical_search``, F85) — Postgres FTS via
+  ``ts_rank_cd`` over ``documents.extracted_text_tsv``. Catches
+  single-word and exact-phrase queries that embeddings miss.
+  Document-level.
+* **SQL metadata** — only contributes when structured filters
+  (``skills``, ``document_type``, etc.) are supplied; otherwise it
+  would return "recent documents for any query".
+
+F80 hardened the vector path (distance ceiling, no implicit metadata
+path, raw RRF scores not normalized). F85 added the lexical path.
 """
 
 from __future__ import annotations
@@ -87,7 +90,9 @@ class SearchService:
         else:
             sql_docs = []
 
-        merged = self._rrf_merge(vector_hits, sql_docs, limit)
+        lexical_hits = await self._documents.full_text_search(query, limit=limit * 3)
+
+        merged = self._rrf_merge(vector_hits, sql_docs, lexical_hits, limit)
 
         doc_ids = [m.document_id for m in merged]
         docs_map = await self._documents.get_many(doc_ids)
@@ -145,9 +150,16 @@ class SearchService:
     def _rrf_merge(
         vector_hits: list[VectorHit],
         sql_docs: list[Document],
+        lexical_hits: list[tuple[Document, float]],
         limit: int,
     ) -> list[SearchResult]:
-        """Reciprocal Rank Fusion across vector and SQL result lists."""
+        """Reciprocal Rank Fusion across vector, SQL-metadata, and lexical lists.
+
+        Equal-weight RRF: the per-source ``ts_rank_cd`` and cosine distance
+        scores are not comparable on the same axis, so we collapse to ranks
+        and let RRF do the merging. A doc that surfaces in two sources
+        outranks one that appears in only one.
+        """
         scores: dict[UUID, float] = defaultdict(float)
         highlights_by_doc: dict[UUID, list[dict[str, Any]]] = defaultdict(list)
 
@@ -165,6 +177,9 @@ class SearchService:
             )
 
         for rank, doc in enumerate(sql_docs):
+            scores[doc.id] += 1.0 / (_RRF_K + rank + 1)
+
+        for rank, (doc, _ts_score) in enumerate(lexical_hits):
             scores[doc.id] += 1.0 / (_RRF_K + rank + 1)
 
         sorted_ids = sorted(scores, key=lambda did: scores[did], reverse=True)
