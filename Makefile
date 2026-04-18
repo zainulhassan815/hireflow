@@ -5,33 +5,7 @@ help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 setup: ## First-time setup (install, env, services, migrate, seed)
-	cd backend && uv sync --extra dev
-	cd frontend && npm install --silent
-	@test -f backend/.env || (cp backend/.env.example backend/.env && \
-		sed -i "s/^JWT_SECRET_KEY=$$/JWT_SECRET_KEY=$$(openssl rand -hex 32)/" backend/.env && \
-		echo "Created backend/.env")
-	@grep -q '^ENCRYPTION_KEYS=.\+' backend/.env || (cd backend && \
-		KEY=$$(uv run python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())") && \
-		sed -i "s|^ENCRYPTION_KEYS=.*|ENCRYPTION_KEYS=$$KEY|" .env && \
-		(grep -q '^ENCRYPTION_KEYS=' .env || echo "ENCRYPTION_KEYS=$$KEY" >> .env) && \
-		echo "Generated ENCRYPTION_KEYS in backend/.env")
-	@test -f frontend/.env || (cp frontend/.env.example frontend/.env && echo "Created frontend/.env")
-	docker compose up -d postgres redis minio chromadb
-	@docker compose --profile setup run --rm minio-setup 2>/dev/null || true
-	@echo "Waiting for services..." && sleep 3
-	cd backend && uv run alembic upgrade head
-	cd backend && ADMIN_EMAIL=admin@hireflow.io ADMIN_PASSWORD=admin123 uv run python scripts/create_admin.py
-	@echo ""
-	@echo "Ready. Recommended:"
-	@echo "  make tilt       # one command for infra + api + workers + web (UI :10350)"
-	@echo ""
-	@echo "Or run each in its own terminal:"
-	@echo "  make api        # FastAPI    :8080"
-	@echo "  make worker     # Celery worker"
-	@echo "  make beat       # Celery beat (periodic tasks)"
-	@echo "  make web        # Vite       :5173"
-	@echo ""
-	@echo "Admin: admin@hireflow.io / admin123"
+	./scripts/setup.sh
 
 services: ## Start backing Docker services (postgres, redis, minio, chromadb)
 	docker compose up -d postgres redis minio chromadb
