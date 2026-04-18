@@ -1,8 +1,9 @@
 """Document embedding orchestration.
 
-Chunks the document's typed elements (F82.d output, F82.e chunker) and
-upserts vectors + per-chunk metadata into the vector store. Called from
-the Celery extraction pipeline after classification.
+Given a document and its pre-built chunks (element-aware, optionally
+contextualized), upserts vectors + per-chunk metadata into the vector
+store. Callers are the Celery extraction pipeline and the
+``reindex_embeddings`` script.
 """
 
 from __future__ import annotations
@@ -22,41 +23,63 @@ class EmbeddingService:
         self._store = vector_store
 
     def index_document(
-        self, doc: Document, elements: list[Element] | None = None
+        self,
+        doc: Document,
+        *,
+        chunks: list[Chunk] | None = None,
+        elements: list[Element] | None = None,
     ) -> None:
-        """Chunk the document's elements and upsert into the vector store.
+        """Embed and upsert chunks.
 
-        If ``elements`` isn't passed, we load them from the persisted
-        ``document_elements`` rows attached to the document (eagerly
-        loaded via the relationship). Callers that have the elements in
-        memory already (e.g. ``ExtractionService`` right after extract)
-        should pass them directly to avoid the extra lookup.
+        Two call-sites:
+
+        * ``ExtractionService`` passes ``chunks`` (already
+          contextualized by the pipeline) — preferred path.
+        * ``scripts/reindex_embeddings.py`` passes ``elements`` when
+          only re-embedding existing docs (no contextualization).
+
+        If both are passed, ``chunks`` wins. If neither is passed, we
+        load elements from the persisted ``document_elements`` rows on
+        the Document relationship.
         """
-        resolved = elements if elements is not None else _load_elements(doc)
-        if not resolved:
-            logger.info("document %s has no elements, skipping indexing", doc.id)
-            return
+        resolved_chunks = chunks
+        if resolved_chunks is None:
+            resolved_elements = (
+                elements if elements is not None else _load_elements(doc)
+            )
+            if not resolved_elements:
+                logger.info("document %s has no elements, skipping indexing", doc.id)
+                return
+            resolved_chunks = chunk_elements(resolved_elements)
 
-        chunks = chunk_elements(resolved)
-        if not chunks:
+        if not resolved_chunks:
             logger.info("document %s chunked to zero, skipping indexing", doc.id)
             return
 
-        texts = [c.text for c in chunks]
-        metadatas = self._build_metadatas(doc, chunks)
-        self._store.upsert(str(doc.id), texts, metadatas)
+        texts_for_embedding = [_text_for_embedding(c) for c in resolved_chunks]
+        texts_for_display = [c.text for c in resolved_chunks]
+        metadatas = self._build_metadatas(doc, resolved_chunks)
 
-        # Stamp the model we used so a future targeted re-index can
-        # identify docs that need re-embedding (e.g. after switching
-        # `embedding_model` via F85.a).
+        self._store.upsert(
+            str(doc.id),
+            texts_for_display,
+            metadatas,
+            embedding_texts=texts_for_embedding,
+        )
+
+        # Stamp versions so a later targeted re-embed can find docs
+        # with a stale model / pipeline version.
+        doc.chunking_version = CHUNKING_VERSION
         model_name = getattr(self._store, "_embedder", None)
         if model_name is not None:
             doc.embedding_model_version = getattr(model_name, "model_name", None)
 
+        contextualized = sum(1 for c in resolved_chunks if c.context)
         logger.info(
-            "indexed document %s (%d chunks, chunking_version=%s)",
+            "indexed document %s (%d chunks, %d contextualized, chunking=%s)",
             doc.id,
-            len(chunks),
+            len(resolved_chunks),
+            contextualized,
             CHUNKING_VERSION,
         )
 
@@ -70,8 +93,8 @@ class EmbeddingService:
 
         Doc-level fields (filename, owner, etc.) are repeated on every
         chunk because Chroma filters only look at chunk-level metadata.
-        Chunk-level fields (section_heading, page_number, element_kinds)
-        carry the structure-aware signal that F82.e provides.
+        Chunk-level fields (section_heading, page_number, element_kinds,
+        context) carry the structure- and F82.c signal.
         """
         doc_meta = doc.metadata_ or {}
         base: dict[str, Any] = {
@@ -93,20 +116,32 @@ class EmbeddingService:
                 "chunk_index": i,
                 "total_chunks": len(chunks),
                 "chunking_version": CHUNKING_VERSION,
+                "has_context": chunk.context is not None,
             }
-            # Flatten the chunk metadata into the per-chunk dict. Chroma
-            # accepts scalars and lists of scalars; skip anything None
-            # so the filter surface stays clean.
+            if chunk.context:
+                meta["context"] = chunk.context
+
             for key, value in chunk.metadata.items():
                 if value is None:
                     continue
                 if isinstance(value, list):
-                    # Chroma prefers scalars; comma-join for display/filter.
                     meta[key] = ", ".join(str(v) for v in value)
                 else:
                     meta[key] = value
             out.append(meta)
         return out
+
+
+def _text_for_embedding(chunk: Chunk) -> str:
+    """Return the text that actually goes into the embedding model.
+
+    If the chunk has context, prepend it; otherwise plain chunk text.
+    Display-side (snippets, highlights) uses ``chunk.text`` only, so
+    the context doesn't leak into the UI.
+    """
+    if chunk.context:
+        return f"{chunk.context}\n\n{chunk.text}"
+    return chunk.text
 
 
 def _load_elements(doc: Document) -> list[Element]:

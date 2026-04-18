@@ -76,7 +76,21 @@ class ChromaVectorStore:
         document_id: str,
         chunks: list[str],
         metadatas: list[dict[str, Any]],
+        *,
+        embedding_texts: list[str] | None = None,
     ) -> None:
+        """Upsert chunks into the collection.
+
+        ``chunks`` is what Chroma stores as the ``documents`` field
+        (used for snippet display and highlight tokenization).
+
+        ``embedding_texts`` (optional) is what gets passed to the
+        embedder. When None, we embed ``chunks`` directly. When set,
+        the store embeds ``embedding_texts`` but still stores
+        ``chunks`` as the displayable document field — this separation
+        powers contextual retrieval (F82.c): context+chunk feeds the
+        vector while plain chunk text stays clean for snippets.
+        """
         if not chunks:
             return
 
@@ -89,8 +103,8 @@ class ChromaVectorStore:
             for i, meta in enumerate(metadatas)
         ]
 
-        # Compute vectors in our process via the swappable provider.
-        embeddings = self._embedder.embed_documents(chunks)
+        to_embed = embedding_texts if embedding_texts is not None else chunks
+        embeddings = self._embedder.embed_documents(to_embed)
 
         # ChromaDB has a batch limit; chunk in groups of 500
         batch_size = 500

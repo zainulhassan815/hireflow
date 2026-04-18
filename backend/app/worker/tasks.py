@@ -70,6 +70,10 @@ def extract_document_text(self, document_id: str) -> None:
         logger.warning("ChromaDB unavailable, skipping embedding indexing")
         embedding = None
 
+    from app.adapters.contextualizers.registry import get_contextualizer
+
+    contextualizer = get_contextualizer(settings)
+
     session = get_sync_db()
     try:
         service = ExtractionService(
@@ -82,6 +86,7 @@ def extract_document_text(self, document_id: str) -> None:
             classifier=classifier,
             storage_get=storage.get_sync,
             embedding=embedding,
+            contextualizer=contextualizer,
             on_ready=SyncCandidateService(session).handle_document_ready,
         )
         service.process(UUID(document_id))

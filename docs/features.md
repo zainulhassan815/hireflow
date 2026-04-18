@@ -268,7 +268,7 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - [ ] **F82.b** Whole-document chunk: one extra vector per doc with `chunk_kind="document"` holding a concatenated extract (first paragraph + headings + skills list). Helps broad "find me a [persona]" queries that need doc-level signal rather than any single chunk.
   - [~] **F82.d** Layout-aware extraction via `unstructured.partition` (hi_res strategy, GPU-accelerated via local RTX 5050). Persists typed elements (`Title`, `NarrativeText`, `ListItem`, `Table`, …) to a new `document_elements` table + adds versioning columns to `documents` (`extraction_version`, `chunking_version`, `embedding_model_version`). In-progress.
   - [~] **F82.e** Element-aware chunker consuming typed elements: heading→new chunk + `section_heading` metadata, tables→own chunk (markdown), lists→intact, narrative→packed. Replaces the character-recursive splitter. Ships with F82.d.
-  - [ ] **F82.c** (later, biggest published single-intervention lift: Anthropic contextual retrieval) Per-chunk Haiku context-generation at index time; prepend context to chunk text before embedding. -35% retrieval failure rate per Anthropic paper.
+  - [~] **F82.c** Contextual retrieval (Anthropic): `ChunkContextualizer` protocol backed by any `LlmProvider`; three modes (summary / full_doc / auto). In-progress; Claude Haiku as the POC backing model.
   - [ ] **F82.f** (later) Multi-granularity chunks: sentence + paragraph + section levels with parent-child retrieval. Enables retrieve-small-return-big.
   - Re-index required on any chunk strategy change — `scripts/reindex_embeddings.py` handles it.
 

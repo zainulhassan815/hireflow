@@ -47,6 +47,21 @@ class Settings(BaseSettings):
     # Enable table transformer in hi_res; no-op in fast mode.
     extraction_infer_tables: bool = True
 
+    # Chunk contextualizer (F82.c)
+    # - ``llm``: generate context per chunk via the configured LlmProvider
+    # - ``none``: skip contextualization entirely (fast path, no LLM cost)
+    contextualizer_provider: str = "llm"
+    # ``summary``: 1 summary call + N per-chunk calls with the summary.
+    # ``full_doc``: every chunk call includes the full doc body (expensive
+    #   without prompt caching).
+    # ``auto``: pick per-doc based on size vs ``full_doc_max_chars``.
+    contextualizer_mode: str = "auto"
+    contextualizer_full_doc_max_chars: int = 8000
+    # Optional override: if set, the contextualizer uses this model
+    # instead of ``llm_model``. Lets RAG use Sonnet while
+    # contextualization uses cheap Haiku.
+    contextualizer_model: str | None = None
+
     # JWT — required, no default. Generate with: openssl rand -hex 32
     jwt_secret_key: SecretStr = Field(min_length=32)
     jwt_algorithm: str = "HS256"

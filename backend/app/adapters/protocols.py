@@ -160,6 +160,39 @@ class DocumentClassifier(Protocol):
         ...
 
 
+# ---------- Chunk contextualizer (F82.c) ----------
+
+
+@runtime_checkable
+class ChunkContextualizer(Protocol):
+    """Augment retrieval chunks with situational context.
+
+    Runs at index time: for each chunk, produce a 50-100 token
+    situating context that the embedder prepends to the chunk text
+    before producing the vector. The chunk's displayed text (snippets,
+    highlights) is unchanged — contextualization only moves the
+    retrieval vector.
+
+    Per Anthropic's 2024 "Contextual Retrieval" paper, published
+    -35% retrieval failure reduction vs vanilla embedding.
+
+    Implementations run synchronously (called from Celery worker).
+    """
+
+    def contextualize(self, document: Any, chunks: list[Any]) -> list[Any]:
+        """Return chunks with ``context`` populated.
+
+        ``document`` is an ORM ``Document``; ``chunks`` is
+        ``list[services.chunking.Chunk]``. Typed via ``Any`` here to
+        avoid a circular import — the Protocol's job is to describe
+        behavior, not enforce types.
+        """
+        ...
+
+    @property
+    def model_name(self) -> str: ...
+
+
 # ---------- Embedding provider ----------
 
 

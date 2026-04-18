@@ -15,9 +15,14 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.adapters.protocols import DocumentClassifier, Element, TextExtractor
+from app.adapters.protocols import (
+    ChunkContextualizer,
+    DocumentClassifier,
+    Element,
+    TextExtractor,
+)
 from app.models import Document, DocumentElement, DocumentStatus, DocumentType
-from app.services.chunking import CHUNKING_VERSION
+from app.services.chunking import CHUNKING_VERSION, chunk_elements
 from app.services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -36,6 +41,7 @@ class ExtractionService:
         classifier: DocumentClassifier,
         storage_get: Callable[[str], bytes],
         embedding: EmbeddingService | None = None,
+        contextualizer: ChunkContextualizer | None = None,
         on_ready: Callable[[Document], None] | None = None,
     ) -> None:
         self._session = session
@@ -43,6 +49,7 @@ class ExtractionService:
         self._classifier = classifier
         self._storage_get = storage_get
         self._embedding = embedding
+        self._contextualizer = contextualizer
         self._on_ready = on_ready
 
     def process(self, document_id: UUID) -> None:
@@ -152,7 +159,10 @@ class ExtractionService:
                 )
                 for row in sorted(doc.elements, key=lambda r: r.order_index)
             ]
-            self._embedding.index_document(doc, elements=elements)
+            chunks = chunk_elements(elements)
+            if self._contextualizer is not None:
+                chunks = self._contextualizer.contextualize(doc, chunks)
+            self._embedding.index_document(doc, chunks=chunks)
             doc.chunking_version = CHUNKING_VERSION
         except Exception:
             # Indexing failure is non-fatal — the document is still usable

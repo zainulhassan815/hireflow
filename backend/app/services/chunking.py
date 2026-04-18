@@ -53,6 +53,9 @@ CHUNKING_VERSION = "v2-element-aware"
 class Chunk:
     text: str
     metadata: dict[str, Any] = field(default_factory=dict)
+    # F82.c: populated by ``ChunkContextualizer.contextualize``.
+    # Prepended to ``text`` at embed time (but not at display time).
+    context: str | None = None
 
 
 def chunk_elements(elements: list[Element]) -> list[Chunk]:
