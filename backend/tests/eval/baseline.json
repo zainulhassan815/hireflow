@@ -1,7 +1,7 @@
 {
   "overall": {
-    "p@5": 0.2435,
-    "r@5": 0.9783,
+    "p@5": 0.2522,
+    "r@5": 1.0,
     "mrr": 0.8696
   },
   "cases": [
@@ -15,10 +15,12 @@
       "returned": [
         "resume_python_senior",
         "letter_cover_jane",
-        "resume_devops"
+        "resume_devops",
+        "resume_javascript_junior",
+        "resume_data_scientist"
       ],
-      "p@5": 0.2,
-      "r@5": 0.5,
+      "p@5": 0.4,
+      "r@5": 1.0,
       "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": "Python + cloud; DS is also plausible"
@@ -45,7 +47,9 @@
         "resume_devops"
       ],
       "returned": [
-        "resume_devops"
+        "resume_devops",
+        "resume_python_senior",
+        "resume_data_scientist"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
@@ -60,7 +64,9 @@
         "resume_data_scientist"
       ],
       "returned": [
-        "resume_data_scientist"
+        "resume_data_scientist",
+        "resume_devops",
+        "letter_cover_jane"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
@@ -177,12 +183,21 @@
         "report_sales_q3"
       ],
       "returned": [
-        "report_sales_q3"
+        "report_sales_q3",
+        "resume_python_senior",
+        "resume_javascript_junior",
+        "resume_data_scientist",
+        "resume_devops"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
       "mrr": 1.0,
-      "must_not_contain_violation": [],
+      "must_not_contain_violation": [
+        "resume_data_scientist",
+        "resume_devops",
+        "resume_javascript_junior",
+        "resume_python_senior"
+      ],
       "notes": "type filter dominates"
     },
     {
@@ -327,7 +342,10 @@
         "resume_data_scientist"
       ],
       "returned": [
-        "resume_data_scientist"
+        "resume_data_scientist",
+        "resume_python_senior",
+        "resume_devops",
+        "letter_cover_jane"
       ],
       "p@5": 0.2,
       "r@5": 1.0,

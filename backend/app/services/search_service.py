@@ -87,6 +87,14 @@ class SearchService:
             query, document_type, limit * 3, owner_id=owner_filter
         )
 
+        # F86.c: vector chunks can outlive the docs they came from —
+        # Chroma chunks for a deleted/reset doc that no longer exists in
+        # Postgres, or for a doc demoted from READY. Those orphans collect
+        # RRF score, dominate the merged top-K, and crowd out real lexical
+        # hits. Filter them out before scoring so RRF only ranks docs we
+        # can hydrate AND that are READY.
+        vector_hits = await self._drop_orphan_vector_hits(vector_hits)
+
         has_structured_filter = any(
             [
                 document_type is not None,
@@ -171,6 +179,35 @@ class SearchService:
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
         return results, elapsed_ms
+
+    async def _drop_orphan_vector_hits(self, hits: list[VectorHit]) -> list[VectorHit]:
+        """Drop vector hits whose document is missing or non-READY in Postgres.
+
+        Chroma is the source of truth for chunks, Postgres for documents.
+        Drift between them (deleted docs, failed reprocessing) leaves
+        chunks pointing at nonexistent rows. Without this filter those
+        orphans collect RRF score and shadow real lexical hits.
+        """
+        if not hits:
+            return hits
+        doc_ids: list[UUID] = []
+        for h in hits:
+            try:
+                doc_ids.append(UUID(h.document_id))
+            except ValueError:
+                continue
+        if not doc_ids:
+            return []
+        existing = await self._documents.get_many(doc_ids)
+        return [
+            h
+            for h in hits
+            if (
+                (doc_id := _safe_uuid(h.document_id)) is not None
+                and (existing.get(doc_id))
+                and existing[doc_id].status == DocumentStatus.READY
+            )
+        ]
 
     def _vector_search(
         self,
@@ -268,6 +305,13 @@ class SearchService:
             )
 
         return results
+
+
+def _safe_uuid(value: str) -> UUID | None:
+    try:
+        return UUID(value)
+    except ValueError:
+        return None
 
 
 def _confidence_band(score: float) -> Confidence:

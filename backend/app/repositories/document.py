@@ -202,18 +202,24 @@ class DocumentRepository:
         owner_id: UUID | None = None,
         threshold: float = _TRGM_THRESHOLD,
     ) -> list[tuple[Document, float]]:
-        """Trigram-similarity search over filename (F88.c).
+        """Trigram-similarity search over filename + body (F88.c).
 
         Used by the search service as a fallback when ``full_text_search``
         returns zero hits — a small concession to typo tolerance without
-        muddying ranking on good queries. Backed by the
-        ``documents_filename_trgm_idx`` GIN index.
+        muddying ranking on good queries. Filename matches ride the
+        ``documents_filename_trgm_idx`` GIN index; body matches scan
+        unindexed (acceptable for our corpus size; if extracted_text
+        grows hot enough to matter, add a GIN trigram index then).
 
-        Uses ``word_similarity(query, filename)`` rather than plain
-        ``similarity()`` so a short query term doesn't get drowned by a
-        long filename — a typo of ``pyhton`` should match
-        ``python_resume.pdf`` based on the word ``python``, not the
-        whole filename string.
+        Uses ``word_similarity(query, …)`` rather than plain
+        ``similarity()`` so a short typo'd query doesn't get drowned by
+        a long string — a typo of ``pyhton`` should match
+        ``python_resume.pdf`` based on the word ``python``, and a doc
+        whose body mentions Python should also surface even if no
+        filename does.
+
+        The doc's score is the max of its filename and body word-
+        similarity scores.
 
         Returns ``(doc, similarity)`` pairs ordered by descending
         similarity. Pass ``owner_id`` for per-user scoping (F86).
@@ -222,7 +228,12 @@ class DocumentRepository:
         if not query:
             return []
 
-        sim = func.word_similarity(query, Document.filename).label("sim")
+        sim_filename = func.word_similarity(query, Document.filename)
+        sim_body = func.word_similarity(
+            query, func.coalesce(Document.extracted_text, "")
+        )
+        # GREATEST handles the case where one side is below threshold.
+        sim = func.greatest(sim_filename, sim_body).label("sim")
 
         stmt = (
             select(Document, sim)

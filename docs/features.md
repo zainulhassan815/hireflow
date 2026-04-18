@@ -293,8 +293,8 @@ Improve accuracy, relevance, and usefulness of core AI features.
 - [x] **F86 · Search correctness (P0)** — see `docs/search-hardening.md` §3
   - [x] Per-user ownership scoping (admin bypass) wired into vector `where`, FTS, and SQL metadata paths
   - [x] Status filter on vector path: non-READY docs with stale chunks no longer surface
+  - [x] **F86.c** Drop orphan vector hits (Chroma chunks for deleted Postgres docs) before RRF — was poisoning ranking by giving high vector scores to nonexistent docs and pushing real lexical hits out of top-K
   - Tenancy decision: per-user with admin bypass, matches `DocumentService._ensure_access`
-  - Eval baseline unchanged (P@5 = 0.238); 7 new tests covering scoping + status
 
 - [x] **F87 · Multi-field weighted FTS (P1)** — see `docs/search-hardening.md` §4
   - [x] Replaced `extracted_text_tsv` with weighted `search_tsv`: filename (A, regexp-tokenized for `_-./` separators), `metadata.skills` (B), `extracted_text` (C)
@@ -305,7 +305,7 @@ Improve accuracy, relevance, and usefulness of core AI features.
 - [x] **F88 · Query syntax & understanding (P1 + P2)** — see `docs/search-hardening.md` §3
   - [x] **F88.a** Switch `plainto_tsquery` → `websearch_to_tsquery` (phrase/OR/NOT), empty/whitespace short-circuit at service edge, query length cap (1024 chars) — same eval baseline (additive syntax)
   - [x] **F88.b** Canonical acronym expansion (one-directional: `k8s → kubernetes`, `ml → machine learning`, `js → javascript`, ~25 entries; ambiguous like `cv`/`tf` omitted). Applied to FTS only; vector handles equivalence semantically.
-  - [x] **F88.c** Typo tolerance: `pg_trgm` `word_similarity` fallback over filename when FTS returns 0; threshold 0.25; live `pyhton`/`telemedicin`/`supabse` queries land target at rank 1
+  - [x] **F88.c** Typo tolerance: `pg_trgm` `word_similarity` fallback over filename **and body** (`GREATEST` of both) when FTS returns 0; threshold 0.25. Body fallback was added after a real user-reported case (`pyhton` returned 0 because no filename had `python`).
   - [x] **F88.d** Special-token preservation (`C++`/`C#`/`F#`/`.NET`/`Node.js`/`Objective-C`): mirrored substitution at index time (Postgres `normalize_tech_tokens` SQL function) and query time (Python helper)
   - Known limitations: negation (`-term`) only constrains the FTS path; vector RRF can still surface negated docs. Highlight tokenizer (F92.1) doesn't see normalized tokens — non-issue today since query/snippet share the raw input, but worth flagging if highlighting ever consumes the normalized form.
 

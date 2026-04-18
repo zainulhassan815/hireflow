@@ -426,6 +426,40 @@ async def test_fuzzy_fallback_skipped_when_fts_has_results() -> None:
     repo.fuzzy_search.assert_not_called()
 
 
+# ---------------------------------------------------------------------------
+# F86.c orphan vector chunks (Chroma chunk pointing at deleted/non-READY doc)
+# ---------------------------------------------------------------------------
+
+
+async def test_orphan_vector_chunk_dropped_before_ranking() -> None:
+    """A chunk whose document_id no longer exists in Postgres must not
+    contribute RRF score and crowd out real lexical hits."""
+    real_id = uuid4()
+    orphan_id = uuid4()  # exists in vector but never hydrated
+
+    real_doc = _document(real_id, filename="real.pdf")
+
+    store = _FakeVectorStore(
+        [
+            # Orphan ranked higher in vector — would dominate without the
+            # filter.
+            _vector_hit(doc_id=orphan_id, distance=0.05),
+            _vector_hit(doc_id=real_id, distance=0.10),
+        ]
+    )
+    repo = _mock_repo(
+        [real_doc],  # docs_map only knows about real
+        lexical_hits=[(real_doc, 0.5)],
+    )
+    service = SearchService(repo, store)
+
+    results, _ = await service.search(actor=_admin(), query="anything")
+
+    returned_ids = [r["document_id"] for r in results]
+    assert real_id in returned_ids
+    assert orphan_id not in returned_ids
+
+
 async def test_non_ready_doc_with_indexed_chunks_is_excluded() -> None:
     """A FAILED/PROCESSING doc whose chunks are still in Chroma must not surface.
 

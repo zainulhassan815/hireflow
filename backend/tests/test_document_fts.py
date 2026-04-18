@@ -404,9 +404,7 @@ async def test_dotnet_query_matches_doc_with_dotnet_in_body(owner_id) -> None:
     async with SessionLocal() as session:
         repo = DocumentRepository(session)
         # Use the bare token — the body doesn't contain "engineer".
-        hits = await repo.full_text_search(
-            normalize_tech_tokens(".NET"), limit=10
-        )
+        hits = await repo.full_text_search(normalize_tech_tokens(".NET"), limit=10)
 
     assert target.id in [d.id for d, _ in hits]
 
@@ -443,6 +441,26 @@ async def test_fuzzy_search_finds_one_letter_typo(owner_id) -> None:
     async with SessionLocal() as session:
         repo = DocumentRepository(session)
         # Typo: pyhton (transposition)
+        hits = await repo.fuzzy_search("pyhton", limit=10)
+
+    assert target.id in [d.id for d, _ in hits]
+
+
+async def test_fuzzy_search_falls_back_to_body_when_filename_doesnt_match(
+    owner_id,
+) -> None:
+    """Real-world bug: typo'd query, no doc has the term in filename, but
+    docs do mention it in the body. Body word_similarity must catch it.
+    """
+    target = await _seed_doc(
+        owner_id=owner_id,
+        filename="generic_engineer.pdf",
+        text="Senior Python developer with 8 years of backend experience.",
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        # Typo: pyhton — no filename matches but body does.
         hits = await repo.fuzzy_search("pyhton", limit=10)
 
     assert target.id in [d.id for d, _ in hits]
