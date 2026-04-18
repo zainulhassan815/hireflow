@@ -310,10 +310,10 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - Inline preview for PDFs (embedded viewer)
   - Bulk actions: select multiple → delete, export, create candidates
 
-- [ ] **F92 · Search & RAG UX**
+- [~] **F92 · Search & RAG UX**
   - Search-as-you-type with debounce
   - Filter pills: visual chips for active filters, one-click remove
-  - Search result highlighting: bold matched terms in snippets
+  - [x] **F92.1** Search result highlighting: offset-based `match_spans` on `/search` and `/rag/query`; frontend `<HighlightedText>` renders `<mark>`
   - RAG chat: streaming responses (SSE), typing indicator, copy answer button
   - Source citation links: click citation → opens document preview at relevant section
   - Suggested queries: show example queries when search is empty

@@ -33,6 +33,15 @@ class SourceCitation(BaseModel):
     filename: str = Field(..., description="Source document filename")
     chunk_index: int = Field(..., description="Chunk position in the document")
     text: str = Field(..., description="Chunk text used as context")
+    match_spans: list[tuple[int, int]] = Field(
+        default_factory=list,
+        description=(
+            "Non-overlapping ``[start, end)`` character offsets within "
+            "``text`` where question terms matched. Frontends render "
+            "these as ``<mark>`` spans."
+        ),
+        examples=[[[0, 8]]],
+    )
 
 
 class RagResponse(BaseModel):

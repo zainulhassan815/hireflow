@@ -45,6 +45,17 @@ class SearchHighlight(BaseModel):
 
     text: str = Field(..., description="Chunk text that matched the query")
     chunk_index: int = Field(..., description="Position of this chunk in the document")
+    match_spans: list[tuple[int, int]] = Field(
+        default_factory=list,
+        description=(
+            "Non-overlapping ``[start, end)`` character offsets within "
+            "``text`` where query terms matched. Empty when the snippet "
+            "is a pure semantic hit with no literal keyword overlap. "
+            "Frontends render these as ``<mark>`` spans — the API "
+            "stays presentation-neutral."
+        ),
+        examples=[[[0, 6], [25, 31]]],
+    )
 
 
 class SearchResultItem(BaseModel):

@@ -17,6 +17,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { HighlightedText } from "@/components/highlighted-text";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -195,7 +196,10 @@ export function SearchPage() {
                                   variant="muted"
                                   className="mt-1 line-clamp-3 text-sm"
                                 >
-                                  {result.highlights[0].text}
+                                  <HighlightedText
+                                    text={result.highlights[0].text}
+                                    spans={result.highlights[0].match_spans}
+                                  />
                                 </Typography>
                               )}
                               {result.metadata &&
@@ -333,7 +337,10 @@ export function SearchPage() {
                                   {source.filename}
                                 </span>
                                 <p className="text-muted-foreground mt-0.5 line-clamp-2">
-                                  {source.text}
+                                  <HighlightedText
+                                    text={source.text}
+                                    spans={source.match_spans}
+                                  />
                                 </p>
                               </div>
                             ))}

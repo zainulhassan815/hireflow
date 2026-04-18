@@ -26,6 +26,7 @@ from app.adapters.protocols import VectorHit, VectorStore
 from app.core.config import settings
 from app.models import Document, DocumentType
 from app.repositories.document import DocumentRepository
+from app.services.highlight import extract_query_terms, find_match_spans
 
 _RRF_K = 60  # standard reciprocal rank fusion constant
 
@@ -90,6 +91,13 @@ class SearchService:
 
         doc_ids = [m.document_id for m in merged]
         docs_map = await self._documents.get_many(doc_ids)
+
+        # Annotate each highlight with the per-snippet match offsets
+        # so the frontend can render ``<mark>`` without re-tokenizing.
+        terms = extract_query_terms(query)
+        for item in merged:
+            for highlight in item.highlights:
+                highlight["match_spans"] = find_match_spans(highlight["text"], terms)
 
         results = []
         for item in merged:

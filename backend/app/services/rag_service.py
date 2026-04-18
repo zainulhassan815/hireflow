@@ -11,6 +11,7 @@ from uuid import UUID
 
 from app.adapters.protocols import LlmProvider, VectorStore
 from app.repositories.document import DocumentRepository
+from app.services.highlight import extract_query_terms, find_match_spans
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,7 @@ class RagService:
         # 3. Build context + citations
         context_parts: list[str] = []
         citations: list[dict[str, Any]] = []
+        terms = extract_query_terms(question)
 
         for hit in hits:
             doc_id = UUID(hit.document_id)
@@ -92,12 +94,14 @@ class RagService:
                     text=hit.text,
                 )
             )
+            snippet = hit.text[:500]
             citations.append(
                 {
                     "document_id": doc_id,
                     "filename": filename,
                     "chunk_index": chunk_index,
-                    "text": hit.text[:500],
+                    "text": snippet,
+                    "match_spans": find_match_spans(snippet, terms),
                 }
             )
 
