@@ -465,4 +465,23 @@ EVAL_QUERIES: list[EvalCase] = [
         bucket="edge",
         notes="single skill",
     ),
+    # ---- F87 filename-as-search-target queries ----
+    EvalCase(
+        query="brightforge",
+        expected_docs={"contract_vendor_q3"},
+        bucket="filename",
+        notes="filename token only — body is the contract text, not the brand",
+    ),
+    EvalCase(
+        query="marcus chen",
+        expected_docs={"resume_devops"},
+        bucket="filename",
+        notes="candidate name from filename (the devops resume's filename)",
+    ),
+    EvalCase(
+        query="jane doe",
+        expected_docs={"resume_python_senior", "letter_cover_jane"},
+        bucket="filename",
+        notes="name appears in two filenames",
+    ),
 ]

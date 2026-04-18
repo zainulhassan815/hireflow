@@ -72,10 +72,16 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         "metadata", JSONB, nullable=True, default=None
     )
 
-    # Read-only Postgres-generated tsvector over extracted_text. Populated
-    # automatically by the database on insert/update; never written from the
-    # ORM. Powers F85 lexical retrieval via ts_rank_cd in the search service.
-    extracted_text_tsv: Mapped[str | None] = mapped_column(
+    # Read-only Postgres-generated weighted tsvector. Populated automatically
+    # by the database on insert/update; never written from the ORM. Powers
+    # lexical retrieval via ts_rank_cd in the search service.
+    #
+    # F85 added a single-field version over extracted_text. F87 replaced
+    # it with a multi-field weighted version: filename (A) + skills (B) +
+    # extracted_text (C). ``ts_rank_cd`` respects the per-field weights so
+    # a filename match outranks a body-only mention without ranking-code
+    # changes.
+    search_tsv: Mapped[str | None] = mapped_column(
         TSVECTOR,
         nullable=True,
         server_default=FetchedValue(),

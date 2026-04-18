@@ -296,14 +296,11 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - Tenancy decision: per-user with admin bypass, matches `DocumentService._ensure_access`
   - Eval baseline unchanged (P@5 = 0.238); 7 new tests covering scoping + status
 
-- [ ] **F87 · Multi-field weighted FTS (P1)** — see `docs/search-hardening.md` §4
-  - Replace `extracted_text_tsv` with weighted `search_tsv` generated column:
-    - Weight A (highest): `filename`
-    - Weight B: `document_type`, `metadata.skills`, `metadata.summary`
-    - Weight C (lowest): `extracted_text`
-  - `ts_rank_cd` automatically respects A>B>C; no `SearchService` changes
-  - Single Alembic migration replacing the F85 column + GIN index
-  - Eval: add filename-only and metadata-only query cases; expect P@5 lift
+- [x] **F87 · Multi-field weighted FTS (P1)** — see `docs/search-hardening.md` §4
+  - [x] Replaced `extracted_text_tsv` with weighted `search_tsv`: filename (A, regexp-tokenized for `_-./` separators), `metadata.skills` (B), `extracted_text` (C)
+  - [x] `document_type` deliberately not indexed — `enum::text` is non-IMMUTABLE in Postgres; structured filter handles those 5 values better
+  - [x] No `SearchService` changes; `ts_rank_cd` does the weighting automatically
+  - Eval lift on top of F86: **P@5 0.238→0.253, R@5 0.906→0.974, MRR 0.781→0.868 (+11%)**; new `filename` bucket MRR=1.0; live `menu analyzer` query now ranks Menu Analyzer Portfolio Doc.pdf at #1
 
 - [ ] **F88 · Query syntax & understanding (P1 + P2)** — see `docs/search-hardening.md` §3
   - Switch `plainto_tsquery` → `websearch_to_tsquery` (phrase/OR/NOT support)

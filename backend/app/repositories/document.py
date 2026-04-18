@@ -153,12 +153,12 @@ class DocumentRepository:
             return []
 
         ts_query = func.plainto_tsquery("english", query)
-        rank = func.ts_rank_cd(Document.extracted_text_tsv, ts_query).label("rank")
+        rank = func.ts_rank_cd(Document.search_tsv, ts_query).label("rank")
 
         stmt = (
             select(Document, rank)
             .where(Document.status == DocumentStatus.READY)
-            .where(Document.extracted_text_tsv.op("@@")(ts_query))
+            .where(Document.search_tsv.op("@@")(ts_query))
         )
 
         if owner_id is not None:

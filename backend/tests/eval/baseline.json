@@ -1,8 +1,8 @@
 {
   "overall": {
-    "p@5": 0.2375,
-    "r@5": 0.9062,
-    "mrr": 0.7812
+    "p@5": 0.2526,
+    "r@5": 0.9737,
+    "mrr": 0.8684
   },
   "cases": [
     {
@@ -120,10 +120,12 @@
       "expected": [
         "letter_cover_jane"
       ],
-      "returned": [],
-      "p@5": 0.0,
-      "r@5": 0.0,
-      "mrr": 0.0,
+      "returned": [
+        "letter_cover_jane"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": ""
     },
@@ -254,6 +256,53 @@
       "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": "single skill"
+    },
+    {
+      "bucket": "filename",
+      "query": "brightforge",
+      "expected": [
+        "contract_vendor_q3"
+      ],
+      "returned": [
+        "contract_vendor_q3"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": "filename token only \u2014 body is the contract text, not the brand"
+    },
+    {
+      "bucket": "filename",
+      "query": "marcus chen",
+      "expected": [
+        "resume_devops"
+      ],
+      "returned": [
+        "resume_devops"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": "candidate name from filename (the devops resume's filename)"
+    },
+    {
+      "bucket": "filename",
+      "query": "jane doe",
+      "expected": [
+        "letter_cover_jane",
+        "resume_python_senior"
+      ],
+      "returned": [
+        "resume_python_senior",
+        "letter_cover_jane"
+      ],
+      "p@5": 0.4,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": "name appears in two filenames"
     }
   ]
 }

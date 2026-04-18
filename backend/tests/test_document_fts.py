@@ -64,8 +64,11 @@ async def test_generated_tsvector_populates_on_insert(owner_id) -> None:
         assert fresh is not None
         # The tsvector is opaque to the ORM (we mapped it as str | None);
         # what matters is it's populated, not empty.
-        assert fresh.extracted_text_tsv
-        assert "python" in fresh.extracted_text_tsv.lower()
+        assert fresh.search_tsv
+        assert "python" in fresh.search_tsv.lower()
+        # F87: filename indexed at weight A → its tokens carry an :A
+        # suffix in the textual tsvector representation.
+        assert "resum" in fresh.search_tsv.lower()  # filename "resume.pdf"
 
 
 async def test_full_text_search_finds_single_word_query(owner_id) -> None:
@@ -171,6 +174,88 @@ async def test_full_text_search_handles_multiword_query(owner_id) -> None:
 # ---------------------------------------------------------------------------
 # F86 ownership scoping
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# F87 multi-field weighted FTS
+# ---------------------------------------------------------------------------
+
+
+async def test_filename_match_outranks_body_only_match(owner_id) -> None:
+    """Filename indexed at weight A; body at weight C. ts_rank_cd must reflect that."""
+    title_match = await _seed_doc(
+        owner_id=owner_id,
+        filename="menu_analyzer_portfolio.pdf",
+        text="Some completely unrelated paragraph about cats and dogs.",
+    )
+    body_match = await _seed_doc(
+        owner_id=owner_id,
+        filename="random_filename.pdf",
+        # Body mentions menu analyzer but the filename does not.
+        text=(
+            "This document is a portfolio piece. The menu analyzer was "
+            "built for restaurants. The menu analyzer reads images and "
+            "returns nutritional info."
+        ),
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        hits = await repo.full_text_search("menu analyzer", limit=10)
+
+    ranked = [doc.id for doc, _ in hits]
+    assert title_match.id in ranked
+    assert body_match.id in ranked
+    # Title match must outrank body-only match.
+    assert ranked.index(title_match.id) < ranked.index(body_match.id)
+
+
+async def test_skills_metadata_match_contributes_to_ranking(owner_id) -> None:
+    """Skills indexed at weight B should outrank a body-only mention."""
+    skills_doc = await _seed_doc(
+        owner_id=owner_id,
+        filename="resume_a.pdf",
+        text="Generic engineer profile with various accomplishments.",
+    )
+    body_doc = await _seed_doc(
+        owner_id=owner_id,
+        filename="resume_b.pdf",
+        text=(
+            "Engineer profile. Has used kubernetes once briefly. "
+            "Other unrelated content here."
+        ),
+    )
+
+    # Patch metadata.skills on skills_doc to include "kubernetes".
+    async with SessionLocal() as session:
+        fresh = await session.get(Document, skills_doc.id)
+        assert fresh is not None
+        fresh.metadata_ = {"skills": ["kubernetes", "python"]}
+        await session.commit()
+
+        repo = DocumentRepository(session)
+        hits = await repo.full_text_search("kubernetes", limit=10)
+
+    ranked = [doc.id for doc, _ in hits]
+    assert skills_doc.id in ranked
+    assert body_doc.id in ranked
+    # Skills (weight B) > body (weight C).
+    assert ranked.index(skills_doc.id) < ranked.index(body_doc.id)
+
+
+async def test_filename_only_match_when_body_has_no_overlap(owner_id) -> None:
+    """A doc with the term only in the filename must still surface."""
+    doc = await _seed_doc(
+        owner_id=owner_id,
+        filename="quarterly_telemedicine_review.pdf",
+        text="Lorem ipsum dolor sit amet — body has no matching term.",
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        hits = await repo.full_text_search("telemedicine", limit=10)
+
+    assert doc.id in [d.id for d, _ in hits]
 
 
 async def test_full_text_search_scopes_to_owner(owner_id) -> None:
