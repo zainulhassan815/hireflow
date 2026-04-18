@@ -30,7 +30,7 @@ from app.core.config import settings
 from app.models import Document, DocumentStatus, DocumentType, User, UserRole
 from app.repositories.document import DocumentRepository
 from app.services.highlight import extract_query_terms, find_match_spans
-from app.services.query_expansion import expand_acronyms
+from app.services.query_expansion import expand_acronyms, normalize_tech_tokens
 
 _RRF_K = 60  # standard reciprocal rank fusion constant
 
@@ -110,10 +110,13 @@ class SearchService:
         else:
             sql_docs = []
 
-        # F88.b: expand acronyms only for the lexical path. The vector
-        # path already handles K8s ≈ Kubernetes via embedding similarity,
-        # so feeding it the canonical form would just add noise.
-        lexical_query = expand_acronyms(query)
+        # F88.b + F88.d: normalize the lexical query.
+        # - normalize_tech_tokens preserves C++/C#/.NET/Node.js by
+        #   substituting them with the same safe forms the index uses.
+        # - expand_acronyms swaps K8s/ML/JS for canonical words.
+        # Vector path keeps the raw query — embeddings already handle
+        # both cases semantically; normalizing for them adds noise.
+        lexical_query = expand_acronyms(normalize_tech_tokens(query))
         lexical_hits = await self._documents.full_text_search(
             lexical_query, limit=limit * 3, owner_id=owner_filter
         )

@@ -302,12 +302,12 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - [x] No `SearchService` changes; `ts_rank_cd` does the weighting automatically
   - Eval lift on top of F86: **P@5 0.238→0.253, R@5 0.906→0.974, MRR 0.781→0.868 (+11%)**; new `filename` bucket MRR=1.0; live `menu analyzer` query now ranks Menu Analyzer Portfolio Doc.pdf at #1
 
-- [~] **F88 · Query syntax & understanding (P1 + P2)** — see `docs/search-hardening.md` §3
+- [x] **F88 · Query syntax & understanding (P1 + P2)** — see `docs/search-hardening.md` §3
   - [x] **F88.a** Switch `plainto_tsquery` → `websearch_to_tsquery` (phrase/OR/NOT), empty/whitespace short-circuit at service edge, query length cap (1024 chars) — same eval baseline (additive syntax)
   - [x] **F88.b** Canonical acronym expansion (one-directional: `k8s → kubernetes`, `ml → machine learning`, `js → javascript`, ~25 entries; ambiguous like `cv`/`tf` omitted). Applied to FTS only; vector handles equivalence semantically.
   - [x] **F88.c** Typo tolerance: `pg_trgm` `word_similarity` fallback over filename when FTS returns 0; threshold 0.25; live `pyhton`/`telemedicin`/`supabse` queries land target at rank 1
-  - [ ] **F88.d** Special-token preservation (`C++`, `.NET`, `Node.js`, `C#`) on both index and query side; share helper with F92.1 highlight tokenizer
-  - Known limitation: negation (`-term`) only constrains the FTS path; vector RRF can still surface negated docs. Cross-source semantics fix is its own slice if needed.
+  - [x] **F88.d** Special-token preservation (`C++`/`C#`/`F#`/`.NET`/`Node.js`/`Objective-C`): mirrored substitution at index time (Postgres `normalize_tech_tokens` SQL function) and query time (Python helper)
+  - Known limitations: negation (`-term`) only constrains the FTS path; vector RRF can still surface negated docs. Highlight tokenizer (F92.1) doesn't see normalized tokens — non-issue today since query/snippet share the raw input, but worth flagging if highlighting ever consumes the normalized form.
 
 - [ ] **F89 · Search polish (P2 + P3)** — see `docs/search-hardening.md` §3
   - Recency tie-breaking: stable `created_at desc` when RRF scores tie

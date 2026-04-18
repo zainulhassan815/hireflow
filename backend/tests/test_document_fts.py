@@ -357,6 +357,77 @@ async def test_filename_only_match_when_body_has_no_overlap(owner_id) -> None:
 
 
 # ---------------------------------------------------------------------------
+# F88.d special tech tokens (index ↔ query mirror)
+# ---------------------------------------------------------------------------
+
+
+async def test_cpp_query_matches_doc_with_cpp_in_body(owner_id) -> None:
+    """The bug F88.d fixes: english analyzer strips `++` so `C++` would
+    otherwise tokenize to just `c` and match every C* doc.
+
+    With normalize_tech_tokens applied on both sides, indexing `C++`
+    produces `cpp`, and a query for `C++` after Python normalization
+    is also `cpp` — they meet.
+    """
+    from app.services.query_expansion import normalize_tech_tokens
+
+    cpp_doc = await _seed_doc(
+        owner_id=owner_id,
+        filename="cpp_resume.pdf",
+        text="Senior C++ developer with 8 years of game-engine experience.",
+    )
+    other = await _seed_doc(
+        owner_id=owner_id,
+        filename="java_resume.pdf",
+        text="Java backend engineer; never touched C-family languages.",
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        # Mimic what SearchService does on the lexical path.
+        hits = await repo.full_text_search(normalize_tech_tokens("C++"), limit=10)
+
+    hit_ids = {d.id for d, _ in hits}
+    assert cpp_doc.id in hit_ids
+    assert other.id not in hit_ids
+
+
+async def test_dotnet_query_matches_doc_with_dotnet_in_body(owner_id) -> None:
+    from app.services.query_expansion import normalize_tech_tokens
+
+    target = await _seed_doc(
+        owner_id=owner_id,
+        filename="dotnet_dev.pdf",
+        text="C# / .NET developer, 5 years building enterprise services.",
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        # Use the bare token — the body doesn't contain "engineer".
+        hits = await repo.full_text_search(
+            normalize_tech_tokens(".NET"), limit=10
+        )
+
+    assert target.id in [d.id for d, _ in hits]
+
+
+async def test_nodejs_query_matches_doc_with_nodejs_in_body(owner_id) -> None:
+    from app.services.query_expansion import normalize_tech_tokens
+
+    target = await _seed_doc(
+        owner_id=owner_id,
+        filename="node_dev.pdf",
+        text="Lead engineer using Node.js for high-throughput APIs.",
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        hits = await repo.full_text_search(normalize_tech_tokens("Node.js"), limit=10)
+
+    assert target.id in [d.id for d, _ in hits]
+
+
+# ---------------------------------------------------------------------------
 # F88.c trigram typo tolerance
 # ---------------------------------------------------------------------------
 

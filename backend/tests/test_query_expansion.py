@@ -5,7 +5,7 @@ Pure-function tests, no fixtures.
 
 from __future__ import annotations
 
-from app.services.query_expansion import expand_acronyms
+from app.services.query_expansion import expand_acronyms, normalize_tech_tokens
 
 # ---------- single-word swaps ----------
 
@@ -79,3 +79,49 @@ def test_ambiguous_cv_not_expanded() -> None:
 def test_ambiguous_tf_not_expanded() -> None:
     """`tf` is terraform *or* tensorflow — no expansion."""
     assert expand_acronyms("tf engineer") == "tf engineer"
+
+
+# ---------- F88.d normalize_tech_tokens ----------
+
+
+def test_normalize_cpp() -> None:
+    assert normalize_tech_tokens("C++ developer") == "cpp developer"
+    assert normalize_tech_tokens("c++ skills") == "cpp skills"
+
+
+def test_normalize_csharp_and_fsharp() -> None:
+    assert normalize_tech_tokens("C# .NET Core") == "csharp dotnet Core"
+    assert normalize_tech_tokens("F# enthusiast") == "fsharp enthusiast"
+
+
+def test_normalize_dotnet_only_when_preceded_by_non_letter() -> None:
+    """`.NET` after whitespace becomes dotnet; embedded `xnet` shouldn't."""
+    assert normalize_tech_tokens("Senior .NET dev") == "Senior dotnet dev"
+    # `bonnet` shouldn't be touched.
+    assert normalize_tech_tokens("Wear a bonnet") == "Wear a bonnet"
+
+
+def test_normalize_nodejs_and_objectivec() -> None:
+    assert normalize_tech_tokens("Node.js backend") == "nodejs backend"
+    assert normalize_tech_tokens("Objective-C iOS dev") == "objectivec iOS dev"
+
+
+def test_normalize_combined() -> None:
+    out = normalize_tech_tokens("Polyglot: C++, C#, F#, .NET, Node.js, Objective-C")
+    assert "cpp" in out
+    assert "csharp" in out
+    assert "fsharp" in out
+    assert "dotnet" in out
+    assert "nodejs" in out
+    assert "objectivec" in out
+
+
+def test_normalize_idempotent_on_already_normalized() -> None:
+    """Running twice must give the same answer."""
+    once = normalize_tech_tokens("C++ Node.js")
+    twice = normalize_tech_tokens(once)
+    assert once == twice
+
+
+def test_normalize_empty() -> None:
+    assert normalize_tech_tokens("") == ""
