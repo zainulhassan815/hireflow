@@ -1,5 +1,10 @@
 # RAG Architecture for HR Screening
 
+> **Design reference.** For the actual current-state pipeline diagrams,
+> component map, and re-index flows, see **`docs/rag-pipeline.md`**.
+> This doc captures the intent and rationale; `rag-pipeline.md` captures
+> what exists.
+
 ## Overview
 
 This document defines the Retrieval-Augmented Generation (RAG) architecture for the HR screening system. The goal is to enable natural language queries over resumes and job applications.

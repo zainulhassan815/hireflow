@@ -242,41 +242,58 @@ Register → Login → Access Token (30m) + Refresh Token (7d)
 
 ---
 
-## 7. Document processing pipeline
+## 7. Document processing & search — pipelines
 
-```
-Upload (POST /documents)
-    → Store blob in MinIO → DB row (status=pending) → 201
-    → Celery: extract_document_text.delay(doc_id)
+Detailed diagrams, component map, and re-index flows live in
+`docs/rag-pipeline.md`. Quick summary:
 
-Worker pipeline:
-    1. Fetch blob from MinIO (sync)
-    2. Extract text (PyMuPDF / python-docx / VisionProvider)
-    3. Classify (RuleBased → LLM fallback)
-    4. Index chunks in ChromaDB (non-fatal)
-    5. Update DB: text, type, metadata, status=ready
-```
+**Ingestion** (Celery worker, triggered on upload):
+1. Fetch blob from MinIO
+2. `UnstructuredExtractor` (hi_res on GPU or fast on CPU) produces
+   typed `Element`s (`Title`, `NarrativeText`, `ListItem`, `Table`, …);
+   persisted to `document_elements`
+3. Classify (rule-based → LLM fallback); sets `document_type` +
+   `metadata.skills`
+4. `chunk_elements()` — heading/table/list/narrative-aware chunking
+   with section-heading + page metadata
+5. Embed via `EmbeddingProvider` (default `bge-small-en-v1.5`, swappable)
+6. Upsert to Chroma (per-model collection) + Postgres `search_tsv`
+   auto-populated
+7. `status=READY`; on_ready hook fires (auto-candidate for resumes)
 
-Retry: 3x, 30s delay, `acks_late=True`. Indexing failure is non-fatal.
+Version-stamped at each step (`extraction_version`,
+`chunking_version`, `embedding_model_version`) to support targeted
+re-index. Celery: `acks_late=True`, 3 retries, 30s delay. Indexing
+failure is non-fatal.
+
+Re-extraction: `scripts/reextract_all.py`. Re-index (vectors only):
+`scripts/reindex_embeddings.py`.
 
 ---
 
-## 8. Search & RAG
+## 8. Search & RAG — retrieval
 
-### Hybrid search (`POST /search`)
+Four signals merged via Reciprocal Rank Fusion (k=60) in
+`SearchService.search`:
 
-Two retrieval paths merged by Reciprocal Rank Fusion (k=60):
-1. **Vector search** — ChromaDB cosine similarity on chunked text
-2. **SQL metadata filter** — document_type, skills JSONB, experience_years, date range
+1. **Vector** — Chroma cosine on chunk embeddings; filtered by
+   `owner_id` + `document_type` + distance threshold; orphan chunks
+   dropped.
+2. **Lexical FTS** — `ts_rank_cd` over `search_tsv` (weighted
+   filename-A / skills-B / body-C); uses `websearch_to_tsquery` with
+   acronym expansion and tech-token normalization on both sides.
+3. **SQL metadata** — only engaged when structured filters are
+   provided (`document_type`, `skills`, `experience_years`, dates).
+4. **Fuzzy** — `pg_trgm` `strict_word_similarity` fallback when FTS
+   returns zero (typo tolerance).
 
-Scores normalized to 0–1. Results hydrated with full document metadata.
+All paths respect `owner_id` (per-user scoping, admin bypass) and
+`status=READY`.
 
-### RAG (`POST /rag/query`)
-
-1. Retrieve top-N chunks from ChromaDB
-2. Build prompt: system instructions + context chunks with filenames
-3. Send to LLM (Claude/Ollama via `LlmProvider`)
-4. Return answer + source citations
+`/search` returns ranked docs with snippets + highlight `match_spans`.
+`/rag/query` stuffs top chunks into a Claude Sonnet prompt and
+returns `answer + citations`. Full diagrams and component map:
+`docs/rag-pipeline.md`.
 
 ### Candidate matching (`POST /jobs/{id}/match`)
 

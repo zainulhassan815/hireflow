@@ -1,7 +1,8 @@
 # Search hardening — strategy & edge case map
 
 Reference doc for raising document search to production-grade accuracy
-and correctness. Companion to `architecture.md` and `rag-architecture.md`.
+and correctness. Companion to `architecture.md`, `rag-architecture.md`,
+and `rag-pipeline.md` (current-state pipeline diagrams).
 
 The implementation is split across four tracker tickets (F86–F89). This
 doc explains the *why*, the gap, and what "good" looks like — the
