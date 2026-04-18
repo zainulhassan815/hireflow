@@ -290,6 +290,37 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - [x] Hybrid retrieval: Postgres FTS (`ts_rank_cd`) folded into RRF — eval P@5 0.175→0.238 (+36%), `edge` bucket 0.0→0.4
   - Embedding versioning: track which model generated each chunk's embedding, re-index on model change
 
+- [ ] **F86 · Search correctness (P0)** — see `docs/search-hardening.md` §3
+  - **Bug**: `routes/search.py:25-43` accepts `current_user` but never forwards it; every user sees every doc
+  - Forward `owner_id` into vector `where` filter, FTS predicate, and SQL metadata path
+  - Tenancy decision: per-user scoping vs shared HR pool (admin bypasses either way) — flag in plan
+  - Filter `status = READY` in the vector path (FTS already does)
+  - Eval: add cases verifying other-user docs and non-READY docs are excluded
+
+- [ ] **F87 · Multi-field weighted FTS (P1)** — see `docs/search-hardening.md` §4
+  - Replace `extracted_text_tsv` with weighted `search_tsv` generated column:
+    - Weight A (highest): `filename`
+    - Weight B: `document_type`, `metadata.skills`, `metadata.summary`
+    - Weight C (lowest): `extracted_text`
+  - `ts_rank_cd` automatically respects A>B>C; no `SearchService` changes
+  - Single Alembic migration replacing the F85 column + GIN index
+  - Eval: add filename-only and metadata-only query cases; expect P@5 lift
+
+- [ ] **F88 · Query syntax & understanding (P1 + P2)** — see `docs/search-hardening.md` §3
+  - Switch `plainto_tsquery` → `websearch_to_tsquery` (phrase/OR/NOT support)
+  - Empty / whitespace / stopword-only query short-circuit
+  - Query length cap (~256 tokens) to bound tsquery cost
+  - Acronym / synonym map at query time (~30 HR-domain entries to start: JS↔JavaScript, K8s↔Kubernetes, ML↔machine learning, …)
+  - Typo tolerance: `pg_trgm` similarity fallback when `ts_rank_cd` returns empty
+  - Special-token preservation (`C++`, `.NET`, `Node.js`, `C#`) on both index and query side; share helper with F92.1 highlight tokenizer
+
+- [ ] **F89 · Search polish (P2 + P3)** — see `docs/search-hardening.md` §3
+  - Recency tie-breaking: stable `created_at desc` when RRF scores tie
+  - Pagination: add `offset` to `SearchRequest`
+  - Mixed-language fallback: try `simple` analyzer when `english` produces empty tsvector
+  - Skill normalization (coordinate with F83): canonical form for `python`/`Python`/`py3`
+  - Experience parsing: prose → numeric range (`5+ years`, `senior`)
+
 ---
 
 ## Phase 9 — UI/UX Polish
