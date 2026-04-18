@@ -17,12 +17,15 @@ setup: ## First-time setup (install, env, services, migrate, seed)
 		echo "Generated ENCRYPTION_KEYS in backend/.env")
 	@test -f frontend/.env || (cp frontend/.env.example frontend/.env && echo "Created frontend/.env")
 	docker compose up -d postgres redis minio chromadb
-	@docker compose up minio-setup 2>/dev/null || true
+	@docker compose --profile setup run --rm minio-setup 2>/dev/null || true
 	@echo "Waiting for services..." && sleep 3
 	cd backend && uv run alembic upgrade head
 	cd backend && ADMIN_EMAIL=admin@hireflow.io ADMIN_PASSWORD=admin123 uv run python scripts/create_admin.py
 	@echo ""
-	@echo "Ready. Open four terminals and run:"
+	@echo "Ready. Recommended:"
+	@echo "  make tilt       # one command for infra + api + workers + web (UI :10350)"
+	@echo ""
+	@echo "Or run each in its own terminal:"
 	@echo "  make api        # FastAPI    :8080"
 	@echo "  make worker     # Celery worker"
 	@echo "  make beat       # Celery beat (periodic tasks)"
@@ -44,6 +47,13 @@ beat: services ## Run Celery beat scheduler (foreground; one terminal)
 
 web: ## Run Vite dev server on :5173 (foreground; one terminal)
 	cd frontend && npm run dev
+
+tilt: ## Start full dev stack via Tilt (infra + api + workers + web)
+	@command -v tilt >/dev/null || { echo "tilt not installed. Install: https://docs.tilt.dev/install.html"; exit 1; }
+	tilt up
+
+tilt-down: ## Stop the Tilt dev stack
+	tilt down
 
 lint: ## Lint + format everything
 	cd backend && uv run ruff check --fix . && uv run ruff format .
@@ -86,4 +96,4 @@ clean: stop ## Stop services + remove caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	rm -rf backend/.ruff_cache frontend/dist
 
-.PHONY: help setup services api worker beat web lint migrate generate test eval stop prod-up prod-down prod-logs clean
+.PHONY: help setup services api worker beat web tilt tilt-down lint migrate generate test eval stop prod-up prod-down prod-logs clean
