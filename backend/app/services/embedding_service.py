@@ -46,6 +46,13 @@ class EmbeddingService:
         metadatas = self._build_metadatas(doc, chunks)
         self._store.upsert(str(doc.id), texts, metadatas)
 
+        # Stamp the model we used so a future targeted re-index can
+        # identify docs that need re-embedding (e.g. after switching
+        # `embedding_model` via F85.a).
+        model_name = getattr(self._store, "_embedder", None)
+        if model_name is not None:
+            doc.embedding_model_version = getattr(model_name, "model_name", None)
+
         logger.info(
             "indexed document %s (%d chunks, chunking_version=%s)",
             doc.id,
