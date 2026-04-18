@@ -52,7 +52,7 @@ def _reciprocal_rank(ranked_slugs: list[str], expected: set[str]) -> float:
 
 
 async def _run_query(
-    service: SearchService, case: EvalCase, slug_to_id: dict[str, UUID]
+    service: SearchService, actor, case: EvalCase, slug_to_id: dict[str, UUID]
 ) -> list[str]:
     """Run one query; return the list of result slugs in rank order."""
     filters: dict = {"limit": 10}
@@ -64,7 +64,7 @@ async def _run_query(
         elif key in {"skills", "min_experience_years", "date_from", "date_to"}:
             filters[key] = value
 
-    results, _ = await service.search(query=case.query, **filters)
+    results, _ = await service.search(actor=actor, query=case.query, **filters)
 
     id_to_slug = {v: k for k, v in slug_to_id.items()}
     return [
@@ -72,7 +72,7 @@ async def _run_query(
     ]
 
 
-async def test_search_quality_report(slug_to_document_id):
+async def test_search_quality_report(slug_to_document_id, eval_owner):
     """Run every eval case; print report; fail on hard violations."""
     from app.adapters.chroma_store import ChromaVectorStore
     from app.core.config import settings
@@ -88,7 +88,7 @@ async def test_search_quality_report(slug_to_document_id):
         service = SearchService(DocumentRepository(session), store)
 
         for case in EVAL_QUERIES:
-            ranked = await _run_query(service, case, slug_to_document_id)
+            ranked = await _run_query(service, eval_owner, case, slug_to_document_id)
 
             p5 = _precision_at_k(ranked, case.expected_docs, 5)
             r5 = _recall_at_k(ranked, case.expected_docs, 5)

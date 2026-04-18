@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 
 from app.adapters.protocols import VectorHit
 from app.core.config import settings
-from app.models import Document, DocumentStatus, DocumentType
+from app.models import Document, DocumentStatus, DocumentType, User, UserRole
 from app.services.search_service import SearchService, _confidence_band
 
 # ---------------------------------------------------------------------------
@@ -28,11 +28,13 @@ class _FakeVectorStore:
     def __init__(self, hits: list[VectorHit]) -> None:
         self._hits = hits
         self.last_query: str | None = None
+        self.last_where: dict[str, Any] | None = None
 
     def query(
         self, query_text: str, n_results: int = 10, where: dict[str, Any] | None = None
     ) -> list[VectorHit]:
         self.last_query = query_text
+        self.last_where = where
         return self._hits[:n_results]
 
     def upsert(self, *_: Any, **__: Any) -> None: ...
@@ -76,6 +78,14 @@ def _mock_repo(
     return repo
 
 
+def _admin() -> User:
+    return User(id=uuid4(), email="admin@test", role=UserRole.ADMIN)
+
+
+def _hr(user_id: UUID | None = None) -> User:
+    return User(id=user_id or uuid4(), email="hr@test", role=UserRole.HR)
+
+
 # ---------------------------------------------------------------------------
 # Threshold filter
 # ---------------------------------------------------------------------------
@@ -97,7 +107,7 @@ async def test_hits_above_distance_threshold_are_dropped(monkeypatch) -> None:
     repo = _mock_repo([_document(kept), _document(dropped)])
     service = SearchService(repo, store)
 
-    results, _ = await service.search(query="anything")
+    results, _ = await service.search(actor=_admin(), query="anything")
 
     returned_ids = {r["document_id"] for r in results}
     assert kept in returned_ids
@@ -115,7 +125,7 @@ async def test_sql_path_is_skipped_when_no_structured_filter() -> None:
     repo = _mock_repo([])
     service = SearchService(repo, store)
 
-    await service.search(query="anything at all")
+    await service.search(actor=_admin(), query="anything at all")
 
     repo.search_by_metadata.assert_not_called()
 
@@ -125,7 +135,7 @@ async def test_sql_path_runs_when_skills_filter_provided() -> None:
     repo = _mock_repo([])
     service = SearchService(repo, store)
 
-    await service.search(query="python dev", skills=["python"])
+    await service.search(actor=_admin(), query="python dev", skills=["python"])
 
     repo.search_by_metadata.assert_awaited_once()
 
@@ -135,7 +145,9 @@ async def test_sql_path_runs_when_document_type_filter_provided() -> None:
     repo = _mock_repo([])
     service = SearchService(repo, store)
 
-    await service.search(query="q3 report", document_type=DocumentType.REPORT)
+    await service.search(
+        actor=_admin(), query="q3 report", document_type=DocumentType.REPORT
+    )
 
     repo.search_by_metadata.assert_awaited_once()
 
@@ -163,7 +175,7 @@ async def test_result_includes_confidence_but_not_raw_score() -> None:
     repo = _mock_repo([_document(doc_id)])
     service = SearchService(repo, store)
 
-    results, _ = await service.search(query="anything")
+    results, _ = await service.search(actor=_admin(), query="anything")
 
     assert len(results) == 1
     assert "confidence" in results[0]
@@ -193,7 +205,7 @@ async def test_highlights_are_deduped_and_capped(monkeypatch) -> None:
     repo = _mock_repo([_document(doc_id)])
     service = SearchService(repo, store)
 
-    results, _ = await service.search(query="anything")
+    results, _ = await service.search(actor=_admin(), query="anything")
 
     highlights = results[0]["highlights"]
     assert len(highlights) == 3  # capped
@@ -215,7 +227,7 @@ async def test_lexical_only_doc_surfaces_when_vector_returns_nothing() -> None:
     )
     service = SearchService(repo, store)
 
-    results, _ = await service.search(query="python")
+    results, _ = await service.search(actor=_admin(), query="python")
 
     assert len(results) == 1
     assert results[0]["document_id"] == lex_id
@@ -239,7 +251,7 @@ async def test_hybrid_doc_outranks_single_signal_doc() -> None:
     )
     service = SearchService(repo, store)
 
-    results, _ = await service.search(query="anything")
+    results, _ = await service.search(actor=_admin(), query="anything")
 
     assert [r["document_id"] for r in results][:2] == [both, vector_only]
 
@@ -249,9 +261,87 @@ async def test_lexical_search_called_with_user_query() -> None:
     repo = _mock_repo([])
     service = SearchService(repo, store)
 
-    await service.search(query="vendor services agreement")
+    await service.search(actor=_admin(), query="vendor services agreement")
 
     repo.full_text_search.assert_awaited_once()
     args, kwargs = repo.full_text_search.call_args
     # Query is the first positional arg.
     assert args[0] == "vendor services agreement"
+
+
+# ---------------------------------------------------------------------------
+# F86 ownership scoping
+# ---------------------------------------------------------------------------
+
+
+async def test_admin_search_passes_no_owner_filter() -> None:
+    """Admins must see every document — no owner_id propagated."""
+    store = _FakeVectorStore([])
+    repo = _mock_repo([])
+    service = SearchService(repo, store)
+
+    await service.search(actor=_admin(), query="anything")
+
+    # FTS path must not get an owner filter for admins.
+    _, kwargs = repo.full_text_search.call_args
+    assert kwargs.get("owner_id") is None
+
+
+async def test_hr_search_propagates_owner_filter_to_fts() -> None:
+    """Non-admins get scoped to their own owner_id in every retrieval path."""
+    actor = _hr()
+    store = _FakeVectorStore([])
+    repo = _mock_repo([])
+    service = SearchService(repo, store)
+
+    await service.search(actor=actor, query="anything")
+
+    _, kwargs = repo.full_text_search.call_args
+    assert kwargs["owner_id"] == actor.id
+
+
+async def test_hr_search_propagates_owner_filter_to_metadata_path() -> None:
+    """Same scoping must reach search_by_metadata when filters are present."""
+    actor = _hr()
+    store = _FakeVectorStore([])
+    repo = _mock_repo([])
+    service = SearchService(repo, store)
+
+    await service.search(actor=actor, query="python", skills=["python"])
+
+    _, kwargs = repo.search_by_metadata.call_args
+    assert kwargs["owner_id"] == actor.id
+
+
+async def test_hr_search_propagates_owner_filter_to_vector_where() -> None:
+    """The Chroma `where` clause must include owner_id for non-admin actors."""
+    actor = _hr()
+    store = _FakeVectorStore([])
+    repo = _mock_repo([])
+    service = SearchService(repo, store)
+
+    await service.search(actor=actor, query="anything")
+
+    # Single-condition where collapses to a flat dict; with owner_id only
+    # we expect exactly that one key.
+    where = store.last_where
+    assert where == {"owner_id": str(actor.id)}
+
+
+async def test_hr_search_combines_owner_and_document_type_in_vector_where() -> None:
+    """Multi-condition where uses Chroma's $and operator."""
+    actor = _hr()
+    store = _FakeVectorStore([])
+    repo = _mock_repo([])
+    service = SearchService(repo, store)
+
+    await service.search(
+        actor=actor, query="anything", document_type=DocumentType.RESUME
+    )
+
+    assert store.last_where == {
+        "$and": [
+            {"document_type": DocumentType.RESUME.value},
+            {"owner_id": str(actor.id)},
+        ]
+    }

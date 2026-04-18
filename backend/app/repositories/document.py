@@ -80,9 +80,17 @@ class DocumentRepository:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         limit: int = 50,
+        owner_id: UUID | None = None,
     ) -> list[Document]:
-        """Filter documents by structured metadata fields."""
+        """Filter documents by structured metadata fields.
+
+        ``owner_id`` scopes results to a single user; pass ``None`` for an
+        unscoped query (admin-level access). Required by F86 search-scoping.
+        """
         stmt = select(Document).where(Document.status == DocumentStatus.READY)
+
+        if owner_id is not None:
+            stmt = stmt.where(Document.owner_id == owner_id)
 
         if document_type is not None:
             stmt = stmt.where(Document.document_type == document_type)
@@ -125,6 +133,7 @@ class DocumentRepository:
         query: str,
         *,
         limit: int = 30,
+        owner_id: UUID | None = None,
     ) -> list[tuple[Document, float]]:
         """Lexical retrieval via Postgres FTS, ranked by ts_rank_cd.
 
@@ -134,6 +143,10 @@ class DocumentRepository:
         handled consistently on both sides. Returns ``(doc, score)`` pairs
         ordered by descending rank. Documents without indexable text or
         with no term overlap are excluded.
+
+        ``owner_id`` scopes results to a single user; pass ``None`` for
+        an unscoped query (admin-level access). F86 added this so search
+        respects ownership the same way the documents endpoints do.
         """
         query = query.strip()
         if not query:
@@ -146,9 +159,12 @@ class DocumentRepository:
             select(Document, rank)
             .where(Document.status == DocumentStatus.READY)
             .where(Document.extracted_text_tsv.op("@@")(ts_query))
-            .order_by(rank.desc())
-            .limit(limit)
         )
+
+        if owner_id is not None:
+            stmt = stmt.where(Document.owner_id == owner_id)
+
+        stmt = stmt.order_by(rank.desc()).limit(limit)
 
         result = await self._db.execute(stmt)
         return [(row[0], float(row[1])) for row in result.all()]

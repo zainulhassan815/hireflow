@@ -28,6 +28,7 @@ async def search_documents(
     search: SearchServiceDep,
 ) -> SearchResponse:
     results, query_time_ms = await search.search(
+        actor=current_user,
         query=request.query,
         document_type=request.document_type,
         skills=request.skills,

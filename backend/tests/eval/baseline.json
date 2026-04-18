@@ -13,13 +13,13 @@
         "resume_python_senior"
       ],
       "returned": [
-        "letter_cover_jane",
         "resume_python_senior",
+        "letter_cover_jane",
         "resume_devops"
       ],
       "p@5": 0.2,
       "r@5": 0.5,
-      "mrr": 0.5,
+      "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": "Python + cloud; DS is also plausible"
     },
@@ -75,12 +75,12 @@
         "resume_python_senior"
       ],
       "returned": [
-        "resume_python_senior",
-        "resume_javascript_junior"
+        "resume_javascript_junior",
+        "resume_python_senior"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
-      "mrr": 1.0,
+      "mrr": 0.5,
       "must_not_contain_violation": [],
       "notes": "seniority implied"
     },

@@ -27,7 +27,7 @@ from uuid import UUID
 
 from app.adapters.protocols import VectorHit, VectorStore
 from app.core.config import settings
-from app.models import Document, DocumentType
+from app.models import Document, DocumentType, User, UserRole
 from app.repositories.document import DocumentRepository
 from app.services.highlight import extract_query_terms, find_match_spans
 
@@ -55,6 +55,7 @@ class SearchService:
     async def search(
         self,
         *,
+        actor: User,
         query: str,
         document_type: DocumentType | None = None,
         skills: list[str] | None = None,
@@ -63,10 +64,22 @@ class SearchService:
         date_to: datetime | None = None,
         limit: int = 10,
     ) -> tuple[list[dict[str, Any]], int]:
-        """Run hybrid search. Returns (results, query_time_ms)."""
+        """Run hybrid search scoped to ``actor``. Returns (results, query_time_ms).
+
+        Per-user scoping with admin bypass — same rule the documents
+        routes use (`DocumentService._ensure_access`). HR users only see
+        documents they own; admins see all. Enforced in every retrieval
+        path (vector ``where`` filter, FTS query, SQL metadata path) so
+        access control happens during retrieval, not as a post-filter
+        that could leak metadata.
+        """
         start = time.monotonic()
 
-        vector_hits = self._vector_search(query, document_type, limit * 3)
+        owner_filter = None if actor.role == UserRole.ADMIN else actor.id
+
+        vector_hits = self._vector_search(
+            query, document_type, limit * 3, owner_id=owner_filter
+        )
 
         has_structured_filter = any(
             [
@@ -86,11 +99,14 @@ class SearchService:
                 date_from=date_from,
                 date_to=date_to,
                 limit=limit * 3,
+                owner_id=owner_filter,
             )
         else:
             sql_docs = []
 
-        lexical_hits = await self._documents.full_text_search(query, limit=limit * 3)
+        lexical_hits = await self._documents.full_text_search(
+            query, limit=limit * 3, owner_id=owner_filter
+        )
 
         merged = self._rrf_merge(vector_hits, sql_docs, lexical_hits, limit)
 
@@ -129,13 +145,27 @@ class SearchService:
         query: str,
         document_type: DocumentType | None,
         n_results: int,
+        *,
+        owner_id: UUID | None = None,
     ) -> list[VectorHit]:
         if self._vector_store is None:
             return []
 
-        where: dict[str, Any] | None = None
+        clauses: list[dict[str, Any]] = []
         if document_type is not None:
-            where = {"document_type": document_type.value}
+            clauses.append({"document_type": document_type.value})
+        if owner_id is not None:
+            clauses.append({"owner_id": str(owner_id)})
+
+        # Chroma `where` accepts a single condition as a flat dict but
+        # requires an explicit `$and` for multi-condition composition.
+        where: dict[str, Any] | None
+        if not clauses:
+            where = None
+        elif len(clauses) == 1:
+            where = clauses[0]
+        else:
+            where = {"$and": clauses}
 
         hits = self._vector_store.query(
             query_text=query, n_results=n_results, where=where

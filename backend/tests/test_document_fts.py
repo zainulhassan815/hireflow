@@ -166,3 +166,47 @@ async def test_full_text_search_handles_multiword_query(owner_id) -> None:
     hit_ids = [doc.id for doc, _ in hits]
     assert both.id in hit_ids
     assert only_one.id not in hit_ids
+
+
+# ---------------------------------------------------------------------------
+# F86 ownership scoping
+# ---------------------------------------------------------------------------
+
+
+async def test_full_text_search_scopes_to_owner(owner_id) -> None:
+    """A user must not see documents owned by someone else."""
+    from app.adapters.argon2_hasher import Argon2Hasher
+    from app.models import UserRole
+
+    # Two users; each owns one Python resume.
+    async with SessionLocal() as session:
+        other = await UserRepository(session).create(
+            email=f"other-{uuid4()}@test.hireflow.io",
+            hashed_password=Argon2Hasher().hash("x"),
+            full_name="Other Owner",
+            role=UserRole.HR,
+        )
+        other_id = other.id
+
+    mine = await _seed_doc(
+        owner_id=owner_id,
+        filename="mine.pdf",
+        text="Python engineer resume — MINE.",
+    )
+    theirs = await _seed_doc(
+        owner_id=other_id,
+        filename="theirs.pdf",
+        text="Python engineer resume — THEIRS.",
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+
+        mine_only = await repo.full_text_search("python", limit=10, owner_id=owner_id)
+        their_only = await repo.full_text_search("python", limit=10, owner_id=other_id)
+        unscoped = await repo.full_text_search("python", limit=10)
+
+    assert [d.id for d, _ in mine_only] == [mine.id]
+    assert [d.id for d, _ in their_only] == [theirs.id]
+    # Unscoped (admin) sees both.
+    assert {d.id for d, _ in unscoped} == {mine.id, theirs.id}

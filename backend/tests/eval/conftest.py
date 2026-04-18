@@ -66,8 +66,14 @@ def _assert_test_database(database_url: str) -> None:
 
 
 @pytest.fixture(scope="session")
-async def eval_owner_id() -> UUID:
-    """A deterministic owner user seeded for every eval run."""
+async def eval_owner():
+    """A deterministic owner user seeded for every eval run.
+
+    Returns the full User object so tests can pass it as the search
+    ``actor`` (F86 ownership scoping). The companion ``eval_owner_id``
+    fixture exposes just the UUID for seeding code that doesn't need
+    the full row.
+    """
     from sqlalchemy import delete
 
     from app.adapters.argon2_hasher import Argon2Hasher
@@ -124,7 +130,13 @@ async def eval_owner_id() -> UUID:
             full_name="Eval Owner",
             role=UserRole.HR,
         )
-        return user.id
+        return user
+
+
+@pytest.fixture(scope="session")
+async def eval_owner_id(eval_owner) -> UUID:
+    """UUID convenience for seeding code that doesn't need the full User."""
+    return eval_owner.id
 
 
 @pytest.fixture(scope="session")
