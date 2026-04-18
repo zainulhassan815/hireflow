@@ -356,6 +356,80 @@ async def test_filename_only_match_when_body_has_no_overlap(owner_id) -> None:
     assert doc.id in [d.id for d, _ in hits]
 
 
+# ---------------------------------------------------------------------------
+# F88.c trigram typo tolerance
+# ---------------------------------------------------------------------------
+
+
+async def test_fuzzy_search_finds_one_letter_typo(owner_id) -> None:
+    """Common typo: missing or transposed letter in a filename token."""
+    target = await _seed_doc(
+        owner_id=owner_id,
+        filename="python_resume.pdf",
+        text="Body content unrelated to the query.",
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        # Typo: pyhton (transposition)
+        hits = await repo.fuzzy_search("pyhton", limit=10)
+
+    assert target.id in [d.id for d, _ in hits]
+
+
+async def test_fuzzy_search_rejects_unrelated_query(owner_id) -> None:
+    """Threshold must reject completely unrelated queries."""
+    await _seed_doc(
+        owner_id=owner_id,
+        filename="python_resume.pdf",
+        text="Anything",
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        hits = await repo.fuzzy_search("quantum chromodynamics", limit=10)
+
+    assert hits == []
+
+
+async def test_fuzzy_search_scopes_to_owner(owner_id) -> None:
+    from app.adapters.argon2_hasher import Argon2Hasher
+    from app.models import UserRole
+
+    async with SessionLocal() as session:
+        other = await UserRepository(session).create(
+            email=f"trgm-other-{uuid4()}@test.hireflow.io",
+            hashed_password=Argon2Hasher().hash("x"),
+            full_name="Other Owner",
+            role=UserRole.HR,
+        )
+        other_id = other.id
+
+    mine = await _seed_doc(
+        owner_id=owner_id,
+        filename="python_mine.pdf",
+        text="x",
+    )
+    await _seed_doc(
+        owner_id=other_id,
+        filename="python_theirs.pdf",
+        text="x",
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        mine_only = await repo.fuzzy_search("pyhton", limit=10, owner_id=owner_id)
+
+    assert [d.id for d, _ in mine_only] == [mine.id]
+
+
+async def test_fuzzy_search_empty_query_returns_empty(owner_id) -> None:
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        assert await repo.fuzzy_search("", limit=10) == []
+        assert await repo.fuzzy_search("   ", limit=10) == []
+
+
 async def test_full_text_search_scopes_to_owner(owner_id) -> None:
     """A user must not see documents owned by someone else."""
     from app.adapters.argon2_hasher import Argon2Hasher

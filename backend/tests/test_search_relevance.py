@@ -70,10 +70,12 @@ def _mock_repo(
     docs: list[Document],
     *,
     lexical_hits: list[tuple[Document, float]] | None = None,
+    fuzzy_hits: list[tuple[Document, float]] | None = None,
 ) -> AsyncMock:
     repo = AsyncMock()
     repo.search_by_metadata = AsyncMock(return_value=[])
     repo.full_text_search = AsyncMock(return_value=lexical_hits or [])
+    repo.fuzzy_search = AsyncMock(return_value=fuzzy_hits or [])
     repo.get_many = AsyncMock(return_value={d.id: d for d in docs})
     return repo
 
@@ -381,6 +383,47 @@ async def test_whitespace_only_query_short_circuits() -> None:
     assert results == []
     assert store.last_query is None
     repo.full_text_search.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# F88.c fuzzy fallback wiring
+# ---------------------------------------------------------------------------
+
+
+async def test_fuzzy_fallback_runs_only_when_fts_returns_empty() -> None:
+    fuzzy_doc_id = uuid4()
+    fuzzy_doc = _document(fuzzy_doc_id, filename="python_resume.pdf")
+
+    store = _FakeVectorStore([])
+    repo = _mock_repo(
+        [fuzzy_doc],
+        lexical_hits=[],  # FTS empty — fallback should fire
+        fuzzy_hits=[(fuzzy_doc, 0.5)],
+    )
+    service = SearchService(repo, store)
+
+    results, _ = await service.search(actor=_admin(), query="pyhton")
+
+    repo.fuzzy_search.assert_awaited_once()
+    assert [r["document_id"] for r in results] == [fuzzy_doc_id]
+
+
+async def test_fuzzy_fallback_skipped_when_fts_has_results() -> None:
+    """Good queries should never pay the trigram cost."""
+    doc_id = uuid4()
+    doc = _document(doc_id)
+
+    store = _FakeVectorStore([])
+    repo = _mock_repo(
+        [doc],
+        lexical_hits=[(doc, 0.4)],  # FTS already returned something
+        fuzzy_hits=[(doc, 0.99)],  # would be picked up if called
+    )
+    service = SearchService(repo, store)
+
+    await service.search(actor=_admin(), query="python")
+
+    repo.fuzzy_search.assert_not_called()
 
 
 async def test_non_ready_doc_with_indexed_chunks_is_excluded() -> None:

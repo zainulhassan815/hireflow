@@ -14,6 +14,11 @@ from app.models import Document, DocumentStatus, DocumentType
 # job descriptions from blowing tsquery cost. F88.a.
 _MAX_QUERY_CHARS = 1024
 
+# pg_trgm similarity cutoff for the fuzzy-search fallback (F88.c).
+# 0.25 catches single-letter typos in short filenames while
+# rejecting unrelated terms.
+_TRGM_THRESHOLD = 0.25
+
 
 class DocumentRepository:
     def __init__(self, db: AsyncSession) -> None:
@@ -185,6 +190,50 @@ class DocumentRepository:
             stmt = stmt.where(Document.owner_id == owner_id)
 
         stmt = stmt.order_by(rank.desc()).limit(limit)
+
+        result = await self._db.execute(stmt)
+        return [(row[0], float(row[1])) for row in result.all()]
+
+    async def fuzzy_search(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+        owner_id: UUID | None = None,
+        threshold: float = _TRGM_THRESHOLD,
+    ) -> list[tuple[Document, float]]:
+        """Trigram-similarity search over filename (F88.c).
+
+        Used by the search service as a fallback when ``full_text_search``
+        returns zero hits — a small concession to typo tolerance without
+        muddying ranking on good queries. Backed by the
+        ``documents_filename_trgm_idx`` GIN index.
+
+        Uses ``word_similarity(query, filename)`` rather than plain
+        ``similarity()`` so a short query term doesn't get drowned by a
+        long filename — a typo of ``pyhton`` should match
+        ``python_resume.pdf`` based on the word ``python``, not the
+        whole filename string.
+
+        Returns ``(doc, similarity)`` pairs ordered by descending
+        similarity. Pass ``owner_id`` for per-user scoping (F86).
+        """
+        query = query.strip()
+        if not query:
+            return []
+
+        sim = func.word_similarity(query, Document.filename).label("sim")
+
+        stmt = (
+            select(Document, sim)
+            .where(Document.status == DocumentStatus.READY)
+            .where(sim >= threshold)
+        )
+
+        if owner_id is not None:
+            stmt = stmt.where(Document.owner_id == owner_id)
+
+        stmt = stmt.order_by(sim.desc()).limit(limit)
 
         result = await self._db.execute(stmt)
         return [(row[0], float(row[1])) for row in result.all()]

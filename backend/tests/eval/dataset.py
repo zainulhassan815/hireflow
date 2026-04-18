@@ -497,4 +497,17 @@ EVAL_QUERIES: list[EvalCase] = [
         bucket="acronym",
         notes="ml expands to 'machine learning'",
     ),
+    # ---- F88.c typo tolerance (trigram fallback) ----
+    EvalCase(
+        query="brightforg",
+        expected_docs={"contract_vendor_q3"},
+        bucket="typo",
+        notes="missing trailing 'e' on filename word — fuzzy fallback should catch",
+    ),
+    EvalCase(
+        query="quartely sales",
+        expected_docs={"report_sales_q3"},
+        bucket="typo",
+        notes="quartely (typo) — should still find the q3 sales report via filename",
+    ),
 ]

@@ -118,6 +118,16 @@ class SearchService:
             lexical_query, limit=limit * 3, owner_id=owner_filter
         )
 
+        # F88.c: typo tolerance via trigram similarity on filename.
+        # Fallback only — runs when FTS returns zero. Trigram is fuzzier
+        # than FTS, so using it always would muddy good queries; using
+        # it only on otherwise-empty results lets the user still find
+        # docs with mistyped queries.
+        if not lexical_hits:
+            lexical_hits = await self._documents.fuzzy_search(
+                query, limit=limit * 3, owner_id=owner_filter
+            )
+
         merged = self._rrf_merge(vector_hits, sql_docs, lexical_hits, limit)
 
         doc_ids = [m.document_id for m in merged]

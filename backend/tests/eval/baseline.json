@@ -1,8 +1,8 @@
 {
   "overall": {
-    "p@5": 0.2476,
-    "r@5": 0.9762,
-    "mrr": 0.8571
+    "p@5": 0.2435,
+    "r@5": 0.9783,
+    "mrr": 0.8696
   },
   "cases": [
     {
@@ -334,6 +334,36 @@
       "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": "ml expands to 'machine learning'"
+    },
+    {
+      "bucket": "typo",
+      "query": "brightforg",
+      "expected": [
+        "contract_vendor_q3"
+      ],
+      "returned": [
+        "contract_vendor_q3"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": "missing trailing 'e' on filename word \u2014 fuzzy fallback should catch"
+    },
+    {
+      "bucket": "typo",
+      "query": "quartely sales",
+      "expected": [
+        "report_sales_q3"
+      ],
+      "returned": [
+        "report_sales_q3"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": "quartely (typo) \u2014 should still find the q3 sales report via filename"
     }
   ]
 }

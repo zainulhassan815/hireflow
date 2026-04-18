@@ -305,7 +305,7 @@ Improve accuracy, relevance, and usefulness of core AI features.
 - [~] **F88 · Query syntax & understanding (P1 + P2)** — see `docs/search-hardening.md` §3
   - [x] **F88.a** Switch `plainto_tsquery` → `websearch_to_tsquery` (phrase/OR/NOT), empty/whitespace short-circuit at service edge, query length cap (1024 chars) — same eval baseline (additive syntax)
   - [x] **F88.b** Canonical acronym expansion (one-directional: `k8s → kubernetes`, `ml → machine learning`, `js → javascript`, ~25 entries; ambiguous like `cv`/`tf` omitted). Applied to FTS only; vector handles equivalence semantically.
-  - [ ] **F88.c** Typo tolerance: `pg_trgm` similarity fallback when `ts_rank_cd` returns empty
+  - [x] **F88.c** Typo tolerance: `pg_trgm` `word_similarity` fallback over filename when FTS returns 0; threshold 0.25; live `pyhton`/`telemedicin`/`supabse` queries land target at rank 1
   - [ ] **F88.d** Special-token preservation (`C++`, `.NET`, `Node.js`, `C#`) on both index and query side; share helper with F92.1 highlight tokenizer
   - Known limitation: negation (`-term`) only constrains the FTS path; vector RRF can still surface negated docs. Cross-source semantics fix is its own slice if needed.
 
