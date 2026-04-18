@@ -345,3 +345,38 @@ async def test_hr_search_combines_owner_and_document_type_in_vector_where() -> N
             {"owner_id": str(actor.id)},
         ]
     }
+
+
+# ---------------------------------------------------------------------------
+# F86.b status filter on the vector path
+# ---------------------------------------------------------------------------
+
+
+async def test_non_ready_doc_with_indexed_chunks_is_excluded() -> None:
+    """A FAILED/PROCESSING doc whose chunks are still in Chroma must not surface.
+
+    Vector chunk metadata is set at index time and not refreshed on
+    status change, so the only safe place to enforce the status check is
+    after we hydrate the doc row.
+    """
+    ready_id = uuid4()
+    failed_id = uuid4()
+
+    ready = _document(ready_id)
+    failed = _document(failed_id)
+    failed.status = DocumentStatus.FAILED
+
+    store = _FakeVectorStore(
+        [
+            _vector_hit(doc_id=ready_id, distance=0.1),
+            _vector_hit(doc_id=failed_id, distance=0.15),
+        ]
+    )
+    repo = _mock_repo([ready, failed])
+    service = SearchService(repo, store)
+
+    results, _ = await service.search(actor=_admin(), query="anything")
+
+    returned_ids = {r["document_id"] for r in results}
+    assert ready_id in returned_ids
+    assert failed_id not in returned_ids

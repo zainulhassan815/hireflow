@@ -27,7 +27,7 @@ from uuid import UUID
 
 from app.adapters.protocols import VectorHit, VectorStore
 from app.core.config import settings
-from app.models import Document, DocumentType, User, UserRole
+from app.models import Document, DocumentStatus, DocumentType, User, UserRole
 from app.repositories.document import DocumentRepository
 from app.services.highlight import extract_query_terms, find_match_spans
 
@@ -124,6 +124,15 @@ class SearchService:
         for item in merged:
             doc = docs_map.get(item.document_id)
             if doc is None:
+                continue
+            # F86.b: vector chunks for a doc may exist in Chroma even when
+            # the doc has since been demoted to PROCESSING/FAILED — chunk
+            # metadata is set at index time and not refreshed on status
+            # change. The FTS and SQL paths filter status at the query
+            # level; we mirror that here so all three sources behave the
+            # same. Architectural fix (don't index non-READY chunks at
+            # all) is a follow-up on the extraction pipeline.
+            if doc.status != DocumentStatus.READY:
                 continue
             results.append(
                 {

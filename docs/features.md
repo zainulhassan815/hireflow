@@ -290,12 +290,11 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - [x] Hybrid retrieval: Postgres FTS (`ts_rank_cd`) folded into RRF — eval P@5 0.175→0.238 (+36%), `edge` bucket 0.0→0.4
   - Embedding versioning: track which model generated each chunk's embedding, re-index on model change
 
-- [ ] **F86 · Search correctness (P0)** — see `docs/search-hardening.md` §3
-  - **Bug**: `routes/search.py:25-43` accepts `current_user` but never forwards it; every user sees every doc
-  - Forward `owner_id` into vector `where` filter, FTS predicate, and SQL metadata path
-  - Tenancy decision: per-user scoping vs shared HR pool (admin bypasses either way) — flag in plan
-  - Filter `status = READY` in the vector path (FTS already does)
-  - Eval: add cases verifying other-user docs and non-READY docs are excluded
+- [x] **F86 · Search correctness (P0)** — see `docs/search-hardening.md` §3
+  - [x] Per-user ownership scoping (admin bypass) wired into vector `where`, FTS, and SQL metadata paths
+  - [x] Status filter on vector path: non-READY docs with stale chunks no longer surface
+  - Tenancy decision: per-user with admin bypass, matches `DocumentService._ensure_access`
+  - Eval baseline unchanged (P@5 = 0.238); 7 new tests covering scoping + status
 
 - [ ] **F87 · Multi-field weighted FTS (P1)** — see `docs/search-hardening.md` §4
   - Replace `extracted_text_tsv` with weighted `search_tsv` generated column:
