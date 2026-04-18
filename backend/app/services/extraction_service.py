@@ -12,14 +12,20 @@ import logging
 from collections.abc import Callable
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.adapters.protocols import DocumentClassifier, TextExtractor
-from app.models import Document, DocumentStatus, DocumentType
+from app.adapters.protocols import DocumentClassifier, Element, TextExtractor
+from app.models import Document, DocumentElement, DocumentStatus, DocumentType
+from app.services.chunking import CHUNKING_VERSION
 from app.services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
+
+
+# Bumped when the extractor or its output shape changes in a way that
+# invalidates stored element rows. Stamped on each doc at process time.
+EXTRACTION_VERSION = "v2-unstructured"
 
 
 class ExtractionService:
@@ -82,8 +88,32 @@ class ExtractionService:
         data = self._storage_get(doc.storage_key)
         result = self._extractor.extract(data, doc.mime_type)
         doc.extracted_text = result.text
+        doc.extraction_version = EXTRACTION_VERSION
         if result.page_count is not None:
             doc.metadata_ = {**(doc.metadata_ or {}), "page_count": result.page_count}
+        self._persist_elements(doc, result.elements)
+
+    def _persist_elements(self, doc: Document, elements: list[Element]) -> None:
+        """Replace any prior elements with the fresh extraction output.
+
+        Delete-then-insert is simpler than a merge and, on re-extraction,
+        the element set can change wholesale. CASCADE on the FK handles
+        cleanup if the parent doc is ever deleted.
+        """
+        self._session.execute(
+            delete(DocumentElement).where(DocumentElement.document_id == doc.id)
+        )
+        for element in elements:
+            self._session.add(
+                DocumentElement(
+                    document_id=doc.id,
+                    kind=element.kind,
+                    text=element.text,
+                    page_number=element.page_number,
+                    order_index=element.order,
+                    metadata_=element.metadata or None,
+                )
+            )
 
     def _classify(self, doc: Document) -> None:
         text = doc.extracted_text
@@ -109,7 +139,21 @@ class ExtractionService:
         if self._embedding is None:
             return
         try:
-            self._embedding.index_document(doc)
+            # Pass the fresh element objects rather than reloading them
+            # from the session — we haven't committed yet and eager-
+            # loading would round-trip unnecessarily.
+            elements = [
+                Element(
+                    kind=row.kind,
+                    text=row.text,
+                    page_number=row.page_number,
+                    order=row.order_index,
+                    metadata=row.metadata_ or {},
+                )
+                for row in sorted(doc.elements, key=lambda r: r.order_index)
+            ]
+            self._embedding.index_document(doc, elements=elements)
+            doc.chunking_version = CHUNKING_VERSION
         except Exception:
             # Indexing failure is non-fatal — the document is still usable
             # without search. Log and continue so status reaches READY.

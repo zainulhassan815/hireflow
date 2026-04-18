@@ -12,6 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from app.models.document_element import DocumentElement
     from app.models.user import User
 
 
@@ -72,6 +73,15 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         "metadata", JSONB, nullable=True, default=None
     )
 
+    # F82.d pipeline versioning. Stamped on each doc at index time so
+    # targeted re-indexing can pick only docs whose version differs
+    # from the code's current constants.
+    extraction_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    chunking_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    embedding_model_version: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+
     # Read-only Postgres-generated weighted tsvector. Populated automatically
     # by the database on insert/update; never written from the ORM. Powers
     # lexical retrieval via ts_rank_cd in the search service.
@@ -89,3 +99,10 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     owner: Mapped[User] = relationship(lazy="selectin")
+
+    elements: Mapped[list[DocumentElement]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentElement.order_index",
+        lazy="selectin",
+    )

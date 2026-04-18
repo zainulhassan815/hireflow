@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     embedding_provider: str = "local"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
 
+    # Layout-aware extraction (F82.d) via ``unstructured.partition``.
+    # ``fast`` is rule-based (font/indent heuristics), zero GPU, ~1s/page.
+    # ``hi_res`` runs a layout detector model + optional table transformer;
+    # 5-30s cold start, ~100-300ms/page on GPU. Default ``hi_res`` since
+    # the dev box has a GPU.
+    extraction_strategy: str = "hi_res"
+    # Enable table transformer in hi_res; no-op in fast mode.
+    extraction_infer_tables: bool = True
+
     # JWT — required, no default. Generate with: openssl rand -hex 32
     jwt_secret_key: SecretStr = Field(min_length=32)
     jwt_algorithm: str = "HS256"

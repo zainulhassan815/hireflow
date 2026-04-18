@@ -69,22 +69,38 @@ async def reindex(dry_run: bool = False) -> None:
     indexing = EmbeddingService(store)
 
     async with SessionLocal() as session:
+        # Eagerly load elements via the relationship so we can index
+        # outside the session.
         result = await session.execute(
             select(Document).where(Document.status == DocumentStatus.READY)
         )
         docs = result.scalars().all()
+        # Materialise elements per doc (awaited inside the session).
+        doc_pairs: list[tuple[Document, list]] = []
+        for d in docs:
+            _ = list(d.elements)  # trigger lazy load
+            doc_pairs.append((d, d.elements))
 
-    logger.info("re-indexing %d READY documents", len(docs))
+    logger.info("re-indexing %d READY documents", len(doc_pairs))
 
-    for i, doc in enumerate(docs, 1):
+    for i, (doc, _elements) in enumerate(doc_pairs, 1):
         if not doc.extracted_text:
-            logger.info("[%d/%d] skip %s (no text)", i, len(docs), doc.filename)
+            logger.info("[%d/%d] skip %s (no text)", i, len(doc_pairs), doc.filename)
+            continue
+        if not doc.elements:
+            logger.warning(
+                "[%d/%d] %s has no persisted elements — re-upload or re-extract"
+                " to repopulate document_elements (F82.d)",
+                i,
+                len(doc_pairs),
+                doc.filename,
+            )
             continue
         if dry_run:
-            logger.info("[%d/%d] would re-index %s", i, len(docs), doc.filename)
+            logger.info("[%d/%d] would re-index %s", i, len(doc_pairs), doc.filename)
             continue
         indexing.index_document(doc)
-        logger.info("[%d/%d] re-indexed %s", i, len(docs), doc.filename)
+        logger.info("[%d/%d] re-indexed %s", i, len(doc_pairs), doc.filename)
 
     logger.info("done")
 

@@ -238,9 +238,32 @@ class VectorStore(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class Element:
+    """One typed region of a document from layout-aware extraction.
+
+    The ``kind`` comes from the extraction library's taxonomy
+    (unstructured's: Title, NarrativeText, ListItem, Table, Header,
+    Footer, Address, Image, PageBreak, ...). We keep it as a free-form
+    string rather than an enum so a different extractor can slot in
+    without a schema change — consumers interpret the string.
+
+    ``order`` preserves the reading order within the document so we can
+    reassemble text or re-chunk from the persisted elements without
+    another extraction pass.
+    """
+
+    kind: str
+    text: str
+    page_number: int | None
+    order: int
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
 class ExtractionResult:
     text: str
     page_count: int | None = None
+    elements: list[Element] = field(default_factory=list)
 
 
 @runtime_checkable

@@ -15,12 +15,78 @@ is running.
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator, Iterator
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
 
 from tests.eval.dataset import FIXTURE_DOCS, FixtureDoc
+
+if TYPE_CHECKING:
+    from app.adapters.protocols import Element
+
+
+_ALL_CAPS_HEADING = re.compile(r"^[A-Z][A-Z\s&/+\-]{2,}$")
+
+
+def _synthesize_elements(text: str) -> list[Element]:
+    """Turn a fixture's plain text into typed ``Element`` objects.
+
+    The fixtures are plain strings, not real PDFs — running
+    ``unstructured`` on them is slow and pointless. Simulate what a
+    layout-aware extractor would produce: split on paragraph breaks,
+    detect ALL-CAPS-only lines as Title elements, everything else as
+    NarrativeText. Gives the chunker realistic input while keeping the
+    eval fast and deterministic.
+    """
+    from app.adapters.protocols import Element
+
+    elements: list[Element] = []
+    order = 0
+    for block in re.split(r"\n{2,}", text):
+        block = block.strip()
+        if not block:
+            continue
+        lines = block.splitlines()
+        first = lines[0].strip()
+        if _ALL_CAPS_HEADING.match(first):
+            elements.append(
+                Element(
+                    kind="Title",
+                    text=first,
+                    page_number=1,
+                    order=order,
+                    metadata={},
+                )
+            )
+            order += 1
+            rest = "\n".join(lines[1:]).strip()
+            if rest:
+                elements.append(
+                    Element(
+                        kind="NarrativeText",
+                        text=rest,
+                        page_number=1,
+                        order=order,
+                        metadata={},
+                    )
+                )
+                order += 1
+        else:
+            elements.append(
+                Element(
+                    kind="NarrativeText",
+                    text=block,
+                    page_number=1,
+                    order=order,
+                    metadata={},
+                )
+            )
+            order += 1
+    return elements
+
 
 # ---------------------------------------------------------------------------
 # Override test-wide autouse fixtures
@@ -155,8 +221,12 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
     from app.adapters.embeddings.registry import get_embedding_provider
     from app.core.config import settings
     from app.core.db import SessionLocal
-    from app.models import Document, DocumentStatus, DocumentType
-    from app.services.chunking import chunk_text
+    from app.models import (
+        Document,
+        DocumentElement,
+        DocumentStatus,
+        DocumentType,
+    )
     from app.services.embedding_service import EmbeddingService
 
     _assert_test_database(settings.database_url)
@@ -191,22 +261,24 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
             session.add(doc)
             await session.flush()
 
-            # Override the chunk indexing to use the fixture's slug as
-            # the collection key — makes cleanup deterministic.
-            chunks = chunk_text(fixture.text)
-            metadatas = [
-                {
-                    "filename": fixture.filename,
-                    "mime_type": "application/pdf",
-                    "owner_id": str(eval_owner_id),
-                    "document_type": doc_type.value,
-                    "document_id": str(doc.id),
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                }
-                for i in range(len(chunks))
-            ]
-            store.upsert(str(doc.id), chunks, metadatas)
+            # Synthesize typed elements from the fixture plain text so
+            # the eval exercises the real F82.e element-aware chunker
+            # (we don't actually run unstructured here — that'd be slow
+            # and the fixtures are plain strings not PDFs).
+            synth_elements = _synthesize_elements(fixture.text)
+            for element in synth_elements:
+                session.add(
+                    DocumentElement(
+                        document_id=doc.id,
+                        kind=element.kind,
+                        text=element.text,
+                        page_number=element.page_number,
+                        order_index=element.order,
+                        metadata_=element.metadata or None,
+                    )
+                )
+            await session.flush()
+            embedder.index_document(doc, elements=synth_elements)
 
             pairs.append((fixture, doc.id))
 

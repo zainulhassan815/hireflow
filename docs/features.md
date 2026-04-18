@@ -263,11 +263,14 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - Answer confidence indicator: if context is thin, say so explicitly and suggest uploading more documents
   - Support follow-up context (conversation memory within a session)
 
-- [ ] **F82 · Chunking strategy improvements**
-  - Semantic chunking: split on topic boundaries, not character count
-  - Overlap tuning per document type (resumes need different chunking than reports)
-  - Metadata-enriched chunks: each chunk carries its section header (Skills, Experience, Education) for better retrieval
-  - Re-index existing documents when chunking strategy changes
+- [~] **F82 · Chunking strategy improvements** — mixed-doc corpus, not just resumes
+  - [ ] **F82.a** (skipped — went straight to F82.d layout-aware extraction instead)
+  - [ ] **F82.b** Whole-document chunk: one extra vector per doc with `chunk_kind="document"` holding a concatenated extract (first paragraph + headings + skills list). Helps broad "find me a [persona]" queries that need doc-level signal rather than any single chunk.
+  - [~] **F82.d** Layout-aware extraction via `unstructured.partition` (hi_res strategy, GPU-accelerated via local RTX 5050). Persists typed elements (`Title`, `NarrativeText`, `ListItem`, `Table`, …) to a new `document_elements` table + adds versioning columns to `documents` (`extraction_version`, `chunking_version`, `embedding_model_version`). In-progress.
+  - [~] **F82.e** Element-aware chunker consuming typed elements: heading→new chunk + `section_heading` metadata, tables→own chunk (markdown), lists→intact, narrative→packed. Replaces the character-recursive splitter. Ships with F82.d.
+  - [ ] **F82.c** (later, biggest published single-intervention lift: Anthropic contextual retrieval) Per-chunk Haiku context-generation at index time; prepend context to chunk text before embedding. -35% retrieval failure rate per Anthropic paper.
+  - [ ] **F82.f** (later) Multi-granularity chunks: sentence + paragraph + section levels with parent-child retrieval. Enables retrieve-small-return-big.
+  - Re-index required on any chunk strategy change — `scripts/reindex_embeddings.py` handles it.
 
 - [ ] **F83 · Candidate matching accuracy**
   - Skill normalization: "JS" = "JavaScript", "k8s" = "Kubernetes", "ML" = "Machine Learning"
@@ -285,10 +288,13 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - User correction: let HR override the classified type, feed back into the system
 
 - [~] **F85 · Embedding quality**
-  - [~] **F85.a** Model-agnostic `EmbeddingProvider` protocol: `SentenceTransformerEmbedder` POC with `BAAI/bge-small-en-v1.5`; future `OpenAIEmbedder` / `VoyageEmbedder` slot in. ChromaVectorStore takes pre-computed vectors instead of using Chroma's bundled model.
-  - Document-type-specific embedding prefixes: "resume: ..." vs "job description: ..."
+  - [x] **F85.a** Model-agnostic `EmbeddingProvider` protocol + `SentenceTransformerEmbedder` POC with `BAAI/bge-small-en-v1.5`. ChromaVectorStore takes pre-computed vectors; per-model collection naming; `scripts/reindex_embeddings.py`. Eval: P@5 0.253→0.252 (tied), R@5 0.974→**1.000**, MRR 0.870→0.841.
+  - [ ] **F85.b** Model exploration on HF leaderboard — try `intfloat/e5-small-v2`, `intfloat/e5-base-v2`, `nomic-ai/nomic-embed-text-v1.5`, `jinaai/jina-embeddings-v2-base-en`, `BAAI/bge-base-en-v1.5`. Process: flip `EMBEDDING_MODEL`, `uv run python -m scripts.reindex_embeddings`, `make eval`, keep if P@5/MRR clearly wins. Remember to recalibrate `search_max_distance` per model.
+  - [ ] **F85.c** Weighted RRF so filename (FTS weight A) outranks semantic-only body matches. Today equal weights cause cross-model ranking flips (e.g. `menu analyzer` → "Restaurant Signup" at #1 under bge-small despite Menu Analyzer having the literal filename match). Apply a source-level multiplier to the RRF score.
+  - [ ] **F85.d** Per-model threshold: make `search_max_distance` travel with the embedder instead of a global setting. Each model has its own cosine distribution; a hardcoded global breaks on swap.
+  - [ ] **F85.e** Document-type-specific embedding prefixes: "resume: ..." vs "job description: ..." for models that support task instructions (e5, instructor, nomic).
   - [x] Hybrid retrieval: Postgres FTS (`ts_rank_cd`) folded into RRF — eval P@5 0.175→0.238 (+36%), `edge` bucket 0.0→0.4
-  - Embedding versioning: track which model generated each chunk's embedding, re-index on model change
+  - [ ] **F85.f** Embedding versioning per chunk: store `embedding_model` in chunk metadata + startup check warns on configured-vs-indexed mismatch (per-model collection naming makes this a soft concern today, but belt-and-suspenders).
 
 - [x] **F86 · Search correctness (P0)** — see `docs/search-hardening.md` §3
   - [x] Per-user ownership scoping (admin bypass) wired into vector `where`, FTS, and SQL metadata paths

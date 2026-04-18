@@ -91,9 +91,10 @@ class SentenceTransformerEmbedder:
             model = SentenceTransformer(self._model_name, device=self._device)
             # sentence-transformers renamed this method in a recent
             # release; fall back if we're on the old API.
-            getter = getattr(
-                model, "get_embedding_dimension", None
-            ) or model.get_sentence_embedding_dimension
+            getter = (
+                getattr(model, "get_embedding_dimension", None)
+                or model.get_sentence_embedding_dimension
+            )
             self._dimension = int(getter())
             self._model = model
             logger.info(

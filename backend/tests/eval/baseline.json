@@ -2,7 +2,7 @@
   "overall": {
     "p@5": 0.2522,
     "r@5": 1.0,
-    "mrr": 0.8406
+    "mrr": 0.8587
   },
   "cases": [
     {
@@ -47,12 +47,12 @@
         "resume_devops"
       ],
       "returned": [
-        "resume_python_senior",
-        "resume_devops"
+        "resume_devops",
+        "resume_python_senior"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
-      "mrr": 0.5,
+      "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": ""
     },
@@ -333,12 +333,12 @@
       "returned": [
         "resume_python_senior",
         "letter_cover_jane",
-        "resume_data_scientist",
-        "resume_devops"
+        "resume_devops",
+        "resume_data_scientist"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
-      "mrr": 0.333,
+      "mrr": 0.25,
       "must_not_contain_violation": [],
       "notes": "ml expands to 'machine learning'"
     },

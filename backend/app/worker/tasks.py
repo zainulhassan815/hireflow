@@ -74,7 +74,11 @@ def extract_document_text(self, document_id: str) -> None:
     try:
         service = ExtractionService(
             session=session,
-            extractor=CompositeExtractor(vision=vision),
+            extractor=CompositeExtractor(
+                strategy=settings.extraction_strategy,
+                infer_table_structure=settings.extraction_infer_tables,
+                vision=vision,
+            ),
             classifier=classifier,
             storage_get=storage.get_sync,
             embedding=embedding,
