@@ -149,8 +149,106 @@ async def test_full_text_search_empty_query_returns_empty(owner_id) -> None:
         assert await repo.full_text_search("   ", limit=10) == []
 
 
+# ---------------------------------------------------------------------------
+# F88.a websearch_to_tsquery syntax
+# ---------------------------------------------------------------------------
+
+
+async def test_phrase_query_requires_adjacent_tokens(owner_id) -> None:
+    """Quoted phrase: tokens must appear adjacent in the doc."""
+    adjacent = await _seed_doc(
+        owner_id=owner_id,
+        filename="ml_resume.pdf",
+        text="Senior machine learning engineer with deep neural net experience.",
+    )
+    scattered = await _seed_doc(
+        owner_id=owner_id,
+        filename="other.pdf",
+        text="Machine assisted production line. Learning to type quickly. Engineer.",
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        hits = await repo.full_text_search('"machine learning"', limit=10)
+
+    hit_ids = [d.id for d, _ in hits]
+    assert adjacent.id in hit_ids
+    # The scattered doc has both words but not adjacent — must not match.
+    assert scattered.id not in hit_ids
+
+
+async def test_or_operator_returns_either_match(owner_id) -> None:
+    """websearch OR allows a query to match docs containing either term."""
+    py = await _seed_doc(
+        owner_id=owner_id,
+        filename="py.pdf",
+        text="Python developer specialising in async frameworks.",
+    )
+    go = await _seed_doc(
+        owner_id=owner_id,
+        filename="go.pdf",
+        text="Golang engineer with kubernetes experience.",
+    )
+    rust = await _seed_doc(
+        owner_id=owner_id,
+        filename="rust.pdf",
+        text="Rust systems programmer focused on memory safety.",
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        hits = await repo.full_text_search("python OR golang", limit=10)
+
+    hit_ids = {d.id for d, _ in hits}
+    assert py.id in hit_ids
+    assert go.id in hit_ids
+    assert rust.id not in hit_ids
+
+
+async def test_negation_excludes_matching_docs(owner_id) -> None:
+    """websearch -term excludes docs containing the negated token."""
+    keep = await _seed_doc(
+        owner_id=owner_id,
+        filename="keep.pdf",
+        text="Python developer with Django and Flask experience.",
+    )
+    drop = await _seed_doc(
+        owner_id=owner_id,
+        filename="drop.pdf",
+        text="Python and Java polyglot developer; loves both.",
+    )
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        hits = await repo.full_text_search("python -java", limit=10)
+
+    hit_ids = {d.id for d, _ in hits}
+    assert keep.id in hit_ids
+    assert drop.id not in hit_ids
+
+
+async def test_long_query_is_truncated(owner_id) -> None:
+    """Long pasted-in queries shouldn't bring the index to its knees."""
+    await _seed_doc(
+        owner_id=owner_id,
+        filename="anything.pdf",
+        text="Senior python kubernetes engineer.",
+    )
+
+    # 5x the cap; the function should still return without timeout/error.
+    huge = " ".join(["python kubernetes engineer"] * 200)
+
+    async with SessionLocal() as session:
+        repo = DocumentRepository(session)
+        hits = await repo.full_text_search(huge, limit=10)
+
+    # Doesn't have to find anything specific; the assertion is "doesn't blow up
+    # and returns results bounded to the limit".
+    assert len(hits) <= 10
+
+
 async def test_full_text_search_handles_multiword_query(owner_id) -> None:
-    """plainto_tsquery joins terms with AND — both must appear."""
+    """websearch_to_tsquery ANDs unquoted terms — both must appear."""
     both = await _seed_doc(
         owner_id=owner_id,
         filename="both.pdf",

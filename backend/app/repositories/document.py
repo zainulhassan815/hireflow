@@ -10,6 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Document, DocumentStatus, DocumentType
 
+# Cap on chars passed to websearch_to_tsquery. Prevents pasted-in
+# job descriptions from blowing tsquery cost. F88.a.
+_MAX_QUERY_CHARS = 1024
+
 
 class DocumentRepository:
     def __init__(self, db: AsyncSession) -> None:
@@ -137,12 +141,22 @@ class DocumentRepository:
     ) -> list[tuple[Document, float]]:
         """Lexical retrieval via Postgres FTS, ranked by ts_rank_cd.
 
-        Uses ``plainto_tsquery`` so the user's natural-language query is
-        tokenized server-side with the same ``english`` analyzer that
+        Uses ``websearch_to_tsquery`` so the user's natural-language query
+        is tokenized server-side with the same ``english`` analyzer that
         powers the indexed tsvector — punctuation and stopwords are
-        handled consistently on both sides. Returns ``(doc, score)`` pairs
-        ordered by descending rank. Documents without indexable text or
-        with no term overlap are excluded.
+        handled consistently on both sides. Compared to ``plainto_tsquery``,
+        ``websearch_to_tsquery`` (F88.a) additionally supports:
+
+        * Quoted phrases — ``"machine learning"`` keeps tokens adjacent.
+        * Explicit ``OR`` — ``python OR golang``.
+        * Negation — ``python -java``.
+
+        Plain unquoted multi-word queries still AND, so existing call
+        sites are unaffected.
+
+        Returns ``(doc, score)`` pairs ordered by descending rank.
+        Documents without indexable text or with no term overlap are
+        excluded.
 
         ``owner_id`` scopes results to a single user; pass ``None`` for
         an unscoped query (admin-level access). F86 added this so search
@@ -152,7 +166,13 @@ class DocumentRepository:
         if not query:
             return []
 
-        ts_query = func.plainto_tsquery("english", query)
+        # Bound tsquery cost on pasted-in job descriptions etc.
+        # Postgres handles long inputs but term count drives the scan
+        # cost on large corpora.
+        if len(query) > _MAX_QUERY_CHARS:
+            query = query[:_MAX_QUERY_CHARS]
+
+        ts_query = func.websearch_to_tsquery("english", query)
         rank = func.ts_rank_cd(Document.search_tsv, ts_query).label("rank")
 
         stmt = (

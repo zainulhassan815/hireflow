@@ -352,6 +352,37 @@ async def test_hr_search_combines_owner_and_document_type_in_vector_where() -> N
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# F88.a empty-query short-circuit
+# ---------------------------------------------------------------------------
+
+
+async def test_empty_query_returns_empty_without_hitting_retrieval() -> None:
+    """No-op queries must not roundtrip to ChromaDB or Postgres."""
+    store = _FakeVectorStore([])
+    repo = _mock_repo([])
+    service = SearchService(repo, store)
+
+    results, _ = await service.search(actor=_admin(), query="")
+
+    assert results == []
+    assert store.last_query is None  # vector path not called
+    repo.full_text_search.assert_not_called()
+    repo.search_by_metadata.assert_not_called()
+
+
+async def test_whitespace_only_query_short_circuits() -> None:
+    store = _FakeVectorStore([])
+    repo = _mock_repo([])
+    service = SearchService(repo, store)
+
+    results, _ = await service.search(actor=_admin(), query="   \n\t  ")
+
+    assert results == []
+    assert store.last_query is None
+    repo.full_text_search.assert_not_called()
+
+
 async def test_non_ready_doc_with_indexed_chunks_is_excluded() -> None:
     """A FAILED/PROCESSING doc whose chunks are still in Chroma must not surface.
 

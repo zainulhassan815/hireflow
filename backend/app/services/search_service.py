@@ -75,6 +75,11 @@ class SearchService:
         """
         start = time.monotonic()
 
+        # F88.a: skip every retrieval call on a no-op query rather than
+        # paying for a roundtrip to ChromaDB and Postgres for zero hits.
+        if not query.strip():
+            return [], int((time.monotonic() - start) * 1000)
+
         owner_filter = None if actor.role == UserRole.ADMIN else actor.id
 
         vector_hits = self._vector_search(

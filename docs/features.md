@@ -302,13 +302,12 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - [x] No `SearchService` changes; `ts_rank_cd` does the weighting automatically
   - Eval lift on top of F86: **P@5 0.238→0.253, R@5 0.906→0.974, MRR 0.781→0.868 (+11%)**; new `filename` bucket MRR=1.0; live `menu analyzer` query now ranks Menu Analyzer Portfolio Doc.pdf at #1
 
-- [ ] **F88 · Query syntax & understanding (P1 + P2)** — see `docs/search-hardening.md` §3
-  - Switch `plainto_tsquery` → `websearch_to_tsquery` (phrase/OR/NOT support)
-  - Empty / whitespace / stopword-only query short-circuit
-  - Query length cap (~256 tokens) to bound tsquery cost
-  - Acronym / synonym map at query time (~30 HR-domain entries to start: JS↔JavaScript, K8s↔Kubernetes, ML↔machine learning, …)
-  - Typo tolerance: `pg_trgm` similarity fallback when `ts_rank_cd` returns empty
-  - Special-token preservation (`C++`, `.NET`, `Node.js`, `C#`) on both index and query side; share helper with F92.1 highlight tokenizer
+- [~] **F88 · Query syntax & understanding (P1 + P2)** — see `docs/search-hardening.md` §3
+  - [x] **F88.a** Switch `plainto_tsquery` → `websearch_to_tsquery` (phrase/OR/NOT), empty/whitespace short-circuit at service edge, query length cap (1024 chars) — same eval baseline (additive syntax)
+  - [ ] **F88.b** Acronym / synonym map at query time (~30 HR-domain entries: JS↔JavaScript, K8s↔Kubernetes, ML↔machine learning, …)
+  - [ ] **F88.c** Typo tolerance: `pg_trgm` similarity fallback when `ts_rank_cd` returns empty
+  - [ ] **F88.d** Special-token preservation (`C++`, `.NET`, `Node.js`, `C#`) on both index and query side; share helper with F92.1 highlight tokenizer
+  - Known limitation: negation (`-term`) only constrains the FTS path; vector RRF can still surface negated docs. Cross-source semantics fix is its own slice if needed.
 
 - [ ] **F89 · Search polish (P2 + P3)** — see `docs/search-hardening.md` §3
   - Recency tie-breaking: stable `created_at desc` when RRF scores tie
