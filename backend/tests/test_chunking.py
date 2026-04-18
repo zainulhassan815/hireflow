@@ -51,8 +51,14 @@ def test_tiny_doc_collapses_to_single_chunk() -> None:
 # ---------- heading handling ----------
 
 
-def test_title_starts_new_chunk_and_sets_section_heading() -> None:
-    """Title is its own chunk; narrative after inherits section_heading."""
+def test_title_attaches_as_metadata_not_its_own_chunk() -> None:
+    """Headings are NOT emitted as standalone chunks.
+
+    A heading-only chunk (e.g. just the word 'SKILLS') is poor retrieval
+    signal; its useful role is as metadata on the content that follows.
+    The chunker tracks the current heading and attaches it as
+    ``section_heading`` on subsequent narrative chunks.
+    """
     narr_body = "x " * 800  # force past tiny-doc threshold
     elements = [
         _narr(narr_body, 0),
@@ -60,10 +66,10 @@ def test_title_starts_new_chunk_and_sets_section_heading() -> None:
         _narr("Python, Django, AWS", 2),
     ]
     chunks = chunk_elements(elements)
-    # First: narrative without heading (nothing before it).
-    # Second: the SKILLS heading.
-    # Third: narrative under SKILLS.
-    assert any(c.metadata.get("chunk_kind") == "heading" for c in chunks)
+
+    # No chunk should be kind="heading" — we don't emit those anymore.
+    assert not any(c.metadata.get("chunk_kind") == "heading" for c in chunks)
+
     # The narrative chunk under SKILLS should carry section_heading.
     skills_narrs = [
         c
@@ -73,6 +79,37 @@ def test_title_starts_new_chunk_and_sets_section_heading() -> None:
     ]
     assert skills_narrs, "Expected narrative chunk under SKILLS heading"
     assert "Python" in skills_narrs[0].text
+
+
+def test_multiple_headings_track_current_section() -> None:
+    """Each new heading replaces the current section on subsequent chunks."""
+    # Must exceed tiny-doc threshold (1500) so the chunker actually
+    # walks elements instead of collapsing into a single chunk.
+    big = "x " * 1000
+    elements = [
+        _narr(big, 0),
+        _title("EXPERIENCE", 1),
+        _narr("Engineer at ACME, 2020-2024", 2),
+        _title("SKILLS", 3),
+        _narr("Python, SQL, Docker", 4),
+    ]
+    chunks = chunk_elements(elements)
+
+    # At least one narrative under EXPERIENCE and one under SKILLS.
+    experience = [
+        c
+        for c in chunks
+        if c.metadata.get("section_heading") == "EXPERIENCE"
+        and "ACME" in c.text
+    ]
+    skills = [
+        c
+        for c in chunks
+        if c.metadata.get("section_heading") == "SKILLS"
+        and "Python" in c.text
+    ]
+    assert experience, "Expected a narrative chunk tagged with EXPERIENCE heading"
+    assert skills, "Expected a narrative chunk tagged with SKILLS heading"
 
 
 # ---------- tables ----------

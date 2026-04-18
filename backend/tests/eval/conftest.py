@@ -218,6 +218,7 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
     real UUID of a fixture by its slug.
     """
     from app.adapters.chroma_store import ChromaVectorStore
+    from app.adapters.contextualizers.registry import get_contextualizer
     from app.adapters.embeddings.registry import get_embedding_provider
     from app.core.config import settings
     from app.core.db import SessionLocal
@@ -227,6 +228,7 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
         DocumentStatus,
         DocumentType,
     )
+    from app.services.chunking import chunk_elements
     from app.services.embedding_service import EmbeddingService
 
     _assert_test_database(settings.database_url)
@@ -237,6 +239,7 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
         embedder=get_embedding_provider(settings),
     )
     embedder = EmbeddingService(store)
+    contextualizer = get_contextualizer(settings)
 
     pairs: list[tuple[FixtureDoc, UUID]] = []
     async with SessionLocal() as session:
@@ -278,7 +281,12 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
                     )
                 )
             await session.flush()
-            embedder.index_document(doc, elements=synth_elements)
+            # Same pipeline as the real worker: chunk → contextualize → embed.
+            # Contextualization respects settings — with
+            # CONTEXTUALIZER_PROVIDER=none the path is a passthrough.
+            chunks = chunk_elements(synth_elements)
+            chunks = contextualizer.contextualize(doc, chunks)
+            embedder.index_document(doc, chunks=chunks)
 
             pairs.append((fixture, doc.id))
 

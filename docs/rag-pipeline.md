@@ -73,6 +73,22 @@ Runs in a Celery worker — HTTP upload returns `201` with
                         │  Chunk metadata: chunk_kind, section_heading,           │
                         │    page_number, element_kinds                          │
                         │  documents.chunking_version = CHUNKING_VERSION          │
+                        └──────────────────────────┬─────────────────────────────┘
+                                                   ▼
+                        ┌────────────────────────────────────────────────────────┐
+                        │  4b. Contextualize  (F82.c)                            │
+                        │  ─────────────────────────────────────────────────     │
+                        │  ChunkContextualizer (model-agnostic, any LlmProvider)  │
+                        │  Three modes:                                           │
+                        │   • summary:  1 summary call + N per-chunk calls       │
+                        │   • full_doc: N per-chunk calls with whole doc body    │
+                        │   • auto:     pick per-doc on extracted_text length    │
+                        │   Produces chunk.context (50-100 words) situating the  │
+                        │   chunk within the document for retrieval.             │
+                        │                                                         │
+                        │   Backed today by Claude Haiku (LLM_PROVIDER=anthropic) │
+                        │   Swaps to Ollama / any future LlmProvider via config  │
+                        │   Per-chunk failures are non-fatal (context=None)      │
                         └────────┬────────────────────────────────┬──────────────┘
                                  ▼                                ▼
         ┌────────────────────────────────────┐   ┌────────────────────────────────┐
@@ -237,6 +253,7 @@ can't see. Same rule as `DocumentService._ensure_access`.
 | Image OCR | `adapters/vision/tesseract.py::TesseractVisionProvider` | For raw image uploads |
 | Classification | `adapters/classifiers/` (RuleBasedClassifier → LLM fallback) | Sets `document_type` + extracts skills |
 | Chunking | `services/chunking.py::chunk_elements` | Element-aware, F82.e |
+| Contextualization | `adapters/contextualizers/llm.py::LlmChunkContextualizer` | F82.c; model-agnostic via `LlmProvider`; default Claude Haiku |
 | Embedding | `adapters/embeddings/sentence_transformer.py` (default) | Behind `EmbeddingProvider` protocol, swappable |
 | Vector store | `adapters/chroma_store.py::ChromaVectorStore` | Per-model collection naming |
 | Lexical index | `documents.search_tsv` (Postgres generated column) | Weighted filename A / skills B / body C; tech-token normalization on both sides |
@@ -314,8 +331,6 @@ from current) is doable today via repo query; not scripted yet.
 
 - **F82.b** whole-document chunk emission (helps broad "find a
   persona" queries)
-- **F82.c** contextual retrieval (Anthropic): Haiku-augmented chunks
-  at index time, -35% retrieval failure per paper
 - **F82.f** multi-granularity chunks (sentence / paragraph / section
   with parent-child retrieval)
 - **F80.5** cross-encoder reranker on the merged top-K

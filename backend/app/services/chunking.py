@@ -46,7 +46,7 @@ _LIST_KINDS = frozenset({"ListItem"})
 
 # Bump when the chunking rules change in a way that invalidates existing
 # vectors. Consumed by documents.chunking_version.
-CHUNKING_VERSION = "v2-element-aware"
+CHUNKING_VERSION = "v3-heading-as-metadata"
 
 
 @dataclass(frozen=True)
@@ -85,19 +85,15 @@ def chunk_elements(elements: list[Element]) -> list[Chunk]:
 
     for element in elements:
         if element.kind in _HEADING_KINDS:
+            # Headings are NOT emitted as chunks of their own — their
+            # text alone ("SKILLS", "Technical Highlights") is poor
+            # retrieval signal and contextualizing them via an LLM is
+            # wasted cost. We keep the heading text as
+            # ``section_heading`` metadata on every subsequent narrative
+            # chunk until the next heading, which is what retrieval
+            # actually wants.
             flush_narrative()
             current_heading = element.text
-            chunks.append(
-                Chunk(
-                    text=element.text,
-                    metadata={
-                        "chunk_kind": "heading",
-                        "section_heading": element.text,
-                        "element_kinds": [element.kind],
-                        "page_number": element.page_number,
-                    },
-                )
-            )
             continue
 
         if element.kind in _TABLE_KINDS:
