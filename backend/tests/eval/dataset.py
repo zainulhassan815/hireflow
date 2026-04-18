@@ -484,4 +484,17 @@ EVAL_QUERIES: list[EvalCase] = [
         bucket="filename",
         notes="name appears in two filenames",
     ),
+    # ---- F88.b acronym expansion ----
+    EvalCase(
+        query="k8s",
+        expected_docs={"resume_devops"},
+        bucket="acronym",
+        notes="k8s should expand to kubernetes (which the devops resume mentions)",
+    ),
+    EvalCase(
+        query="ml engineer",
+        expected_docs={"resume_data_scientist"},
+        bucket="acronym",
+        notes="ml expands to 'machine learning'",
+    ),
 ]

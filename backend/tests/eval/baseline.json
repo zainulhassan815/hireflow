@@ -1,8 +1,8 @@
 {
   "overall": {
-    "p@5": 0.2526,
-    "r@5": 0.9737,
-    "mrr": 0.8684
+    "p@5": 0.2476,
+    "r@5": 0.9762,
+    "mrr": 0.8571
   },
   "cases": [
     {
@@ -303,6 +303,37 @@
       "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": "name appears in two filenames"
+    },
+    {
+      "bucket": "acronym",
+      "query": "k8s",
+      "expected": [
+        "resume_devops"
+      ],
+      "returned": [
+        "resume_python_senior",
+        "resume_devops"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 0.5,
+      "must_not_contain_violation": [],
+      "notes": "k8s should expand to kubernetes (which the devops resume mentions)"
+    },
+    {
+      "bucket": "acronym",
+      "query": "ml engineer",
+      "expected": [
+        "resume_data_scientist"
+      ],
+      "returned": [
+        "resume_data_scientist"
+      ],
+      "p@5": 0.2,
+      "r@5": 1.0,
+      "mrr": 1.0,
+      "must_not_contain_violation": [],
+      "notes": "ml expands to 'machine learning'"
     }
   ]
 }

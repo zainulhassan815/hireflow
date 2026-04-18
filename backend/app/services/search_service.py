@@ -30,6 +30,7 @@ from app.core.config import settings
 from app.models import Document, DocumentStatus, DocumentType, User, UserRole
 from app.repositories.document import DocumentRepository
 from app.services.highlight import extract_query_terms, find_match_spans
+from app.services.query_expansion import expand_acronyms
 
 _RRF_K = 60  # standard reciprocal rank fusion constant
 
@@ -109,8 +110,12 @@ class SearchService:
         else:
             sql_docs = []
 
+        # F88.b: expand acronyms only for the lexical path. The vector
+        # path already handles K8s ≈ Kubernetes via embedding similarity,
+        # so feeding it the canonical form would just add noise.
+        lexical_query = expand_acronyms(query)
         lexical_hits = await self._documents.full_text_search(
-            query, limit=limit * 3, owner_id=owner_filter
+            lexical_query, limit=limit * 3, owner_id=owner_filter
         )
 
         merged = self._rrf_merge(vector_hits, sql_docs, lexical_hits, limit)
