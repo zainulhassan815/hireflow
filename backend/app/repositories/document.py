@@ -211,25 +211,26 @@ class DocumentRepository:
         unindexed (acceptable for our corpus size; if extracted_text
         grows hot enough to matter, add a GIN trigram index then).
 
-        Uses ``word_similarity(query, …)`` rather than plain
-        ``similarity()`` so a short typo'd query doesn't get drowned by
-        a long string — a typo of ``pyhton`` should match
-        ``python_resume.pdf`` based on the word ``python``, and a doc
-        whose body mentions Python should also surface even if no
-        filename does.
+        Uses ``strict_word_similarity`` (not plain ``word_similarity``).
+        On long body text ``word_similarity`` finds a fragment match
+        anywhere in any token and produces score noise around ~0.28
+        for unrelated docs — every doc surfaces. ``strict_word_similarity``
+        requires the matched window to align with word boundaries, which
+        cleanly separates real matches (~0.27 for a one-letter typo on
+        ``python``) from noise (~0.13–0.17). Filename behavior is
+        unchanged because filename "words" already align after F87's
+        ``regexp_replace`` swap.
 
-        The doc's score is the max of its filename and body word-
-        similarity scores.
-
-        Returns ``(doc, similarity)`` pairs ordered by descending
-        similarity. Pass ``owner_id`` for per-user scoping (F86).
+        The doc's score is the max of its filename and body strict
+        similarity. Returns ``(doc, similarity)`` ordered desc.
+        Pass ``owner_id`` for per-user scoping (F86).
         """
         query = query.strip()
         if not query:
             return []
 
-        sim_filename = func.word_similarity(query, Document.filename)
-        sim_body = func.word_similarity(
+        sim_filename = func.strict_word_similarity(query, Document.filename)
+        sim_body = func.strict_word_similarity(
             query, func.coalesce(Document.extracted_text, "")
         )
         # GREATEST handles the case where one side is below threshold.
