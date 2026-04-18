@@ -2,7 +2,7 @@
   "overall": {
     "p@5": 0.2522,
     "r@5": 1.0,
-    "mrr": 0.8696
+    "mrr": 0.8406
   },
   "cases": [
     {
@@ -47,13 +47,12 @@
         "resume_devops"
       ],
       "returned": [
-        "resume_devops",
         "resume_python_senior",
-        "resume_data_scientist"
+        "resume_devops"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
-      "mrr": 1.0,
+      "mrr": 0.5,
       "must_not_contain_violation": [],
       "notes": ""
     },
@@ -65,8 +64,8 @@
       ],
       "returned": [
         "resume_data_scientist",
-        "resume_devops",
-        "letter_cover_jane"
+        "letter_cover_jane",
+        "resume_devops"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
@@ -81,12 +80,12 @@
         "resume_python_senior"
       ],
       "returned": [
-        "resume_javascript_junior",
-        "resume_python_senior"
+        "resume_python_senior",
+        "letter_cover_jane"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
-      "mrr": 0.5,
+      "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": "seniority implied"
     },
@@ -166,9 +165,8 @@
       ],
       "returned": [
         "resume_python_senior",
-        "resume_javascript_junior",
-        "resume_devops",
-        "letter_cover_jane"
+        "letter_cover_jane",
+        "resume_devops"
       ],
       "p@5": 0.4,
       "r@5": 1.0,
@@ -183,21 +181,12 @@
         "report_sales_q3"
       ],
       "returned": [
-        "report_sales_q3",
-        "resume_python_senior",
-        "resume_javascript_junior",
-        "resume_data_scientist",
-        "resume_devops"
+        "report_sales_q3"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
       "mrr": 1.0,
-      "must_not_contain_violation": [
-        "resume_data_scientist",
-        "resume_devops",
-        "resume_javascript_junior",
-        "resume_python_senior"
-      ],
+      "must_not_contain_violation": [],
       "notes": "type filter dominates"
     },
     {
@@ -342,14 +331,14 @@
         "resume_data_scientist"
       ],
       "returned": [
-        "resume_data_scientist",
         "resume_python_senior",
-        "resume_devops",
-        "letter_cover_jane"
+        "letter_cover_jane",
+        "resume_data_scientist",
+        "resume_devops"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
-      "mrr": 1.0,
+      "mrr": 0.333,
       "must_not_contain_violation": [],
       "notes": "ml expands to 'machine learning'"
     },

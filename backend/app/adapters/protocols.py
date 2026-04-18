@@ -160,6 +160,43 @@ class DocumentClassifier(Protocol):
         ...
 
 
+# ---------- Embedding provider ----------
+
+
+@runtime_checkable
+class EmbeddingProvider(Protocol):
+    """Turn text into dense vectors. Provider-agnostic.
+
+    Implementations may be local (sentence-transformers, fastembed) or
+    remote (OpenAI, Voyage, Cohere). ``dimension`` and ``model_name``
+    travel with the embedder so the vector store can warn on dim
+    mismatch and the eval harness can label results.
+
+    Synchronous on purpose — callers running inside an asyncio loop
+    should hop to a thread (``asyncio.to_thread``). Local models do
+    real CPU work; doing it on the event loop would block.
+    """
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Return one vector per input text."""
+        ...
+
+    def embed_query(self, text: str) -> list[float]:
+        """Return one vector for a search query.
+
+        A separate method so providers that benefit from query/document
+        asymmetry (e.g. instruct-tuned models needing a ``query:``
+        prefix) can do that internally without leaking the detail.
+        """
+        ...
+
+    @property
+    def model_name(self) -> str: ...
+
+    @property
+    def dimension(self) -> int: ...
+
+
 # ---------- Vector store ----------
 
 

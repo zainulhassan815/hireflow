@@ -285,7 +285,7 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - User correction: let HR override the classified type, feed back into the system
 
 - [~] **F85 · Embedding quality**
-  - Evaluate embedding model options: all-MiniLM-L6-v2 vs all-mpnet-base-v2 vs instructor-xl
+  - [~] **F85.a** Model-agnostic `EmbeddingProvider` protocol: `SentenceTransformerEmbedder` POC with `BAAI/bge-small-en-v1.5`; future `OpenAIEmbedder` / `VoyageEmbedder` slot in. ChromaVectorStore takes pre-computed vectors instead of using Chroma's bundled model.
   - Document-type-specific embedding prefixes: "resume: ..." vs "job description: ..."
   - [x] Hybrid retrieval: Postgres FTS (`ts_rank_cd`) folded into RRF — eval P@5 0.175→0.238 (+36%), `edge` bucket 0.0→0.4
   - Embedding versioning: track which model generated each chunk's embedding, re-index on model change

@@ -58,8 +58,12 @@ def extract_document_text(self, document_id: str) -> None:
     classifier = get_document_classifier(settings)
 
     try:
+        from app.adapters.embeddings.registry import get_embedding_provider
+
         vector_store = ChromaVectorStore(
-            host=settings.chroma_host, port=settings.chroma_port
+            host=settings.chroma_host,
+            port=settings.chroma_port,
+            embedder=get_embedding_provider(settings),
         )
         embedding = EmbeddingService(vector_store)
     except Exception:

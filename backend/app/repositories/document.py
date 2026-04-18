@@ -143,6 +143,7 @@ class DocumentRepository:
         *,
         limit: int = 30,
         owner_id: UUID | None = None,
+        document_type: DocumentType | None = None,
     ) -> list[tuple[Document, float]]:
         """Lexical retrieval via Postgres FTS, ranked by ts_rank_cd.
 
@@ -189,6 +190,9 @@ class DocumentRepository:
         if owner_id is not None:
             stmt = stmt.where(Document.owner_id == owner_id)
 
+        if document_type is not None:
+            stmt = stmt.where(Document.document_type == document_type)
+
         stmt = stmt.order_by(rank.desc()).limit(limit)
 
         result = await self._db.execute(stmt)
@@ -200,6 +204,7 @@ class DocumentRepository:
         *,
         limit: int = 10,
         owner_id: UUID | None = None,
+        document_type: DocumentType | None = None,
         threshold: float = _TRGM_THRESHOLD,
     ) -> list[tuple[Document, float]]:
         """Trigram-similarity search over filename + body (F88.c).
@@ -244,6 +249,9 @@ class DocumentRepository:
 
         if owner_id is not None:
             stmt = stmt.where(Document.owner_id == owner_id)
+
+        if document_type is not None:
+            stmt = stmt.where(Document.document_type == document_type)
 
         stmt = stmt.order_by(sim.desc()).limit(limit)
 

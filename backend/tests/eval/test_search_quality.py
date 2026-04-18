@@ -75,10 +75,15 @@ async def _run_query(
 async def test_search_quality_report(slug_to_document_id, eval_owner):
     """Run every eval case; print report; fail on hard violations."""
     from app.adapters.chroma_store import ChromaVectorStore
+    from app.adapters.embeddings.registry import get_embedding_provider
     from app.core.config import settings
     from app.core.db import SessionLocal
 
-    store = ChromaVectorStore(host=settings.chroma_host, port=settings.chroma_port)
+    store = ChromaVectorStore(
+        host=settings.chroma_host,
+        port=settings.chroma_port,
+        embedder=get_embedding_provider(settings),
+    )
 
     per_case: list[dict] = []
     by_bucket: dict[str, list[dict]] = defaultdict(list)

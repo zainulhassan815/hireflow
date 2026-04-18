@@ -126,7 +126,10 @@ class SearchService:
         # both cases semantically; normalizing for them adds noise.
         lexical_query = expand_acronyms(normalize_tech_tokens(query))
         lexical_hits = await self._documents.full_text_search(
-            lexical_query, limit=limit * 3, owner_id=owner_filter
+            lexical_query,
+            limit=limit * 3,
+            owner_id=owner_filter,
+            document_type=document_type,
         )
 
         # F88.c: typo tolerance via trigram similarity on filename.
@@ -136,7 +139,10 @@ class SearchService:
         # docs with mistyped queries.
         if not lexical_hits:
             lexical_hits = await self._documents.fuzzy_search(
-                query, limit=limit * 3, owner_id=owner_filter
+                query,
+                limit=limit * 3,
+                owner_id=owner_filter,
+                document_type=document_type,
             )
 
         merged = self._rrf_merge(vector_hits, sql_docs, lexical_hits, limit)

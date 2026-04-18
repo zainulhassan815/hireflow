@@ -1,33 +1,75 @@
 """ChromaDB vector store adapter.
 
-Uses ChromaDB's HTTP client to talk to the ChromaDB server running in Docker.
-Embedding is handled server-side by ChromaDB's default model (all-MiniLM-L6-v2)
-so no local embedding library is needed.
+Uses ChromaDB's HTTP client to talk to the ChromaDB server running in
+Docker. Embeddings are computed in our process (not on the Chroma
+server) via the injected ``EmbeddingProvider`` — F85.a made this
+swappable so we can A/B different models without touching the rest of
+the system.
+
+The collection name is suffixed with the model and dimension so two
+embedding models can coexist without clashing. A startup-time consistency
+check on collection metadata is intentionally not implemented: the
+collection name itself encodes the contract.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import chromadb
 
-from app.adapters.protocols import VectorHit
+from app.adapters.protocols import EmbeddingProvider, VectorHit
 
 logger = logging.getLogger(__name__)
 
-_COLLECTION_NAME = "documents"
+_COLLECTION_PREFIX = "documents"
+
+
+def _safe_collection_suffix(model_name: str) -> str:
+    """Reduce ``BAAI/bge-small-en-v1.5`` to ``bge_small_en_v1_5`` so it's
+    a valid Chroma collection name (alphanumerics, ``_``, ``-``, no slashes)."""
+    return re.sub(r"[^a-zA-Z0-9_-]", "_", model_name.split("/")[-1]).strip("_-")
 
 
 class ChromaVectorStore:
-    """`VectorStore` protocol implementation backed by ChromaDB."""
+    """``VectorStore`` protocol implementation backed by ChromaDB.
 
-    def __init__(self, *, host: str, port: int) -> None:
+    Takes an ``EmbeddingProvider`` so the model is owned by us, not by
+    Chroma. Vectors are pre-computed and passed via ``embeddings=`` /
+    ``query_embeddings=`` — Chroma's bundled embedding function is
+    never invoked.
+    """
+
+    def __init__(
+        self,
+        *,
+        host: str,
+        port: int,
+        embedder: EmbeddingProvider,
+    ) -> None:
         self._client = chromadb.HttpClient(host=host, port=port)
-        self._collection = self._client.get_or_create_collection(
-            name=_COLLECTION_NAME,
-            metadata={"hnsw:space": "cosine"},
+        self._embedder = embedder
+        # Per-model collection isolates vectors of incompatible dimensions
+        # and lets two models coexist while we A/B them. Switching model
+        # = a new collection; old one stays around until manually dropped
+        # (see scripts/reindex_embeddings.py).
+        collection_name = (
+            f"{_COLLECTION_PREFIX}_{_safe_collection_suffix(embedder.model_name)}"
         )
+        self._collection_name = collection_name
+        self._collection = self._client.get_or_create_collection(
+            name=collection_name,
+            metadata={
+                "hnsw:space": "cosine",
+                "embedding_model": embedder.model_name,
+            },
+        )
+
+    @property
+    def collection_name(self) -> str:
+        return self._collection_name
 
     def upsert(
         self,
@@ -47,6 +89,9 @@ class ChromaVectorStore:
             for i, meta in enumerate(metadatas)
         ]
 
+        # Compute vectors in our process via the swappable provider.
+        embeddings = self._embedder.embed_documents(chunks)
+
         # ChromaDB has a batch limit; chunk in groups of 500
         batch_size = 500
         for start in range(0, len(ids), batch_size):
@@ -55,6 +100,7 @@ class ChromaVectorStore:
                 ids=ids[start:end],
                 documents=chunks[start:end],
                 metadatas=enriched_metadatas[start:end],
+                embeddings=embeddings[start:end],
             )
 
         logger.info("indexed %d chunks for document %s", len(chunks), document_id)
@@ -69,8 +115,10 @@ class ChromaVectorStore:
         n_results: int = 10,
         where: dict[str, Any] | None = None,
     ) -> list[VectorHit]:
+        query_embedding = self._embedder.embed_query(query_text)
+
         kwargs: dict[str, Any] = {
-            "query_texts": [query_text],
+            "query_embeddings": [query_embedding],
             "n_results": n_results,
         }
         if where:

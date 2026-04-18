@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     chroma_host: str = "localhost"
     chroma_port: int = 8000
 
+    # Embedding provider (F85.a)
+    # ``local`` uses sentence-transformers with ``embedding_model`` from
+    # the HuggingFace hub. Add ``openai`` / ``voyage`` adapters to switch
+    # providers without code changes elsewhere.
+    embedding_provider: str = "local"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+
     # JWT — required, no default. Generate with: openssl rand -hex 32
     jwt_secret_key: SecretStr = Field(min_length=32)
     jwt_algorithm: str = "HS256"
@@ -71,9 +78,15 @@ class Settings(BaseSettings):
     vision_model: str | None = None
     ollama_base_url: str = "http://localhost:11434"
 
-    # Search relevance (F80). Defaults chosen for all-MiniLM-L6-v2 in
-    # ChromaDB's cosine space; retune via the eval harness.
-    search_max_distance: float = 0.6
+    # Search relevance (F80). Defaults chosen for
+    # ``BAAI/bge-small-en-v1.5`` in Chroma's cosine space: relevant hits
+    # land around 0.18-0.30, near-domain "maybe" hits around 0.38-0.45,
+    # unrelated 0.45+. 0.35 is tight enough to reject near-domain noise
+    # (a Python resume matching "vendor services agreement" via the word
+    # "services") while keeping cleanly-relevant hits. If you swap the
+    # embedding model, recalibrate via ``make eval`` — different models
+    # produce different distance distributions even on the same text.
+    search_max_distance: float = 0.35
     search_confidence_high: float = 0.02
     search_confidence_medium: float = 0.01
     search_max_highlights_per_doc: int = 3

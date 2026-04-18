@@ -90,8 +90,12 @@ _blob_storage = MinioBlobStorage(
 )
 
 try:
+    from app.adapters.embeddings.registry import get_embedding_provider
+
     _vector_store: VectorStore | None = ChromaVectorStore(
-        host=settings.chroma_host, port=settings.chroma_port
+        host=settings.chroma_host,
+        port=settings.chroma_port,
+        embedder=get_embedding_provider(settings),
     )
 except Exception:
     _logger.warning("ChromaDB unavailable at startup; vector search disabled")

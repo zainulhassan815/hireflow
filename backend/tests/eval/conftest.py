@@ -112,10 +112,15 @@ async def eval_owner():
         # "truncate collection" API; delete-by-filter covers it.
         try:
             from app.adapters.chroma_store import ChromaVectorStore
+            from app.adapters.embeddings.registry import (
+                get_embedding_provider,
+            )
             from app.core.config import settings
 
             store = ChromaVectorStore(
-                host=settings.chroma_host, port=settings.chroma_port
+                host=settings.chroma_host,
+                port=settings.chroma_port,
+                embedder=get_embedding_provider(settings),
             )
             # Delete every chunk we'll seed. We know the slugs.
             for fixture in FIXTURE_DOCS:
@@ -147,6 +152,7 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
     real UUID of a fixture by its slug.
     """
     from app.adapters.chroma_store import ChromaVectorStore
+    from app.adapters.embeddings.registry import get_embedding_provider
     from app.core.config import settings
     from app.core.db import SessionLocal
     from app.models import Document, DocumentStatus, DocumentType
@@ -155,7 +161,11 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
 
     _assert_test_database(settings.database_url)
 
-    store = ChromaVectorStore(host=settings.chroma_host, port=settings.chroma_port)
+    store = ChromaVectorStore(
+        host=settings.chroma_host,
+        port=settings.chroma_port,
+        embedder=get_embedding_provider(settings),
+    )
     embedder = EmbeddingService(store)
 
     pairs: list[tuple[FixtureDoc, UUID]] = []
