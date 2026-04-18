@@ -47,8 +47,18 @@ class PdfExtractor:
             text = page.get_text().strip()
             if len(text) >= _SCANNED_PAGE_THRESHOLD or self._vision is None:
                 pages.append(text)
-            else:
+                continue
+            try:
                 pages.append(self._ocr_page(page))
+            except Exception:
+                # Don't fail the whole document because one page's OCR
+                # blew up (tesseract missing, corrupt image, etc.).
+                # Fall back to whatever sparse text the page did yield.
+                logger.exception(
+                    "OCR failed for page %d, falling back to native text",
+                    page.number,
+                )
+                pages.append(text)
 
         page_count = len(pages)
         doc.close()

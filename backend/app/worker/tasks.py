@@ -139,10 +139,10 @@ def sync_gmail_connection(self, connection_id: str) -> None:
 
 
 async def _load_connection_ids() -> list[UUID]:
-    from app.core.db import SessionLocal
+    from app.core.db import WorkerSessionLocal
     from app.repositories.gmail_connection import GmailConnectionRepository
 
-    async with SessionLocal() as session:
+    async with WorkerSessionLocal() as session:
         repo = GmailConnectionRepository(session)
         return [c.id for c in await repo.list_all()]
 
@@ -152,7 +152,7 @@ async def _run_sync(connection_id: UUID) -> None:
     from app.adapters.gmail_oauth import GoogleGmailOAuth
     from app.adapters.minio_storage import MinioBlobStorage
     from app.core.config import settings
-    from app.core.db import SessionLocal
+    from app.core.db import WorkerSessionLocal
     from app.repositories.activity_log import ActivityLogRepository
     from app.repositories.document import DocumentRepository
     from app.repositories.gmail_connection import GmailConnectionRepository
@@ -187,7 +187,7 @@ async def _run_sync(connection_id: UUID) -> None:
         region=settings.storage_region,
     )
 
-    async with SessionLocal() as session:
+    async with WorkerSessionLocal() as session:
         documents_repo = DocumentRepository(session)
         document_service = DocumentService(
             documents_repo,

@@ -102,7 +102,14 @@ class ChromaVectorStore:
         return hits
 
     def _delete_by_document_id(self, document_id: str) -> None:
-        import contextlib
-
-        with contextlib.suppress(Exception):
+        try:
             self._collection.delete(where={"document_id": document_id})
+        except Exception:
+            # Logged but not re-raised: re-indexing should still attempt
+            # to add the new chunks. If Chroma is genuinely down the
+            # subsequent .add() will surface the error.
+            logger.warning(
+                "failed to delete existing chunks for document %s",
+                document_id,
+                exc_info=True,
+            )

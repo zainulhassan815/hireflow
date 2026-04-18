@@ -234,7 +234,16 @@ class GmailSyncService:
                 connection.id,
                 message_id,
             )
-            await self._ingested.mark_failed(claim, reason=f"{type_name}: {exc}")
+            try:
+                await self._ingested.mark_failed(claim, reason=f"{type_name}: {exc}")
+            except Exception:
+                # If marking the row fails (DB blip), don't propagate —
+                # the stale-claim sweep will rescue it on the next run.
+                logger.exception(
+                    "could not record mark_failed for claim %s; "
+                    "stale-claim sweep will recover it",
+                    claim.id,
+                )
             report.errors += 1
             report.errors_by_type[type_name] += 1
 
