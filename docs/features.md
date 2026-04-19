@@ -250,7 +250,7 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - Eval harness: 15-20 curated queries against fixture docs, precision@5 + MRR baseline via `make eval`
   - Deferred to F80.5 (below): query expansion, RRF recency boost, faceted results
 
-- [ ] **F80.5 · Cross-encoder reranker**
+- [x] **F80.5 · Cross-encoder reranker** — `Reranker` protocol + `CrossEncoderReranker` (BAAI/bge-reranker-base, local sentence-transformers) + `NullReranker` + registry. Wired into `SearchService` with `reranker_top_k=20`. Default disabled (`reranker_provider=none`) on our small corpus because BGE's neutral semantic scoring can override filename intent (e.g. ranks "Menu Extraction" heading above "Menu Analyzer" filename). Flip to `local` via env to A/B. Works better once F85.c (weighted RRF) lands — reranker should narrow the candidate ordering after filename-boost has the right doc at the top.
   - Rerank top-20 vector candidates with a local cross-encoder (e.g. `cross-encoder/ms-marco-MiniLM-L-6-v2`)
   - Toggle via `SEARCH_RERANKER_ENABLED` env var for A/B
   - Eval harness measures precision@5 before/after to justify the `sentence-transformers` dep weight

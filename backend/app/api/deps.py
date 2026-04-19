@@ -105,6 +105,17 @@ _llm_provider = get_llm_provider(settings)
 if _llm_provider:
     _logger.info("LLM provider: %s", _llm_provider.model_name)
 
+try:
+    from app.adapters.rerankers.registry import get_reranker
+
+    _reranker = get_reranker(settings)
+    _logger.info("reranker: %s", _reranker.model_name)
+except Exception:
+    _logger.warning("reranker unavailable at startup; disabling", exc_info=True)
+    from app.adapters.rerankers.null import NullReranker
+
+    _reranker = NullReranker()
+
 _gmail_oauth: GmailOAuth | None
 if (
     settings.gmail_client_id
@@ -249,7 +260,7 @@ def get_document_service(
 
 
 def get_search_service(documents: DocumentRepositoryDep) -> SearchService:
-    return SearchService(documents, _vector_store)
+    return SearchService(documents, _vector_store, reranker=_reranker)
 
 
 def get_rag_service(documents: DocumentRepositoryDep) -> RagService | None:

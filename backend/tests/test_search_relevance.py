@@ -460,6 +460,90 @@ async def test_orphan_vector_chunk_dropped_before_ranking() -> None:
     assert orphan_id not in returned_ids
 
 
+# ---------------------------------------------------------------------------
+# F80.5 reranker wiring
+# ---------------------------------------------------------------------------
+
+
+class _ReverseReranker:
+    """Reverses incoming candidate order — proves the reranker is called
+    AND its ordering is the one returned."""
+
+    @property
+    def model_name(self) -> str:
+        return "reverse"
+
+    def rerank(self, query, candidates, top_n=None):
+        reordered = list(reversed(candidates))
+        if top_n is not None:
+            reordered = reordered[:top_n]
+        return reordered
+
+
+class _FailingReranker:
+    """Always raises — exercises the fallback path."""
+
+    @property
+    def model_name(self) -> str:
+        return "failing"
+
+    def rerank(self, query, candidates, top_n=None):
+        raise RuntimeError("reranker exploded")
+
+
+async def test_reranker_reorders_results() -> None:
+    first = uuid4()
+    second = uuid4()
+
+    store = _FakeVectorStore(
+        [
+            _vector_hit(doc_id=first, distance=0.1),
+            _vector_hit(doc_id=second, distance=0.2),
+        ]
+    )
+    repo = _mock_repo([_document(first), _document(second)])
+    service = SearchService(repo, store, reranker=_ReverseReranker())
+
+    results, _ = await service.search(actor=_admin(), query="anything")
+
+    # Without the reranker, first would come before second (lower
+    # distance). Reverse reranker flips them.
+    assert [r["document_id"] for r in results] == [second, first]
+
+
+async def test_reranker_failure_falls_back_to_rrf_order() -> None:
+    a = uuid4()
+    b = uuid4()
+
+    store = _FakeVectorStore(
+        [
+            _vector_hit(doc_id=a, distance=0.1),
+            _vector_hit(doc_id=b, distance=0.2),
+        ]
+    )
+    repo = _mock_repo([_document(a), _document(b)])
+    service = SearchService(repo, store, reranker=_FailingReranker())
+
+    results, _ = await service.search(actor=_admin(), query="anything")
+
+    # Failure doesn't kill the search — RRF order preserved.
+    assert [r["document_id"] for r in results] == [a, b]
+
+
+async def test_reranker_respects_user_limit() -> None:
+    ids = [uuid4() for _ in range(5)]
+    store = _FakeVectorStore(
+        [_vector_hit(doc_id=i, distance=0.1 + n * 0.01) for n, i in enumerate(ids)]
+    )
+    repo = _mock_repo([_document(i) for i in ids])
+    service = SearchService(repo, store, reranker=_ReverseReranker())
+
+    results, _ = await service.search(actor=_admin(), query="anything", limit=2)
+
+    # User asked for 2; reranker honors top_n.
+    assert len(results) == 2
+
+
 async def test_non_ready_doc_with_indexed_chunks_is_excluded() -> None:
     """A FAILED/PROCESSING doc whose chunks are still in Chroma must not surface.
 

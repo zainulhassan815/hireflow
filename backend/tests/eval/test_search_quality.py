@@ -76,6 +76,7 @@ async def test_search_quality_report(slug_to_document_id, eval_owner):
     """Run every eval case; print report; fail on hard violations."""
     from app.adapters.chroma_store import ChromaVectorStore
     from app.adapters.embeddings.registry import get_embedding_provider
+    from app.adapters.rerankers.registry import get_reranker
     from app.core.config import settings
     from app.core.db import SessionLocal
 
@@ -84,13 +85,16 @@ async def test_search_quality_report(slug_to_document_id, eval_owner):
         port=settings.chroma_port,
         embedder=get_embedding_provider(settings),
     )
+    reranker = get_reranker(settings)
 
     per_case: list[dict] = []
     by_bucket: dict[str, list[dict]] = defaultdict(list)
     hard_failures: list[str] = []
 
     async with SessionLocal() as session:
-        service = SearchService(DocumentRepository(session), store)
+        service = SearchService(
+            DocumentRepository(session), store, reranker=reranker
+        )
 
         for case in EVAL_QUERIES:
             ranked = await _run_query(service, eval_owner, case, slug_to_document_id)

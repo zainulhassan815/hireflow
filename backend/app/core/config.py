@@ -47,6 +47,23 @@ class Settings(BaseSettings):
     # Enable table transformer in hi_res; no-op in fast mode.
     extraction_infer_tables: bool = True
 
+    # Cross-encoder reranker (F80.5)
+    # Rerank the merged RRF top-K with a (query, chunk) cross-encoder
+    # that attends over both at once. Much more accurate than bi-encoder
+    # cosine similarity but slower — only run on a small candidate set.
+    # ``none`` falls back to NullReranker (passthrough).
+    #
+    # Default ``none`` until F85.c (weighted RRF) lands: on a small
+    # corpus, BGE's neutral semantic scoring can override filename /
+    # title intent (e.g. ranking a doc that mentions "menu extraction"
+    # above a doc literally named "Menu Analyzer"). Flip to ``local`` to
+    # A/B against the baseline; the infrastructure is wired either way.
+    reranker_provider: str = "none"
+    reranker_model: str = "BAAI/bge-reranker-base"
+    # Candidates to hand the reranker. Retrieval runs up to this many,
+    # then reranker picks the top-N (N = user's ``limit``).
+    reranker_top_k: int = 20
+
     # Chunk contextualizer (F82.c)
     # - ``llm``: generate context per chunk via the configured LlmProvider
     # - ``none``: skip contextualization entirely (fast path, no LLM cost)

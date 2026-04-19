@@ -230,6 +230,57 @@ class EmbeddingProvider(Protocol):
     def dimension(self) -> int: ...
 
 
+# ---------- Reranker (F80.5) ----------
+
+
+@dataclass(frozen=True, slots=True)
+class RerankCandidate:
+    """A document (or chunk) handed to a reranker.
+
+    ``document_id`` is opaque to the reranker — it's the caller's
+    handle to map scores back to its own result objects.
+    ``text`` is what the cross-encoder actually reads alongside the
+    query; typically the top-scoring chunk per document.
+    ``original_score`` / ``metadata`` pass through untouched.
+    """
+
+    document_id: UUID
+    text: str
+    original_score: float = 0.0
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@runtime_checkable
+class Reranker(Protocol):
+    """Reorder a small candidate set using (query, text) cross-encoder scoring.
+
+    Typical use: after retrieval returns top-K (say 20) via fast
+    bi-encoder similarity, the reranker reads each candidate alongside
+    the query simultaneously and returns a better-ordered list. Cost is
+    per-query only; no index-time work.
+
+    Called synchronously from the FastAPI request handler; if inference
+    is heavy enough to matter, callers should hop to a thread.
+    """
+
+    def rerank(
+        self,
+        query: str,
+        candidates: list[RerankCandidate],
+        top_n: int | None = None,
+    ) -> list[RerankCandidate]:
+        """Return candidates reordered by relevance (best first).
+
+        If ``top_n`` is set, truncate to that many items. If ``top_n``
+        exceeds ``len(candidates)``, returns all candidates in the new
+        order — no padding.
+        """
+        ...
+
+    @property
+    def model_name(self) -> str: ...
+
+
 # ---------- Vector store ----------
 
 

@@ -18,6 +18,7 @@ path, raw RRF scores not normalized). F85 added the lexical path.
 
 from __future__ import annotations
 
+import logging
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -25,12 +26,19 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from app.adapters.protocols import VectorHit, VectorStore
+from app.adapters.protocols import (
+    RerankCandidate,
+    Reranker,
+    VectorHit,
+    VectorStore,
+)
 from app.core.config import settings
 from app.models import Document, DocumentStatus, DocumentType, User, UserRole
 from app.repositories.document import DocumentRepository
 from app.services.highlight import extract_query_terms, find_match_spans
 from app.services.query_expansion import expand_acronyms, normalize_tech_tokens
+
+logger = logging.getLogger(__name__)
 
 _RRF_K = 60  # standard reciprocal rank fusion constant
 
@@ -49,9 +57,11 @@ class SearchService:
         self,
         documents: DocumentRepository,
         vector_store: VectorStore | None,
+        reranker: Reranker | None = None,
     ) -> None:
         self._documents = documents
         self._vector_store = vector_store
+        self._reranker = reranker
 
     async def search(
         self,
@@ -145,7 +155,11 @@ class SearchService:
                 document_type=document_type,
             )
 
-        merged = self._rrf_merge(vector_hits, sql_docs, lexical_hits, limit)
+        # Widen the merged set when a reranker is wired so the cross-
+        # encoder has enough candidates to reshuffle meaningfully.
+        # After rerank, we truncate back to the user's requested limit.
+        merge_limit = max(settings.reranker_top_k, limit) if self._reranker else limit
+        merged = self._rrf_merge(vector_hits, sql_docs, lexical_hits, merge_limit)
 
         doc_ids = [m.document_id for m in merged]
         docs_map = await self._documents.get_many(doc_ids)
@@ -183,8 +197,38 @@ class SearchService:
                 }
             )
 
+        # F80.5: cross-encoder rerank the merged top-K into top-limit.
+        # Uses the top-1 highlight per doc as the cross-encoder input —
+        # chunk-level is the natural unit since 512-token limit forbids
+        # whole-doc reranking anyway.
+        if self._reranker is not None and results:
+            results = self._rerank_results(query, results, limit)
+        else:
+            results = results[:limit]
+
         elapsed_ms = int((time.monotonic() - start) * 1000)
         return results, elapsed_ms
+
+    def _rerank_results(
+        self, query: str, results: list[dict[str, Any]], limit: int
+    ) -> list[dict[str, Any]]:
+        """Apply the cross-encoder reranker; fall back to RRF order on failure."""
+        candidates = [
+            RerankCandidate(
+                document_id=r["document_id"],
+                text=(r["highlights"][0]["text"] if r["highlights"] else r["filename"]),
+                original_score=0.0,
+            )
+            for r in results
+        ]
+        try:
+            reranked = self._reranker.rerank(query, candidates, top_n=limit)
+        except Exception:
+            logger.exception("rerank failed; falling back to RRF order")
+            return results[:limit]
+
+        by_id = {r["document_id"]: r for r in results}
+        return [by_id[c.document_id] for c in reranked if c.document_id in by_id]
 
     async def _drop_orphan_vector_hits(self, hits: list[VectorHit]) -> list[VectorHit]:
         """Drop vector hits whose document is missing or non-READY in Postgres.
