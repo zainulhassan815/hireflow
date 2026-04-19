@@ -473,7 +473,7 @@ envelope with the right HTTP status.
 {
   "answer": "…",
   "citations": [SourceCitation, …],
-  "model": "claude-3-haiku-20240307",
+  "model": "claude-haiku-4-5-20251001",
   "query_time_ms": 3840,
   "confidence": "high" | "medium" | "low" | null,   # F81.e
   "intent":     "count" | "comparison" | … | "general",  # F81.g
@@ -637,7 +637,7 @@ All live in `backend/app/core/config.py`:
 | `embedding_provider` | `local` | Choose `EmbeddingProvider` impl |
 | `embedding_model` | `BAAI/bge-small-en-v1.5` | Per-model Chroma collection + threshold table |
 | `llm_provider` | `anthropic` | `claude` or `ollama` |
-| `llm_model` | `claude-3-haiku-20240307` | Provider-specific model name |
+| `llm_model` | `claude-haiku-4-5-20251001` | Provider-specific model name |
 | `reranker_provider` | `local` | `local` or `none` (disable) |
 | `reranker_top_k` | 20 | Candidates handed to cross-encoder |
 | `search_max_distance` | `None` | Override embedder's threshold (search path) |

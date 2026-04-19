@@ -169,12 +169,11 @@ class Settings(BaseSettings):
     rrf_weight_vector: float = 1.0
     rrf_weight_sql: float = 1.0
 
-    # LLM / Embeddings
+    # LLM
     llm_provider: str = "anthropic"
-    llm_model: str = "claude-3-haiku-20240307"
+    llm_model: str = "claude-haiku-4-5-20251001"
     anthropic_api_key: SecretStr | None = None
     openai_api_key: SecretStr | None = None
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
