@@ -229,6 +229,19 @@ class EmbeddingProvider(Protocol):
     @property
     def dimension(self) -> int: ...
 
+    @property
+    def recommended_distance_threshold(self) -> float:
+        """Cosine-distance cutoff above which hits are considered noise.
+
+        Varies per model: bge-small's relevant hits cluster ~0.18-0.30
+        so 0.35 is a safe cutoff; MiniLM's distribution is wider. F85.d
+        lets each embedder own this so swapping models doesn't silently
+        break the threshold. ``SearchService`` uses this when
+        ``settings.search_max_distance`` is ``None``; an explicit float
+        in settings still overrides (operator knob).
+        """
+        ...
+
 
 # ---------- Reranker (F80.5) ----------
 

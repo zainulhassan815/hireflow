@@ -297,11 +297,24 @@ class SearchService:
         hits = self._vector_store.query(
             query_text=query, n_results=n_results, where=where
         )
-        # Drop hits worse than the configured cosine-distance ceiling.
-        # Keeping them means ChromaDB's "top N" becomes "everything
-        # matches" as soon as the inbox is mostly irrelevant to the
-        # query.
-        return [h for h in hits if h.distance <= settings.search_max_distance]
+        # Drop hits worse than the cosine-distance ceiling. Keeping them
+        # means ChromaDB's "top N" becomes "everything matches" as soon
+        # as the inbox is mostly irrelevant to the query.
+        #
+        # F85.d: threshold resolution order —
+        # 1) explicit ``settings.search_max_distance`` override
+        # 2) embedder's per-model recommendation
+        # 3) safe default (0.5)
+        threshold = self._resolve_distance_threshold()
+        return [h for h in hits if h.distance <= threshold]
+
+    def _resolve_distance_threshold(self) -> float:
+        if settings.search_max_distance is not None:
+            return settings.search_max_distance
+        embedder = getattr(self._vector_store, "embedder", None)
+        if embedder is not None:
+            return embedder.recommended_distance_threshold
+        return 0.5
 
     @staticmethod
     def _rrf_merge(

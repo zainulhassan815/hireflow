@@ -99,14 +99,12 @@ def test_multiple_headings_track_current_section() -> None:
     experience = [
         c
         for c in chunks
-        if c.metadata.get("section_heading") == "EXPERIENCE"
-        and "ACME" in c.text
+        if c.metadata.get("section_heading") == "EXPERIENCE" and "ACME" in c.text
     ]
     skills = [
         c
         for c in chunks
-        if c.metadata.get("section_heading") == "SKILLS"
-        and "Python" in c.text
+        if c.metadata.get("section_heading") == "SKILLS" and "Python" in c.text
     ]
     assert experience, "Expected a narrative chunk tagged with EXPERIENCE heading"
     assert skills, "Expected a narrative chunk tagged with SKILLS heading"

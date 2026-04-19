@@ -67,9 +67,55 @@ class ChromaVectorStore:
             },
         )
 
+        self._log_startup_integrity()
+
     @property
     def collection_name(self) -> str:
         return self._collection_name
+
+    @property
+    def embedder(self) -> EmbeddingProvider:
+        """Public handle to the embedder this store was built with.
+
+        Lets ``SearchService`` ask for the embedder's recommended
+        distance threshold (F85.d) without poking at a private attr.
+        """
+        return self._embedder
+
+    def _log_startup_integrity(self) -> None:
+        """F85.f: loud log line + mismatch warning on construction.
+
+        Per-model collection naming means two different models can't
+        *share* a collection (they each land in their own). This check
+        mostly catches the "someone attached unusual metadata to our
+        named collection" drift and gives operators a snapshot of
+        model / dim / chunk count when the worker or API boots.
+        """
+        try:
+            existing_meta = self._collection.metadata or {}
+            stored_model = existing_meta.get("embedding_model")
+            count = self._collection.count()
+            logger.info(
+                "ChromaVectorStore ready: collection=%s model=%s chunks=%d",
+                self._collection_name,
+                self._embedder.model_name,
+                count,
+            )
+            if stored_model and stored_model != self._embedder.model_name:
+                logger.warning(
+                    "Chroma collection %s metadata says embedding_model=%r "
+                    "but we were instantiated with %r. Run "
+                    "scripts/reindex_embeddings.py to align.",
+                    self._collection_name,
+                    stored_model,
+                    self._embedder.model_name,
+                )
+        except Exception:
+            # Never let a diagnostics log crash the process at boot.
+            logger.warning(
+                "ChromaVectorStore: integrity log failed (non-fatal)",
+                exc_info=True,
+            )
 
     def upsert(
         self,

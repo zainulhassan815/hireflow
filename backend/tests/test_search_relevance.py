@@ -461,6 +461,75 @@ async def test_orphan_vector_chunk_dropped_before_ranking() -> None:
 
 
 # ---------------------------------------------------------------------------
+# F85.d per-model distance threshold
+# ---------------------------------------------------------------------------
+
+
+async def test_distance_threshold_resolves_from_embedder_when_setting_is_none(
+    monkeypatch,
+) -> None:
+    """With search_max_distance=None, SearchService asks the embedder."""
+    monkeypatch.setattr(settings, "search_max_distance", None)
+
+    kept = uuid4()
+    dropped = uuid4()
+
+    store = _FakeVectorStore(
+        [
+            _vector_hit(doc_id=kept, distance=0.1),
+            _vector_hit(doc_id=dropped, distance=0.5),
+        ]
+    )
+    # Embedder reports threshold 0.2 — only `kept` should survive.
+    store.embedder = _FakeEmbedder(recommended=0.2)
+    repo = _mock_repo([_document(kept), _document(dropped)])
+    service = SearchService(repo, store)
+
+    results, _ = await service.search(actor=_admin(), query="anything")
+    returned = {r["document_id"] for r in results}
+    assert kept in returned
+    assert dropped not in returned
+
+
+async def test_distance_threshold_setting_overrides_embedder(monkeypatch) -> None:
+    """An explicit float in settings beats the embedder's recommendation."""
+    # Embedder says 0.2 but settings say 0.9 — both hits survive.
+    monkeypatch.setattr(settings, "search_max_distance", 0.9)
+
+    a = uuid4()
+    b = uuid4()
+
+    store = _FakeVectorStore(
+        [
+            _vector_hit(doc_id=a, distance=0.3),
+            _vector_hit(doc_id=b, distance=0.5),
+        ]
+    )
+    store.embedder = _FakeEmbedder(recommended=0.2)
+    repo = _mock_repo([_document(a), _document(b)])
+    service = SearchService(repo, store)
+
+    results, _ = await service.search(actor=_admin(), query="anything")
+    returned = {r["document_id"] for r in results}
+    assert a in returned
+    assert b in returned
+
+
+class _FakeEmbedder:
+    def __init__(self, recommended: float, name: str = "fake") -> None:
+        self._recommended = recommended
+        self._name = name
+
+    @property
+    def model_name(self) -> str:
+        return self._name
+
+    @property
+    def recommended_distance_threshold(self) -> float:
+        return self._recommended
+
+
+# ---------------------------------------------------------------------------
 # F85.c weighted RRF
 # ---------------------------------------------------------------------------
 

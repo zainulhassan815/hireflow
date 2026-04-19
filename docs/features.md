@@ -8,7 +8,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ## Current focus
 
-**Retrieval track complete** — F80, F80.5, F82.c/d/e, F85.a/c, F86, F87, F88 all landed. Pipeline shape: hybrid retrieval (vector + FTS + SQL metadata + trigram fallback) → weighted RRF → cross-encoder rerank → hydration → highlights. See `docs/rag-pipeline.md` for the current diagram.
+**Retrieval track complete** — F80, F80.5, F82.c/d/e, F85.a/c/d/f, F86, F87, F88 all landed. Pipeline shape: hybrid retrieval (vector + FTS + SQL metadata + trigram fallback) → weighted RRF → cross-encoder rerank → hydration → highlights. See `docs/rag-pipeline.md` for the current diagram.
 
 Eval on 7-doc fixture: **P@5 0.252 · R@5 1.000 · MRR 0.859**. Ceiling hit on fixture size; further retrieval wins need corpus growth (more docs with overlapping vocabulary).
 
@@ -307,14 +307,21 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - Classification audit: log classified vs actual type, track accuracy over time
   - User correction: let HR override the classified type, feed back into the system
 
-- [~] **F85 · Embedding quality**
+- [~] **F85 · Embedding quality** (F85.b/e still open — gated on real-corpus scale)
   - [x] **F85.a** Model-agnostic `EmbeddingProvider` protocol + `SentenceTransformerEmbedder` POC with `BAAI/bge-small-en-v1.5`. ChromaVectorStore takes pre-computed vectors; per-model collection naming; `scripts/reindex_embeddings.py`. Eval: P@5 0.253→0.252 (tied), R@5 0.974→**1.000**, MRR 0.870→0.841.
-  - [ ] **F85.b** Model exploration on HF leaderboard — try `intfloat/e5-small-v2`, `intfloat/e5-base-v2`, `nomic-ai/nomic-embed-text-v1.5`, `jinaai/jina-embeddings-v2-base-en`, `BAAI/bge-base-en-v1.5`. Process: flip `EMBEDDING_MODEL`, `uv run python -m scripts.reindex_embeddings`, `make eval`, keep if P@5/MRR clearly wins. Remember to recalibrate `search_max_distance` per model.
+  - [ ] **F85.b** Model exploration — the single biggest unexplored retrieval lever. bge-small-en-v1.5 is a reasonable default but MTEB shows meaningful lift is available on small/base models that still fit on CPU. Candidates to A/B in rough priority order:
+    - `intfloat/e5-base-v2` / `intfloat/e5-small-v2` — task-instructed, unlocks F85.e prefixes
+    - `BAAI/bge-base-en-v1.5` — same family, bigger; usually +2–4 P@5 on MTEB retrieval
+    - `nomic-ai/nomic-embed-text-v1.5` — long-context (8k), matryoshka dims; good for resumes that blow past 512 tokens
+    - `jinaai/jina-embeddings-v2-base-en` — 8k context, competitive on MTEB
+    - `mixedbread-ai/mxbai-embed-large-v1` — top of MTEB small/base tier; slower but may be worth it
+    - `thenlper/gte-base` / `gte-large` — Alibaba; strong asymmetric-query scores
+    Reference: https://huggingface.co/spaces/mteb/leaderboard (filter by "Retrieval (en)"). Recipe per candidate: (1) flip `EMBEDDING_MODEL` in `.env`; (2) `uv run python -m scripts.reindex_embeddings`; (3) `make eval`; (4) compare P@5 / R@5 / MRR against baseline. F85.d means `search_max_distance` auto-travels via the embedder table — add a row to `_MODEL_DISTANCE_THRESHOLDS` before evaluating so hits aren't wrongly filtered. Expected dev-corpus ceiling: current corpus is tiny (8 docs), so wins here will be modest; model exploration matters more once the real corpus grows.
   - [x] **F85.c** Weighted RRF: `_rrf_merge` takes `w_vector` / `w_sql` / `w_lexical` multipliers. Defaults bias lexical up (2.0) so F87's filename-A / skills-B weighting carries through to the merged ranking. Unlocked F80.5 reranker default-on (composes cleanly; MRR holds at 0.859).
-  - [ ] **F85.d** Per-model threshold: make `search_max_distance` travel with the embedder instead of a global setting. Each model has its own cosine distribution; a hardcoded global breaks on swap. Small refactor (~30 min).
+  - [x] **F85.d** Per-model distance threshold travels with the embedder. `EmbeddingProvider` protocol now exposes `recommended_distance_threshold`; `SentenceTransformerEmbedder` ships a curated `_MODEL_DISTANCE_THRESHOLDS` table (BGE 0.35, MiniLM/mpnet 0.60, E5 0.50, nomic 0.45, jina 0.40) with a 0.5 default + one-time warning for unknown models. `settings.search_max_distance` is now `float | None` — None means "ask the embedder," an explicit float still overrides (operator knob). `SearchService._resolve_distance_threshold` reads via `ChromaVectorStore.embedder` property. Unlocks model swaps without silent relevance regressions.
   - [ ] **F85.e** Document-type-specific embedding prefixes: "resume: ..." vs "job description: ..." for models that support task instructions (e5, instructor, nomic). **Depends on F85.b** — no point before we adopt an instruct model.
   - [x] Hybrid retrieval: Postgres FTS (`ts_rank_cd`) folded into RRF — eval P@5 0.175→0.238 (+36%), `edge` bucket 0.0→0.4
-  - [~] **F85.f** Embedding versioning: `documents.embedding_model_version` is stamped at index time ✅. Missing: startup check that warns when the configured `EMBEDDING_MODEL` differs from what existing chunks were built with. Per-model Chroma collection naming makes the data-corruption risk low; the warning is a developer-experience polish.
+  - [x] **F85.f** Embedding versioning + startup integrity log. Per-chunk `embedding_model_version` stamped at index time ✅. `ChromaVectorStore._log_startup_integrity` logs `collection=<name> model=<name> chunks=<N>` on construction and warns when the Chroma collection's `embedding_model` metadata drifts from the configured embedder (pointing operators to `scripts/reindex_embeddings.py`). Non-fatal — wrapped in try/except so diagnostics can't crash boot.
 
 - [x] **F86 · Search correctness (P0)** — see `docs/search-hardening.md` §3
   - [x] Per-user ownership scoping (admin bypass) wired into vector `where`, FTS, and SQL metadata paths

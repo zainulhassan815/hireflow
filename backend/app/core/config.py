@@ -119,15 +119,13 @@ class Settings(BaseSettings):
     vision_model: str | None = None
     ollama_base_url: str = "http://localhost:11434"
 
-    # Search relevance (F80). Defaults chosen for
-    # ``BAAI/bge-small-en-v1.5`` in Chroma's cosine space: relevant hits
-    # land around 0.18-0.30, near-domain "maybe" hits around 0.38-0.45,
-    # unrelated 0.45+. 0.35 is tight enough to reject near-domain noise
-    # (a Python resume matching "vendor services agreement" via the word
-    # "services") while keeping cleanly-relevant hits. If you swap the
-    # embedding model, recalibrate via ``make eval`` — different models
-    # produce different distance distributions even on the same text.
-    search_max_distance: float = 0.35
+    # Search relevance (F80 / F85.d). When ``None``, SearchService
+    # asks the configured embedder for its recommended threshold
+    # (per-model table in ``SentenceTransformerEmbedder``). Set an
+    # explicit float to override for this deploy — rarely needed, but
+    # the operator knob is there. Legacy value for bge-small was 0.35;
+    # that lives in the embedder's threshold table now.
+    search_max_distance: float | None = None
     search_confidence_high: float = 0.02
     search_confidence_medium: float = 0.01
     search_max_highlights_per_doc: int = 3

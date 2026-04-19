@@ -92,9 +92,7 @@ async def test_search_quality_report(slug_to_document_id, eval_owner):
     hard_failures: list[str] = []
 
     async with SessionLocal() as session:
-        service = SearchService(
-            DocumentRepository(session), store, reranker=reranker
-        )
+        service = SearchService(DocumentRepository(session), store, reranker=reranker)
 
         for case in EVAL_QUERIES:
             ranked = await _run_query(service, eval_owner, case, slug_to_document_id)

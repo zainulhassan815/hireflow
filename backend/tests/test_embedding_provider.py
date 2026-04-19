@@ -27,6 +27,54 @@ def test_model_name_round_trips(embedder: SentenceTransformerEmbedder) -> None:
     assert embedder.model_name == "BAAI/bge-small-en-v1.5"
 
 
+# ---------- F85.d recommended threshold ----------
+
+
+def test_recommended_threshold_for_known_model() -> None:
+    """Known model hits the curated table."""
+    e = SentenceTransformerEmbedder(model_name="BAAI/bge-small-en-v1.5")
+    assert e.recommended_distance_threshold == 0.35
+
+
+def test_recommended_threshold_differs_per_model_family() -> None:
+    """MiniLM's wider distribution should get a wider threshold."""
+    bge = SentenceTransformerEmbedder(model_name="BAAI/bge-small-en-v1.5")
+    minilm = SentenceTransformerEmbedder(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
+    assert minilm.recommended_distance_threshold > bge.recommended_distance_threshold
+
+
+def test_recommended_threshold_falls_back_for_unknown_model(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Unknown model gets the default + a warning on first access."""
+    import logging
+
+    caplog.set_level(logging.WARNING)
+    e = SentenceTransformerEmbedder(model_name="hf/totally-new-model-v9000")
+    threshold = e.recommended_distance_threshold
+    # Default is 0.5 (documented conservative choice).
+    assert threshold == 0.5
+    # Warning fired.
+    assert any(
+        "no curated distance threshold" in rec.message
+        and "totally-new-model-v9000" in rec.message
+        for rec in caplog.records
+    )
+    # Second access doesn't spam the log.
+    caplog.clear()
+    _ = e.recommended_distance_threshold
+    assert not caplog.records
+
+
+def test_recommended_threshold_is_cheap_no_model_load() -> None:
+    """Threshold lookup must not load weights — it's a pure string lookup."""
+    e = SentenceTransformerEmbedder(model_name="BAAI/bge-small-en-v1.5")
+    _ = e.recommended_distance_threshold
+    assert e._model is None  # still lazy
+
+
 def test_embed_query_returns_correct_shape(
     embedder: SentenceTransformerEmbedder,
 ) -> None:
