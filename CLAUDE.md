@@ -56,8 +56,9 @@ uv run pytest
 - `docs/frontend-standards.md` — component + data-fetching patterns
 - `docs/frontend-api-rules.md` — **strict rules for frontend ↔ backend wiring** (SDK types only, no mock data, no custom types)
 - `docs/srs-document.md` — functional requirements (FR01+) and use cases
-- `docs/rag-architecture.md` — RAG design reference (intent/rationale)
-- `docs/rag-pipeline.md` — **current-state RAG pipeline: diagrams, component map, re-index flows** (read when touching extraction/chunking/embeddings/search)
+- `docs/rag-system.md` — **current-state RAG architecture: retrieval, intent classification, prompt composition, streaming, observability, failure modes** (read when touching `RagService`, `IntentClassifier`, `rag_prompts.py`, `/rag/*` routes, or answer-rendering components)
+- `docs/rag-architecture.md` — RAG design reference (intent/rationale; predates F81)
+- `docs/rag-pipeline.md` — low-level ingestion pipeline diagrams + re-index flows
 - `docs/search-hardening.md` — search edge-case catalog + P0–P3 roadmap
 
 ## Workflow (strict)

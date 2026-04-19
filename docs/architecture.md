@@ -244,8 +244,11 @@ Register → Login → Access Token (30m) + Refresh Token (7d)
 
 ## 7. Document processing & search — pipelines
 
-Detailed diagrams, component map, and re-index flows live in
-`docs/rag-pipeline.md`. Quick summary:
+The canonical current-state reference is **`docs/rag-system.md`**
+(architecture overview post-F81: retrieval, intent classification,
+prompt composition, streaming, observability, schemas, failure
+modes). `docs/rag-pipeline.md` remains the low-level diagram of the
+ingestion pipeline specifically. Quick summary:
 
 **Ingestion** (Celery worker, triggered on upload):
 1. Fetch blob from MinIO
@@ -291,9 +294,17 @@ All paths respect `owner_id` (per-user scoping, admin bypass) and
 `status=READY`.
 
 `/search` returns ranked docs with snippets + highlight `match_spans`.
-`/rag/query` stuffs top chunks into a Claude Sonnet prompt and
-returns `answer + citations`. Full diagrams and component map:
-`docs/rag-pipeline.md`.
+
+`/rag/query` and `/rag/stream` share the same retrieval path via the
+`ChunkRetriever` Protocol (F81.k) — `SearchService.retrieve_chunks`
+returns chunk-level ranked output; `RagService` applies F81.b/c
+gates, runs an embedding-based intent classifier (F81.g, 10 intents
++ `general`), composes a three-layer system prompt
+(identity + evidence rules + per-intent format) via
+`rag_prompts.py`, and streams the answer with typed citations +
+confidence + intent on the wire. See **`docs/rag-system.md`** for the
+full architecture, schemas, observability, failure modes, and
+feature-to-code map.
 
 ### Candidate matching (`POST /jobs/{id}/match`)
 

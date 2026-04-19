@@ -1,11 +1,19 @@
-# RAG pipeline — current-state reference
+# RAG pipeline — ingestion-focused reference
 
-Canonical description of how Hireflow ingests documents and serves
-search / Q&A. Companion to `architecture.md` (system-wide) and
-`rag-architecture.md` (design rationale).
+Low-level diagrams of the document **ingestion pipeline** (extract →
+chunk → embed → index). Kept because the indexing flow is stable
+and the pictures are useful when touching the worker code.
+
+> **For the broader RAG system architecture** — retrieval, intent
+> classification, prompt composition, streaming, observability, wire
+> schemas, failure modes, and the feature-to-code map — see
+> **[`docs/rag-system.md`](rag-system.md)**. That's the canonical
+> current-state reference after the F81 track landed. Keep this doc
+> for the ingestion specifics; pull from `rag-system.md` for
+> everything post-ingestion.
 
 Keep this doc in sync with the code. When a slice lands that changes
-either pipeline, update the diagram + component map below.
+the ingestion pipeline, update the diagram + component map below.
 
 ---
 
