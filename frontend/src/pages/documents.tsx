@@ -261,11 +261,12 @@ export function DocumentsPage() {
       {documents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <FileTextIcon className="text-muted-foreground size-12" />
-          <Typography variant="h4" className="mt-4">
-            No documents yet
+          <Typography variant="h4" className="mt-4 max-w-[28ch]">
+            Nothing here yet.
           </Typography>
-          <Typography variant="muted" className="mt-1">
-            Upload your first document to get started
+          <Typography variant="muted" className="mt-1 max-w-[48ch]">
+            Upload resumes, reports, contracts — whatever you want to search
+            later. They&rsquo;ll show up as soon as processing finishes.
           </Typography>
           <Button className="mt-4" onClick={() => setUploadOpen(true)}>
             <UploadIcon className="size-4" data-icon="inline-start" />

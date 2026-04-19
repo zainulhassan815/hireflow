@@ -121,11 +121,12 @@ export function JobsPage() {
       {jobs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <BriefcaseIcon className="text-muted-foreground size-12" />
-          <Typography variant="h4" className="mt-4">
-            No jobs yet
+          <Typography variant="h4" className="mt-4 max-w-[28ch]">
+            No openings on the board.
           </Typography>
-          <Typography variant="muted" className="mt-1">
-            Create your first job posting to start screening candidates
+          <Typography variant="muted" className="mt-1 max-w-[48ch]">
+            Post a job with the skills and experience you&rsquo;re looking for.
+            Matching resumes will sort to the top as they come in.
           </Typography>
           <Button className="mt-4" onClick={() => navigate("/jobs/create")}>
             <PlusIcon className="size-4" data-icon="inline-start" />

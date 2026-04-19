@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useQuery, queryOptions } from "@tanstack/react-query";
-import { FileIcon, FileTextIcon, ImageIcon, SparklesIcon } from "lucide-react";
+import { FileIcon, FileTextIcon, ImageIcon, LayersIcon } from "lucide-react";
 
 import {
   findSimilarDocuments,
@@ -70,7 +70,7 @@ export function SimilarDocuments({
   return (
     <section aria-labelledby="similar-docs-heading">
       <div className="mb-3 flex items-center gap-2">
-        <SparklesIcon className="text-muted-foreground size-4" />
+        <LayersIcon className="text-muted-foreground size-4" />
         <Typography variant="h6" id="similar-docs-heading">
           Similar documents
         </Typography>

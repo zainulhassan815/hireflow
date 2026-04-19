@@ -10,7 +10,7 @@ import {
 } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -247,36 +247,23 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <Typography variant="h5">Recent Documents</Typography>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => navigate("/documents")}
-          >
-            View All
-          </Button>
-        </div>
+      {/* F90.g — skip the Recent Documents block entirely when the
+          library is empty; the hero above already carries the empty
+          voice + upload CTA. Double-empty was noisy. */}
+      {stats.documents > 0 && (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <Typography variant="h5">Recent Documents</Typography>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => navigate("/documents")}
+            >
+              View All
+            </Button>
+          </div>
 
-        {recent.length === 0 ? (
-          <Card className="border">
-            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-              <FileTextIcon className="text-muted-foreground size-12" />
-              <Typography variant="h5" className="mt-4">
-                No documents yet
-              </Typography>
-              <Typography variant="muted" className="mt-1">
-                Upload your first document to get started
-              </Typography>
-              <Button className="mt-4" onClick={() => navigate("/documents")}>
-                <UploadIcon className="size-4" data-icon="inline-start" />
-                Go to Documents
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
           <Card className="border">
             <Table>
               <TableHeader>
@@ -351,8 +338,8 @@ export function DashboardPage() {
               </TableBody>
             </Table>
           </Card>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

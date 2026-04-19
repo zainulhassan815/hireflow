@@ -395,7 +395,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - [x] **F90.f** `/impeccable:harden` — destructive-action confirms,
     skeleton loaders replace spinners, retry affordances, real empty-
     state voice.
-  - [ ] **F90.g** `/impeccable:delight` — brand moments: login hero,
+  - [x] **F90.g** `/impeccable:delight` — brand moments: login hero,
     empty states, first-use onboarding. Peak-end rule targets.
   - [ ] **F90.h** `/impeccable:polish` — final pass: pure-black backdrop
     → brand-tinted, kill bounce animation, align spacing drift, document

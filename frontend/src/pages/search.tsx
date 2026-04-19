@@ -1,10 +1,9 @@
 import * as React from "react";
 import {
-  BotIcon,
   FileTextIcon,
+  MessageCircleIcon,
   SearchIcon,
   SendIcon,
-  SparklesIcon,
   UserIcon,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -398,11 +397,11 @@ export function SearchPage() {
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="search">
             <SearchIcon className="mr-2 size-4" />
-            Semantic Search
+            Search
           </TabsTrigger>
           <TabsTrigger value="chat">
-            <SparklesIcon className="mr-2 size-4" />
-            AI Q&A
+            <MessageCircleIcon className="mr-2 size-4" />
+            Ask
           </TabsTrigger>
         </TabsList>
 
@@ -555,12 +554,10 @@ export function SearchPage() {
         <TabsContent value="chat" className="mt-6 flex min-h-0 flex-1 flex-col">
           <Card className="flex h-full min-h-0 flex-col">
             <CardHeader className="border-b p-4">
-              <div className="flex items-center gap-2">
-                <SparklesIcon className="text-primary size-5" />
-                <Typography variant="h5">Ask about your documents</Typography>
-              </div>
+              <Typography variant="h5">Ask about your documents</Typography>
               <Typography variant="muted" className="text-sm">
-                Ask questions and get AI-powered answers with source citations
+                Answers come straight from your library, with sources you can
+                open.
               </Typography>
             </CardHeader>
 
@@ -568,12 +565,13 @@ export function SearchPage() {
               <div className="space-y-4">
                 {chatMessages.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <SparklesIcon className="text-muted-foreground size-12 opacity-50" />
+                    <MessageCircleIcon className="text-muted-foreground size-12 opacity-50" />
                     <Typography variant="h5" className="mt-4">
                       Ask anything about your documents
                     </Typography>
                     <Typography variant="muted" className="mt-1">
-                      e.g. &ldquo;Who has Kubernetes experience?&rdquo;
+                      Try: &ldquo;Who has Kubernetes experience?&rdquo; or
+                      &ldquo;Which resumes mention a security clearance?&rdquo;
                     </Typography>
                   </div>
                 )}
@@ -590,8 +588,8 @@ export function SearchPage() {
                       }`}
                     >
                       {message.role === "assistant" && (
-                        <div className="bg-primary flex size-8 shrink-0 items-center justify-center rounded-full">
-                          <BotIcon className="size-4 text-white" />
+                        <div className="bg-foreground text-background font-display flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
+                          H
                         </div>
                       )}
                       <div

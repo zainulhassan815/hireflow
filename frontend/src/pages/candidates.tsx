@@ -79,11 +79,12 @@ export function CandidatesPage() {
       {candidates.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <UsersIcon className="text-muted-foreground size-12" />
-          <Typography variant="h4" className="mt-4">
-            No candidates yet
+          <Typography variant="h4" className="mt-4 max-w-[28ch]">
+            No candidates yet.
           </Typography>
-          <Typography variant="muted" className="mt-1">
-            Upload resumes and create candidates from the Documents page
+          <Typography variant="muted" className="mt-1 max-w-[48ch]">
+            Candidates show up here once you&rsquo;ve turned resumes into
+            profiles. Head to Documents to do that.
           </Typography>
         </div>
       ) : (
