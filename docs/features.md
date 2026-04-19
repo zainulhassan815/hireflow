@@ -602,13 +602,12 @@ Production-grade interface with attention to detail, accessibility, and delight.
   provided documents" because the case study didn't explicitly name
   the candidate, and the candidate's resume skill-list didn't include
   "stripe" (it was buried in project narrative). The dots exist in
-  the data but nothing connects them. Three layers to the fix, each
-  independent and shippable on its own.
+  the data but nothing connects them.
   - [x] **F103.a** Prompt: loosen the "Not in the provided
     documents" sentinel in `rag_prompts.EVIDENCE_RULES` so partial /
     indirect evidence is described and cited rather than deflected.
     Reserve the sentinel for genuinely off-topic retrievals.
-    PROMPT_VERSION bumped v2 → v3. Shipped as part of this entry.
+    PROMPT_VERSION bumped v2 → v3.
   - [ ] **F103.b** Narrative skill extraction: extend the skill
     classifier to read technologies out of experience / project
     descriptions, not just explicit "Skills:" sections. Populates
@@ -621,6 +620,103 @@ Production-grade interface with attention to detail, accessibility, and delight.
     set from extraction metadata. With the link, RAG context can
     include "this document was authored by {candidate}" so Claude
     attributes project work to the right person natively.
+  - [ ] **F103.d** Entity-aware contextualizer prompt: rewrite the
+    `ChunkContextualizer` prompt so the per-chunk summary preserves
+    authorship and first-person language. Current summaries turn
+    *"I built a Stripe integration"* into *"the API server was built
+    to bridge Stripe and GHL"* — stripping the agent and losing the
+    retrieval signal that links chunks to people. New prompt should
+    incorporate `{candidate.name}` when author is known (depends on
+    F103.c for non-resume docs; resumes already have name in
+    metadata) and the classifier's extracted technology list so
+    stripe-in-narrative ends up in stripe-in-context.
+    Requires a bump to the contextualizer prompt version and a full
+    re-embed so the new summaries land in vectors. Pairs naturally
+    with F103.b landing first.
+  - [ ] **F103.e** Improved summarization prompt for the RAG
+    answer layer (distinct from F103.d which is the chunk-level
+    contextualizer). Today's prompt is a minimum viable citation
+    + deflection contract. A stronger prompt would: (1) name
+    candidates in the answer when context supplies a name, not
+    "the candidate"; (2) prefer evidence-dense sentences over
+    hedging; (3) quantify when quantities exist ("3 years of
+    Stripe integration work" over "has Stripe experience"); (4)
+    cross-reference docs in a single claim where the same person's
+    resume + case study both speak to a skill. Writable and
+    testable offline via the existing RAG eval harness once we
+    stub sample queries.
+
+- [ ] **F104 · RAG + search moonshots** — menu of improvements,
+  each independently shippable, each individually meaningful.
+  None locked-in as scoped; we'll revisit after F103 lands and
+  pick based on where quality still feels thin. Ordered by
+  rough impact-per-effort.
+
+  **Tier 1 — prompt / small infra, large visible effect:**
+  - [ ] **F104.a** Candidate one-liner at ingest: after parsing a
+    resume (or linking a case study via F103.c), generate a
+    one-sentence candidate summary ("Zain Ul Hassan — full-stack,
+    4+ yrs, Stripe + GHL + TypeScript heavy"). Store alongside
+    the candidate row and index it as a separate retrieval source.
+    Queries like *"who has X?"* hit summaries before chunks —
+    much higher recall with lower noise.
+  - [ ] **F104.b** Query expansion / HyDE: before retrieval,
+    use Haiku to rewrite the user's question into 2–3 paraphrases
+    and/or a hypothetical answer. Embed each, union the
+    retrievals, dedupe, rerank. Fixes the gap where the user asks
+    in one vocabulary and the doc uses another.
+  - [ ] **F104.c** Source diversity: the reranker top-K often
+    comes from one dominant doc. Enforce "at most 2 chunks per
+    doc, at least 3 docs when available" so the answer sees
+    breadth. Small rule, often fixes "Claude only read Tutorelli"
+    feelings.
+  - [ ] **F104.d** Hallucination guard: after Claude answers,
+    a second short LLM pass checks each claim against its
+    cited chunk. Flag unsupported claims visibly. Builds trust
+    more than anything else we could ship.
+
+  **Tier 2 — architectural, medium cost:**
+  - [ ] **F104.e** Hybrid retrieval with bge-m3 (dense + sparse):
+    swap `embedding_model` to BAAI/bge-m3 and extend the
+    `EmbeddingProvider` protocol to also return sparse term
+    weights. Weighted RRF already exists (F85.c) — it just needs
+    a sparse source to fuse against dense. Full re-embed
+    required.
+  - [ ] **F104.f** Named-entity extraction at ingest: NER over
+    every doc to surface people, orgs, technologies, locations,
+    dates as typed metadata. Powers filtered search ("candidates
+    with FastAPI at startups in London, ≤ 2 yrs experience") and
+    gives the reranker structured signal.
+  - [ ] **F104.g** Intent-specific retrieval paths: F81.g
+    classifies intent but routes everything through the same
+    retriever. Different intents deserve different strategies —
+    `count` queries aggregate at candidate level, `locate`
+    queries need document-level recall, `comparison` needs
+    top-K-per-entity. Plumb the intent into retriever selection.
+  - [ ] **F104.h** Parent-document retrieval: chunk small for
+    precision, retrieve big for context. Keep the current chunks
+    as embed targets; when surfacing context to the LLM, expand
+    each hit to its surrounding section so Claude sees more
+    signal per token spent.
+
+  **Tier 3 — ambitious:**
+  - [ ] **F104.i** Agent with tools instead of single-shot RAG.
+    Claude gets `search_chunks`, `get_candidate`,
+    `list_candidates(filters)`, `compare_candidates(ids, attrs)`.
+    For complex queries (*"rank the top 3 candidates for a senior
+    backend role, explain each"*), Claude plans, calls tools,
+    synthesizes. Much more flexible than single-shot RAG. Bumps
+    cost per query; better UX for messy questions.
+  - [ ] **F104.j** Streaming citation highlights: as tokens
+    arrive, the cited source chunks pulse/highlight in real time
+    in the sidebar. "Claude is reading Zain's CV right now…"
+    Pure UX flex; cheap once F81.j citation parser is already
+    wired.
+  - [ ] **F104.k** Match-explanation hover: hovering a candidate
+    card pops *"matched because Tutorelli case study mentions
+    Stripe (0.23 distance, reranker score 0.89)."* Radical
+    transparency about why the system ranked someone where it
+    did. Trust multiplier.
 
 - [ ] **F101 · Document thumbnails** — generate a small preview image
   per document during processing so the Documents grid view, preview
