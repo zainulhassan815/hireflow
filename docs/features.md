@@ -230,6 +230,13 @@ Wire existing frontend pages to the real backend API. All pages must follow
   Depends on: F20, F40, F41
   - Real counts (documents, jobs, candidates, recent activity) replacing mocks
 
+- [ ] **F63 · Dev-mode logging config**
+  Depends on: —
+  - Today the project has no root logging handler, so `logger.info(...)` from `app.*` gets dropped in dev runs (SQLAlchemy shows up because it configures its own handler; our modules don't).
+  - Add a `DEBUG`-guarded `logging.basicConfig(level=INFO)` in `app/main.py` so dev runs surface observability lines like F81.b/c's `rag context: ...` without a custom log config.
+  - Keep prod behaviour unchanged (container runtimes configure logging externally).
+  - Small, self-contained. Surfaced as a follow-up from F81.b/c manual-testing where the INFO log was only visible via `caplog` in tests.
+
 ---
 
 ## Phase 7 — Hardening & Deploy
@@ -280,8 +287,9 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - [ ] **F81.f** Conversation memory: track the last N message pairs per session in Redis, inject into the prompt. **User sees:** follow-ups like "what about the other resume?" and "show me more like that" work naturally.
   - [ ] **F81.g** Structured answer templates: count queries → number + list; comparison queries → markdown table; skill queries → bullet points. Driven by lightweight intent classification. **User sees:** answers that look right for the question asked — not prose where a table was obvious.
   - [ ] **F81.h** Source citation linking: citations click through to the source doc at the relevant section. Needs `section_heading` metadata (F82.e already stamps it) + a doc-preview route. **User sees:** click `[1]` → doc opens at the right section.
-  - [ ] **F81.i** Graceful failure UX: LLM timeout / rate limit / empty retrieval → clear message ("I couldn't find information about X. Try rephrasing or uploading more documents.") instead of silence or raw 500s. **User sees:** the system always says *something* useful.
+  - [x] **F81.i** Typed LLM-provider error taxonomy. New `LlmProviderError` + `LlmUnavailable` (→503) / `LlmRateLimited` (→429, carries `retry_after_seconds` in `details`) / `LlmTimeout` (→504). Adapters translate `anthropic.*` and `httpx.*` errors via one `_translate_*` helper shared between sync `complete()` and async `stream()` — symmetric error boundary. `RagService.stream_query` emits typed `ErrorEvent` with the domain code; sync `/rag/query` gets a proper 503/429/504 envelope via the existing F70 handler. `DomainError.details()` method added (default None, backwards-compatible). Empty retrieval was already handled by F81.b's sentinel path. Unknown SDK exceptions re-raise → last-resort `llm_error` with full server-side traceback. Live-verified with bogus `ANTHROPIC_API_KEY`: streaming yields `code="llm_unavailable"`, sync returns 503. No new deps.
   - [ ] **F81.j** Inline citation markers: render `[1]`, `[2]` clickable inline in the answer prose (not just a separate list at the bottom). Hover-preview shows source filename + snippet. Makes citations readable mid-sentence instead of foot-note style. **User sees:** "Jane Doe[1] has Kubernetes experience[2]" with hoverable refs.
+  - [ ] **F81.k** RAG retrieval adopts the full `SearchService` pipeline (FTS + RRF + reranker). Today `RagService` retrieves vector-only via `vector_store.query`, missing F87 multi-field weighted FTS, F88 acronym expansion + typo tolerance, and F80.5 cross-encoder reranker scores. Architectural change — needs owner-scope threading (SearchService takes `owner_id`; RAG today doesn't), composition-root edits, and a decision on whether to share retrieval ordering with the displayed search results. Follow-up surfaced from F81.b/c where "rank chunks by reranker score" was scope-fenced out. **User sees:** RAG answers using retrieval-quality parity with the search page (no "but I searched for that and it was there" mismatches).
 
 - [~] **F82 · Chunking strategy improvements** — mixed-doc corpus, not just resumes
   - [ ] **F82.a** (skipped — went straight to F82.d layout-aware extraction instead)

@@ -130,6 +130,29 @@ class _MidStreamFailureLlm:
         return "fake-llm-failing"
 
 
+class _TypedFailureLlm:
+    """Yields one delta, then raises a specific domain exception.
+
+    Used to assert that ``stream_query`` dispatches each
+    ``LlmProviderError`` subclass into the right ``ErrorEvent`` shape
+    (code + details) without reverting to the generic fallback.
+    """
+
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    def complete(self, system: str, user: str) -> str:
+        raise self._exc
+
+    async def stream(self, system: str, user: str) -> AsyncIterator[str]:
+        yield "partial "
+        raise self._exc
+
+    @property
+    def model_name(self) -> str:
+        return "fake-llm-typed"
+
+
 # --------------------------------------------------------------------------
 # Fixtures
 # --------------------------------------------------------------------------
@@ -537,3 +560,137 @@ async def test_distance_cutoff_falls_back_to_embedder(
         llm=_FakeStreamingLlm([]),
     )
     assert service._resolve_distance_cutoff() == 0.33  # type: ignore[attr-defined]
+
+
+# --------------------------------------------------------------------------
+# F81.i — typed LLM-error dispatch in stream_query
+# --------------------------------------------------------------------------
+
+
+async def test_rate_limit_emits_typed_error_event_with_retry_after(
+    alice_id: UUID,
+) -> None:
+    """LlmRateLimited → ErrorEvent carries ``llm_rate_limited`` code
+    plus ``retry_after_seconds`` in ``details``. Drives F92.11's
+    countdown UX; frontend switches on the code."""
+    from app.domain.exceptions import LlmRateLimited
+
+    hits = [_hit(alice_id, chunk_index=0, text="Alice has 5 years of Kubernetes.")]
+    service = _make_service(
+        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
+        vector_store=_FakeVectorStore(hits),
+        llm=_TypedFailureLlm(LlmRateLimited(retry_after_seconds=30)),
+    )
+
+    events = [e async for e in service.stream_query(question="q")]
+    assert [type(e) for e in events] == [CitationsEvent, DeltaEvent, ErrorEvent]
+    err = events[-1]
+    assert isinstance(err, ErrorEvent)
+    assert err.data.code == "llm_rate_limited"
+    assert err.data.details == {"retry_after_seconds": 30}
+
+
+async def test_timeout_emits_llm_timeout_code(alice_id: UUID) -> None:
+    from app.domain.exceptions import LlmTimeout
+
+    hits = [_hit(alice_id, chunk_index=0, text="Alice has 5 years of Kubernetes.")]
+    service = _make_service(
+        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
+        vector_store=_FakeVectorStore(hits),
+        llm=_TypedFailureLlm(LlmTimeout("slow")),
+    )
+
+    events = [e async for e in service.stream_query(question="q")]
+    err = events[-1]
+    assert isinstance(err, ErrorEvent)
+    assert err.data.code == "llm_timeout"
+    # No details for plain timeouts — no retry hint to surface.
+    assert err.data.details is None
+
+
+async def test_unavailable_emits_llm_unavailable_code(alice_id: UUID) -> None:
+    from app.domain.exceptions import LlmUnavailable
+
+    hits = [_hit(alice_id, chunk_index=0, text="Alice has 5 years of Kubernetes.")]
+    service = _make_service(
+        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
+        vector_store=_FakeVectorStore(hits),
+        llm=_TypedFailureLlm(LlmUnavailable("network down")),
+    )
+
+    events = [e async for e in service.stream_query(question="q")]
+    err = events[-1]
+    assert isinstance(err, ErrorEvent)
+    assert err.data.code == "llm_unavailable"
+
+
+async def test_unknown_exception_still_falls_back_to_generic_llm_error(
+    alice_id: UUID,
+) -> None:
+    """Regression guard: a genuinely unknown failure (not one of our
+    domain subclasses) still routes to the generic ``llm_error``
+    envelope rather than being mis-categorised."""
+    hits = [_hit(alice_id, chunk_index=0, text="Alice has 5 years of Kubernetes.")]
+    service = _make_service(
+        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
+        vector_store=_FakeVectorStore(hits),
+        llm=_TypedFailureLlm(ValueError("completely unexpected")),
+    )
+
+    events = [e async for e in service.stream_query(question="q")]
+    err = events[-1]
+    assert isinstance(err, ErrorEvent)
+    assert err.data.code == "llm_error"
+    # Exception message must NOT leak into user-visible field.
+    assert "completely unexpected" not in err.data.message
+
+
+# --------------------------------------------------------------------------
+# F81.i — HTTP status mapping through the error handler
+# --------------------------------------------------------------------------
+
+
+async def test_llm_unavailable_returns_503_with_envelope() -> None:
+    from fastapi import Request
+    from fastapi.responses import JSONResponse
+
+    from app.api.error_handlers import handle_domain_error
+    from app.domain.exceptions import LlmUnavailable
+
+    request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+    response = await handle_domain_error(request, LlmUnavailable("down"))
+    assert isinstance(response, JSONResponse)
+    assert response.status_code == 503
+    import json as _json
+
+    body = _json.loads(response.body)
+    assert body["error"]["code"] == "llm_unavailable"
+
+
+async def test_llm_rate_limited_returns_429_with_details() -> None:
+    from fastapi import Request
+
+    from app.api.error_handlers import handle_domain_error
+    from app.domain.exceptions import LlmRateLimited
+
+    request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+    response = await handle_domain_error(
+        request, LlmRateLimited(retry_after_seconds=12)
+    )
+    assert response.status_code == 429
+    import json as _json
+
+    body = _json.loads(response.body)
+    assert body["error"]["code"] == "llm_rate_limited"
+    assert body["error"]["details"] == {"retry_after_seconds": 12}
+
+
+async def test_llm_timeout_returns_504() -> None:
+    from fastapi import Request
+
+    from app.api.error_handlers import handle_domain_error
+    from app.domain.exceptions import LlmTimeout
+
+    request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+    response = await handle_domain_error(request, LlmTimeout("slow"))
+    assert response.status_code == 504

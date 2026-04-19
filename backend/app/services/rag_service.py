@@ -12,6 +12,7 @@ from uuid import UUID
 
 from app.adapters.protocols import LlmProvider, VectorHit, VectorStore
 from app.core.config import settings
+from app.domain.exceptions import LlmProviderError
 from app.repositories.document import DocumentRepository
 from app.schemas.errors import ErrorBody
 from app.schemas.rag import (
@@ -194,14 +195,25 @@ class RagService:
         try:
             async for chunk in self._llm.stream(ctx.system_prompt, ctx.user_prompt):
                 yield DeltaEvent(data=chunk)
+        except LlmProviderError as exc:
+            # Known provider failure — adapter already translated from
+            # SDK types to our domain taxonomy. WARN without a stack
+            # trace: rate-limits and transient outages are expected
+            # operational events, not bugs.
+            logger.warning("LLM provider error (%s): %s", exc.code, exc)
+            yield ErrorEvent(
+                data=ErrorBody(
+                    code=exc.code,
+                    message=str(exc),
+                    details=exc.details(),
+                ),
+            )
+            return
         except Exception:
-            # Full traceback + exception detail goes to the server log.
-            # The client-visible ``ErrorBody.message`` is documented as
-            # "safe to display to end users" (see schemas/errors.py),
-            # so we deliberately do not surface ``str(exc)`` — raw SDK
-            # error strings can contain internal URLs, request IDs, or
-            # partial credentials.
-            logger.exception("LLM stream failed")
+            # Genuinely unknown failure — full traceback so operators
+            # can diagnose and add a translation if the pattern
+            # repeats. Client sees a generic message.
+            logger.exception("Unexpected LLM stream failure")
             yield ErrorEvent(
                 data=ErrorBody(
                     code="llm_error",

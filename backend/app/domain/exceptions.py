@@ -12,7 +12,7 @@ frontend switches on; messages are human-readable and may change.
 from __future__ import annotations
 
 import re
-from typing import ClassVar
+from typing import Any, ClassVar
 
 _CAMEL_TO_SNAKE = re.compile(r"(?<!^)(?=[A-Z])")
 
@@ -26,6 +26,16 @@ class DomainError(Exception):
         super().__init_subclass__(**kwargs)
         if "code" not in cls.__dict__:
             cls.code = _CAMEL_TO_SNAKE.sub("_", cls.__name__).lower()
+
+    def details(self) -> dict[str, Any] | None:
+        """Structured context for the error envelope. None = no details.
+
+        Subclasses override to expose machine-readable fields (e.g.
+        ``retry_after_seconds``). The default returns None so the full
+        existing hierarchy stays backwards-compatible — callers that
+        only care about ``{code, message}`` keep working unchanged.
+        """
+        return None
 
 
 class InvalidCredentials(DomainError):
@@ -66,3 +76,50 @@ class ServiceUnavailable(DomainError):
 
 class GmailAuthError(DomainError):
     """OAuth flow with Google failed (bad state, denied consent, exchange error)."""
+
+
+# ---------- LLM provider errors (F81.i) ----------
+#
+# Adapters (ClaudeLlmProvider, OllamaLlmProvider) translate provider-
+# specific exceptions (``anthropic.*``, ``httpx.*``) into these so the
+# service layer never leaks SDK types. ``LlmProviderError`` is the
+# catch-all for RagService's ``except`` block.
+
+
+class LlmProviderError(DomainError):
+    """Base for LLM-provider failures. Not raised directly — catch this
+    in service code to handle every provider-origin error uniformly."""
+
+
+class LlmUnavailable(LlmProviderError):
+    """Provider is unreachable — network error, authentication failure,
+    or a 5xx response from the provider."""
+
+
+class LlmRateLimited(LlmProviderError):
+    """Provider returned 429 Too Many Requests.
+
+    Carries ``retry_after_seconds`` when the response's ``Retry-After``
+    header was parseable as an integer (per RFC 7231 §7.1.3). The
+    header may also be an HTTP-date; that form is not parsed — we fail
+    loudly via ``None`` rather than shipping speculative date handling.
+    """
+
+    def __init__(
+        self,
+        message: str = "AI provider is rate-limited. Please try again shortly.",
+        *,
+        retry_after_seconds: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+    def details(self) -> dict[str, Any] | None:
+        if self.retry_after_seconds is None:
+            return None
+        return {"retry_after_seconds": self.retry_after_seconds}
+
+
+class LlmTimeout(LlmProviderError):
+    """Request to the provider timed out — connection was alive but the
+    response didn't arrive inside the configured deadline."""

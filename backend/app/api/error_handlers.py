@@ -29,6 +29,9 @@ from app.domain.exceptions import (
     GmailAuthError,
     InvalidCredentials,
     InvalidToken,
+    LlmRateLimited,
+    LlmTimeout,
+    LlmUnavailable,
     NotFound,
     ServiceUnavailable,
     UnsupportedFileType,
@@ -45,7 +48,10 @@ _STATUS: dict[type[DomainError], int] = {
     EmailAlreadyRegistered: 409,
     FileTooLarge: 413,
     UnsupportedFileType: 415,
+    LlmRateLimited: 429,
     ServiceUnavailable: 503,
+    LlmUnavailable: 503,
+    LlmTimeout: 504,
     GmailAuthError: 400,
 }
 
@@ -62,10 +68,18 @@ def _envelope(
 async def handle_domain_error(_request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, DomainError)
     status_code = _STATUS.get(type(exc), 400)
+    # Fall back on a parent-class match if the exact type isn't in the
+    # registry. Lets ``LlmProviderError`` subclasses not in ``_STATUS``
+    # pick up the base-class status code for free.
+    if type(exc) not in _STATUS:
+        for ancestor in type(exc).__mro__[1:]:
+            if ancestor in _STATUS:
+                status_code = _STATUS[ancestor]
+                break
     message = str(exc) or type(exc).__name__
     return JSONResponse(
         status_code=status_code,
-        content=_envelope(exc.code, message),
+        content=_envelope(exc.code, message, details=exc.details()),
     )
 
 
