@@ -565,6 +565,43 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - [ ] **F100.c** Contract test: search + RAG response snapshots
     updated to match new labels.
 
+- [ ] **F101 · Document thumbnails** — generate a small preview image
+  per document during processing so the Documents grid view, preview
+  dialog, and similar-docs list render the first page instead of a
+  generic type icon. Pairs with F90.d's visual-grid instinct and
+  removes a lot of "all docs look identical" noise.
+  - [ ] **F101.a** Backend: add a thumbnail step to the Celery
+    ingestion pipeline. PDFs → render first page via pdf2image /
+    PyMuPDF; images → resize via Pillow; other types (docx, txt) →
+    skip and let the frontend fall back to the type icon (MVP). Store
+    in MinIO at `thumbnails/{doc_id}.webp`, 320px wide, quality ~80.
+  - [ ] **F101.b** Schema: `thumbnail_path` nullable column on
+    `documents`. Alembic migration. `DocumentResponse` gains a
+    `thumbnail_url` computed from the signed MinIO URL (same pattern
+    as `download_url`).
+  - [ ] **F101.c** Frontend: Documents grid view renders the
+    thumbnail at `aspect-[3/4]` with `object-cover`; fallback to the
+    existing type icon when `thumbnail_url` is null or fails to
+    load. Table view gets a 32×32 thumbnail next to the filename.
+  - [ ] **F101.d** Preview dialog hero: show the thumbnail as the
+    lead image above the "Similar documents" section when available.
+  - [ ] **F101.e** Reprocess path: existing documents don't have
+    thumbnails. Add an admin command (or one-shot migration) that
+    queues thumbnail generation for every `status = ready` doc
+    without one.
+  - [ ] **F101.f** Failure handling: thumbnail generation must not
+    block the `ready` state — if it errors, log + leave
+    `thumbnail_path = NULL` + move on. The document is usable
+    without a thumbnail.
+
+  Open questions to settle at start:
+  - Do resumes (the primary doc type) benefit from thumbnails at
+    all? Resume first pages look ~identical at 320px. Maybe render a
+    contact-header strip instead, or skip resumes entirely.
+  - Dependencies: pdf2image needs `poppler-utils` system binary;
+    PyMuPDF (`pymupdf`) is pure Python wheel. Prefer PyMuPDF for the
+    thinner install.
+
 ---
 
 ## Out of scope for v1
