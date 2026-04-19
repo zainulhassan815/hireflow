@@ -7,7 +7,7 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from app.adapters.protocols import LlmProvider, VectorHit, VectorStore
@@ -39,6 +39,27 @@ _CHARS_PER_TOKEN = 4
 def _estimate_tokens(text: str) -> int:
     """Approximate token count for budget accounting."""
     return (len(text) + _CHARS_PER_TOKEN - 1) // _CHARS_PER_TOKEN
+
+
+# F81.e — user-visible confidence band for the answer.
+Confidence = Literal["high", "medium", "low"]
+
+
+def _compute_confidence(kept: list[VectorHit]) -> Confidence:
+    """Derive the confidence band from the chunks the LLM will see.
+
+    Today: top-chunk distance only. The signature takes the full list
+    so future signals (distance spread, reranker-score gap,
+    ``len(kept)``) slot in without a caller rewrite. ``kept`` must be
+    non-empty by construction — callers short-circuit to the no-hits
+    sentinel before computing confidence.
+    """
+    top = kept[0].distance
+    if top <= settings.rag_confidence_high_max_distance:
+        return "high"
+    if top <= settings.rag_confidence_medium_max_distance:
+        return "medium"
+    return "low"
 
 
 # F81.d — tighter system prompt. Rules over prose.
@@ -90,6 +111,7 @@ class RagResult:
     citations: list[dict[str, Any]]
     model: str
     query_time_ms: int
+    confidence: Confidence | None = None
 
 
 @dataclass
@@ -105,6 +127,7 @@ class _RagContext:
     citations: list[dict[str, Any]]
     system_prompt: str
     user_prompt: str
+    confidence: Confidence
 
 
 class RagService:
@@ -152,6 +175,7 @@ class RagService:
             citations=ctx.citations,
             model=self._llm.model_name,
             query_time_ms=elapsed_ms,
+            confidence=ctx.confidence,
         )
 
     async def stream_query(
@@ -235,6 +259,7 @@ class RagService:
             data=StreamDone(
                 model=self._llm.model_name,
                 query_time_ms=elapsed_ms,
+                confidence=ctx.confidence,
             )
         )
 
@@ -312,6 +337,7 @@ class RagService:
             citations=citations,
             system_prompt=_SYSTEM_PROMPT,
             user_prompt=user_prompt,
+            confidence=_compute_confidence(kept),
         )
 
     def _resolve_distance_cutoff(self) -> float:

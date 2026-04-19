@@ -62,6 +62,16 @@ class RagResponse(BaseModel):
     query_time_ms: int = Field(
         ..., description="Total query + generation time in milliseconds"
     )
+    confidence: Literal["high", "medium", "low"] | None = Field(
+        None,
+        description=(
+            "Answer confidence band derived from top-chunk vector distance "
+            "(F81.e). ``null`` when no answer was grounded in documents "
+            "(empty retrieval → sentinel reply); the frontend should hide "
+            "the badge in that case."
+        ),
+        examples=["high"],
+    )
 
 
 # --------------------------------------------------------------------------
@@ -93,6 +103,14 @@ class StreamDone(BaseModel):
     )
     query_time_ms: int = Field(
         ..., description="Total query + generation time in milliseconds."
+    )
+    confidence: Literal["high", "medium", "low"] | None = Field(
+        None,
+        description=(
+            "Answer confidence band (F81.e). ``null`` when no answer was "
+            "grounded in documents (empty retrieval → sentinel)."
+        ),
+        examples=["high"],
     )
 
 

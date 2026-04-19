@@ -64,6 +64,7 @@ async def query_documents(
         citations=[SourceCitation(**c) for c in result.citations],
         model=result.model,
         query_time_ms=result.query_time_ms,
+        confidence=result.confidence,
     )
 
 

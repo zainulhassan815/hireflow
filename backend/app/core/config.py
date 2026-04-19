@@ -149,6 +149,17 @@ class Settings(BaseSettings):
     # answer capability over config-only failures).
     rag_context_token_budget: int = 4000
 
+    # RAG answer confidence bands (F81.e). Top-chunk distance drives
+    # the user-visible badge: ``high`` ≤ high_max, ``medium`` ≤
+    # medium_max, else ``low``. Defaults calibrated against bge-small
+    # (recommended cutoff 0.35); operators can tighten if the UI
+    # shows too many "high" badges relative to perceived quality.
+    # If ``rag_context_max_distance`` is tightened below
+    # ``medium_max``, the "low" band becomes unreachable — that's the
+    # correct behaviour, not a miscalibration.
+    rag_confidence_high_max_distance: float = 0.20
+    rag_confidence_medium_max_distance: float = 0.30
+
     # Weighted RRF (F85.c). Multiplies each source's rank contribution
     # before scores accumulate. Boosting lexical reflects the F87
     # filename-A / skills-B index weighting so filename-intent queries

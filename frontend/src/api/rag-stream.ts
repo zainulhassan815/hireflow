@@ -25,6 +25,9 @@ import type {
 export interface StreamDone {
   model: string;
   query_time_ms: number;
+  // F81.e — null when no answer was grounded (sentinel path); frontend
+  // should hide the badge rather than render "low".
+  confidence: "high" | "medium" | "low" | null;
 }
 
 export type RagStreamEvent =

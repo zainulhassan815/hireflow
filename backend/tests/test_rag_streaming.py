@@ -694,3 +694,120 @@ async def test_llm_timeout_returns_504() -> None:
     request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
     response = await handle_domain_error(request, LlmTimeout("slow"))
     assert response.status_code == 504
+
+
+# --------------------------------------------------------------------------
+# F81.e — answer confidence indicator
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("top_distance", "expected"),
+    [
+        (0.05, "high"),
+        (0.20, "high"),  # boundary
+        (0.21, "medium"),
+        (0.30, "medium"),  # boundary
+        (0.31, "low"),
+        (0.50, "low"),
+    ],
+)
+def test_compute_confidence_bands(top_distance: float, expected: str) -> None:
+    """Pure function — top-chunk distance maps to the band via the
+    configured thresholds. Boundaries are inclusive on the lower side."""
+    from app.services.rag_service import _compute_confidence
+
+    hit = VectorHit(
+        chunk_id="x",
+        document_id=str(uuid4()),
+        text="",
+        metadata={},
+        distance=top_distance,
+    )
+    assert _compute_confidence([hit]) == expected
+
+
+async def test_stream_done_carries_confidence_from_top_hit(
+    monkeypatch: pytest.MonkeyPatch, alice_id: UUID
+) -> None:
+    """DoneEvent.data.confidence reflects the top (best) chunk's band,
+    not a later chunk's. Guards against a future reorder swapping them."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "rag_context_max_distance", 0.9)
+    monkeypatch.setattr(settings, "rag_context_token_budget", 10_000)
+
+    # Top chunk at 0.15 → "high"; second chunk (weaker) at 0.28 would
+    # be "medium". Confidence must follow the top, not the bottom.
+    bob_id = uuid4()
+    hits = [
+        _hit_at(alice_id, distance=0.15, text="Alice is a strong match."),
+        _hit_at(bob_id, distance=0.28, text="Bob is a weaker match."),
+    ]
+    service = _make_service(
+        docs=_FakeDocumentRepo({alice_id: "alice.pdf", bob_id: "bob.pdf"}),
+        vector_store=_FakeVectorStore(hits),
+        llm=_FakeStreamingLlm(["ok"]),
+    )
+
+    events = [e async for e in service.stream_query(question="q")]
+    done = events[-1]
+    assert isinstance(done, DoneEvent)
+    assert done.data.confidence == "high"
+
+
+async def test_stream_done_confidence_is_none_on_no_hits_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Empty retrieval → no answer to rate → confidence is null.
+    Distinguishing absence from 'low' on the wire lets the frontend
+    hide the badge rather than render a red one."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "rag_context_max_distance", 0.9)
+
+    service = _make_service(
+        docs=_FakeDocumentRepo({}),
+        vector_store=_FakeVectorStore([]),
+        llm=_FakeStreamingLlm(["unused"]),
+    )
+
+    events = [e async for e in service.stream_query(question="q")]
+    done = events[-1]
+    assert isinstance(done, DoneEvent)
+    assert done.data.confidence is None
+
+
+async def test_sync_query_result_carries_confidence(
+    monkeypatch: pytest.MonkeyPatch, alice_id: UUID
+) -> None:
+    """Regression guard: the sync path consumes the same _RagContext,
+    so confidence travels unchanged. Asserted directly so a future
+    change that bypasses _build_context in the sync branch trips here."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "rag_context_max_distance", 0.9)
+    monkeypatch.setattr(settings, "rag_context_token_budget", 10_000)
+
+    hits = [_hit_at(alice_id, distance=0.10, text="Alice is a perfect match.")]
+    service = _make_service(
+        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
+        vector_store=_FakeVectorStore(hits),
+        llm=_FakeStreamingLlm(["the answer"]),
+    )
+
+    result = await service.query(question="q")
+    assert result.confidence == "high"
+
+
+async def test_sync_query_confidence_is_none_on_fallback() -> None:
+    """Sync-path fallback also carries None confidence."""
+    service = _make_service(
+        docs=_FakeDocumentRepo({}),
+        vector_store=_FakeVectorStore([]),
+        llm=_FakeStreamingLlm(["unused"]),
+    )
+
+    result = await service.query(question="quantum physics")
+    assert result.confidence is None
+    assert result.answer == "Not in the provided documents."

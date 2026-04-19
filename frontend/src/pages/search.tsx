@@ -34,6 +34,7 @@ interface ChatMessage {
   sources?: SourceCitation[];
   model?: string;
   queryTimeMs?: number;
+  confidence?: "high" | "medium" | "low" | null;
 }
 
 export function SearchPage() {
@@ -124,6 +125,7 @@ export function SearchPage() {
                   ...m,
                   model: event.data.model,
                   queryTimeMs: event.data.query_time_ms,
+                  confidence: event.data.confidence,
                 }));
                 break;
               case "error":
@@ -408,12 +410,28 @@ export function SearchPage() {
                           </>
                         )}
                         {message.queryTimeMs != null && (
-                          <Typography
-                            variant="muted"
-                            className="mt-1 text-xs opacity-60"
-                          >
-                            {message.model} · {message.queryTimeMs}ms
-                          </Typography>
+                          <div className="mt-1 flex items-center gap-2">
+                            <Typography
+                              variant="muted"
+                              className="text-xs opacity-60"
+                            >
+                              {message.model} · {message.queryTimeMs}ms
+                            </Typography>
+                            {message.confidence && (
+                              <Badge
+                                variant="outline"
+                                className={
+                                  message.confidence === "high"
+                                    ? "border-green-500 text-green-700 dark:text-green-400"
+                                    : message.confidence === "medium"
+                                      ? "border-amber-500 text-amber-700 dark:text-amber-400"
+                                      : "border-muted-foreground text-muted-foreground"
+                                }
+                              >
+                                {message.confidence} confidence
+                              </Badge>
+                            )}
+                          </div>
                         )}
                       </div>
                       {message.role === "user" && (
