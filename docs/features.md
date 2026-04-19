@@ -310,11 +310,11 @@ Improve accuracy, relevance, and usefulness of core AI features.
 - [~] **F85 · Embedding quality**
   - [x] **F85.a** Model-agnostic `EmbeddingProvider` protocol + `SentenceTransformerEmbedder` POC with `BAAI/bge-small-en-v1.5`. ChromaVectorStore takes pre-computed vectors; per-model collection naming; `scripts/reindex_embeddings.py`. Eval: P@5 0.253→0.252 (tied), R@5 0.974→**1.000**, MRR 0.870→0.841.
   - [ ] **F85.b** Model exploration on HF leaderboard — try `intfloat/e5-small-v2`, `intfloat/e5-base-v2`, `nomic-ai/nomic-embed-text-v1.5`, `jinaai/jina-embeddings-v2-base-en`, `BAAI/bge-base-en-v1.5`. Process: flip `EMBEDDING_MODEL`, `uv run python -m scripts.reindex_embeddings`, `make eval`, keep if P@5/MRR clearly wins. Remember to recalibrate `search_max_distance` per model.
-  - [ ] **F85.c** Weighted RRF so filename (FTS weight A) outranks semantic-only body matches. Today equal weights cause cross-model ranking flips (e.g. `menu analyzer` → "Restaurant Signup" at #1 under bge-small despite Menu Analyzer having the literal filename match). Apply a source-level multiplier to the RRF score.
-  - [ ] **F85.d** Per-model threshold: make `search_max_distance` travel with the embedder instead of a global setting. Each model has its own cosine distribution; a hardcoded global breaks on swap.
-  - [ ] **F85.e** Document-type-specific embedding prefixes: "resume: ..." vs "job description: ..." for models that support task instructions (e5, instructor, nomic).
+  - [x] **F85.c** Weighted RRF: `_rrf_merge` takes `w_vector` / `w_sql` / `w_lexical` multipliers. Defaults bias lexical up (2.0) so F87's filename-A / skills-B weighting carries through to the merged ranking. Unlocked F80.5 reranker default-on (composes cleanly; MRR holds at 0.859).
+  - [ ] **F85.d** Per-model threshold: make `search_max_distance` travel with the embedder instead of a global setting. Each model has its own cosine distribution; a hardcoded global breaks on swap. Small refactor (~30 min).
+  - [ ] **F85.e** Document-type-specific embedding prefixes: "resume: ..." vs "job description: ..." for models that support task instructions (e5, instructor, nomic). **Depends on F85.b** — no point before we adopt an instruct model.
   - [x] Hybrid retrieval: Postgres FTS (`ts_rank_cd`) folded into RRF — eval P@5 0.175→0.238 (+36%), `edge` bucket 0.0→0.4
-  - [ ] **F85.f** Embedding versioning per chunk: store `embedding_model` in chunk metadata + startup check warns on configured-vs-indexed mismatch (per-model collection naming makes this a soft concern today, but belt-and-suspenders).
+  - [~] **F85.f** Embedding versioning: `documents.embedding_model_version` is stamped at index time ✅. Missing: startup check that warns when the configured `EMBEDDING_MODEL` differs from what existing chunks were built with. Per-model Chroma collection naming makes the data-corruption risk low; the warning is a developer-experience polish.
 
 - [x] **F86 · Search correctness (P0)** — see `docs/search-hardening.md` §3
   - [x] Per-user ownership scoping (admin bypass) wired into vector `where`, FTS, and SQL metadata paths
