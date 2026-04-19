@@ -59,7 +59,7 @@ def upgrade() -> None:
     op.execute("ALTER TABLE documents DROP COLUMN IF EXISTS extracted_text_tsv")
 
     op.execute(
-        """
+        r"""
         ALTER TABLE documents
         ADD COLUMN search_tsv tsvector
         GENERATED ALWAYS AS (

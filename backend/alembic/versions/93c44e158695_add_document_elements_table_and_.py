@@ -45,9 +45,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["document_id"], ["documents.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["document_id"], ["documents.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "document_id", "order_index", name="uq_document_elements_doc_order"
@@ -76,9 +74,7 @@ def upgrade() -> None:
     )
     op.add_column(
         "documents",
-        sa.Column(
-            "embedding_model_version", sa.String(length=128), nullable=True
-        ),
+        sa.Column("embedding_model_version", sa.String(length=128), nullable=True),
     )
 
 
@@ -86,9 +82,7 @@ def downgrade() -> None:
     op.drop_column("documents", "embedding_model_version")
     op.drop_column("documents", "chunking_version")
     op.drop_column("documents", "extraction_version")
-    op.drop_index(
-        op.f("ix_document_elements_kind"), table_name="document_elements"
-    )
+    op.drop_index(op.f("ix_document_elements_kind"), table_name="document_elements")
     op.drop_index(
         op.f("ix_document_elements_document_id"), table_name="document_elements"
     )
