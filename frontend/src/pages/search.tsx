@@ -10,10 +10,10 @@ import {
 
 import {
   searchDocuments,
-  queryDocuments,
   type SearchResultItem,
   type SourceCitation,
 } from "@/api";
+import { streamRagAnswer } from "@/api/rag-stream";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -48,6 +48,9 @@ export function SearchPage() {
   const [chatMessages, setChatMessages] = React.useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = React.useState("");
   const [isSending, setIsSending] = React.useState(false);
+  const [streamingMessageId, setStreamingMessageId] = React.useState<
+    string | null
+  >(null);
   const chatEndRef = React.useRef<HTMLDivElement>(null);
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -74,39 +77,68 @@ export function SearchPage() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
+    const question = chatInput.trim();
+    if (!question) return;
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: chatInput,
+      content: question,
+    };
+    const assistantId = crypto.randomUUID();
+    const assistantPlaceholder: ChatMessage = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      sources: [],
     };
 
-    setChatMessages((prev) => [...prev, userMessage]);
+    setChatMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
     setChatInput("");
     setIsSending(true);
+    setStreamingMessageId(assistantId);
 
-    const { data, error } = await queryDocuments({
-      body: { question: chatInput, max_chunks: 5 },
-    });
-
-    if (error) {
-      toast.error(extractApiError(error).message);
-      setIsSending(false);
-      return;
-    }
-
-    const assistantMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: data?.answer ?? "No answer generated.",
-      sources: data?.citations ?? [],
-      model: data?.model,
-      queryTimeMs: data?.query_time_ms,
+    const updateAssistant = (patch: (m: ChatMessage) => ChatMessage) => {
+      setChatMessages((prev) =>
+        prev.map((m) => (m.id === assistantId ? patch(m) : m))
+      );
     };
 
-    setChatMessages((prev) => [...prev, assistantMessage]);
-    setIsSending(false);
+    try {
+      await streamRagAnswer(
+        { question, max_chunks: 5 },
+        {
+          onEvent: (event) => {
+            switch (event.event) {
+              case "citations":
+                updateAssistant((m) => ({ ...m, sources: event.data }));
+                break;
+              case "delta":
+                updateAssistant((m) => ({
+                  ...m,
+                  content: m.content + event.data,
+                }));
+                break;
+              case "done":
+                updateAssistant((m) => ({
+                  ...m,
+                  model: event.data.model,
+                  queryTimeMs: event.data.query_time_ms,
+                }));
+                break;
+              case "error":
+                toast.error(event.data.message);
+                break;
+            }
+          },
+        }
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Streaming failed");
+    } finally {
+      setIsSending(false);
+      setStreamingMessageId(null);
+    }
   };
 
   React.useEffect(() => {
@@ -114,7 +146,7 @@ export function SearchPage() {
   }, [chatMessages]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex h-full flex-col gap-6">
       <div>
         <Typography variant="h3">Search & Q&A</Typography>
         <Typography variant="muted">
@@ -122,7 +154,10 @@ export function SearchPage() {
         </Typography>
       </div>
 
-      <Tabs defaultValue="search" className="w-full">
+      <Tabs
+        defaultValue="search"
+        className="flex min-h-0 w-full flex-1 flex-col"
+      >
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="search">
             <SearchIcon className="mr-2 size-4" />
@@ -267,8 +302,8 @@ export function SearchPage() {
         </TabsContent>
 
         {/* AI Q&A Tab */}
-        <TabsContent value="chat" className="mt-6">
-          <Card className="flex h-[600px] flex-col">
+        <TabsContent value="chat" className="mt-6 flex min-h-0 flex-1 flex-col">
+          <Card className="flex h-full min-h-0 flex-col">
             <CardHeader className="border-b p-4">
               <div className="flex items-center gap-2">
                 <SparklesIcon className="text-primary size-5" />
@@ -292,91 +327,103 @@ export function SearchPage() {
                     </Typography>
                   </div>
                 )}
-                {chatMessages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex gap-3 ${
-                      message.role === "user" ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    {message.role === "assistant" && (
-                      <div className="bg-primary flex size-8 shrink-0 items-center justify-center rounded-full">
-                        <BotIcon className="size-4 text-white" />
-                      </div>
-                    )}
+                {chatMessages.map((message) => {
+                  const isStreaming = message.id === streamingMessageId;
+                  const isEmptyStreaming = isStreaming && !message.content;
+                  return (
                     <div
-                      className={`max-w-[80%] rounded-lg p-3 ${
+                      key={message.id}
+                      className={`flex gap-3 ${
                         message.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted"
+                          ? "justify-end"
+                          : "justify-start"
                       }`}
                     >
-                      <Typography
-                        variant="small"
-                        className={
+                      {message.role === "assistant" && (
+                        <div className="bg-primary flex size-8 shrink-0 items-center justify-center rounded-full">
+                          <BotIcon className="size-4 text-white" />
+                        </div>
+                      )}
+                      <div
+                        className={`max-w-[80%] rounded-lg p-3 ${
                           message.role === "user"
-                            ? "text-primary-foreground whitespace-pre-wrap"
-                            : "whitespace-pre-wrap"
-                        }
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted"
+                        }`}
                       >
-                        {message.content}
-                      </Typography>
-                      {message.sources && message.sources.length > 0 && (
-                        <>
-                          <Separator className="my-2" />
-                          <Typography variant="muted" className="mb-1 text-xs">
-                            Sources:
-                          </Typography>
-                          <div className="space-y-1">
-                            {message.sources.map((source, idx) => (
-                              <div
-                                key={idx}
-                                className="bg-background/50 rounded p-2 text-xs"
-                              >
-                                <span className="font-medium">
-                                  {source.filename}
-                                </span>
-                                <p className="text-muted-foreground mt-0.5 line-clamp-2">
-                                  <HighlightedText
-                                    text={source.text}
-                                    spans={source.match_spans}
-                                  />
-                                </p>
-                              </div>
-                            ))}
+                        {isEmptyStreaming ? (
+                          <div
+                            aria-label="Assistant is thinking"
+                            className="flex gap-1 py-1"
+                          >
+                            <span className="bg-foreground/30 size-2 animate-bounce rounded-full" />
+                            <span className="bg-foreground/30 size-2 animate-bounce rounded-full [animation-delay:0.1s]" />
+                            <span className="bg-foreground/30 size-2 animate-bounce rounded-full [animation-delay:0.2s]" />
                           </div>
-                        </>
-                      )}
-                      {message.queryTimeMs != null && (
-                        <Typography
-                          variant="muted"
-                          className="mt-1 text-xs opacity-60"
-                        >
-                          {message.model} · {message.queryTimeMs}ms
-                        </Typography>
-                      )}
-                    </div>
-                    {message.role === "user" && (
-                      <div className="bg-muted flex size-8 shrink-0 items-center justify-center rounded-full">
-                        <UserIcon className="size-4" />
+                        ) : (
+                          <Typography
+                            variant="small"
+                            className={
+                              message.role === "user"
+                                ? "text-primary-foreground whitespace-pre-wrap"
+                                : "whitespace-pre-wrap"
+                            }
+                          >
+                            {message.content}
+                            {isStreaming && (
+                              <span
+                                aria-hidden
+                                className="bg-foreground/60 ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 animate-pulse rounded-sm align-baseline"
+                              />
+                            )}
+                          </Typography>
+                        )}
+                        {message.sources && message.sources.length > 0 && (
+                          <>
+                            <Separator className="my-2" />
+                            <Typography
+                              variant="muted"
+                              className="mb-1 text-xs"
+                            >
+                              Sources:
+                            </Typography>
+                            <div className="space-y-1">
+                              {message.sources.map((source, idx) => (
+                                <div
+                                  key={idx}
+                                  className="bg-background/50 rounded p-2 text-xs"
+                                >
+                                  <span className="font-medium">
+                                    {source.filename}
+                                  </span>
+                                  <p className="text-muted-foreground mt-0.5 line-clamp-2">
+                                    <HighlightedText
+                                      text={source.text}
+                                      spans={source.match_spans}
+                                    />
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                        {message.queryTimeMs != null && (
+                          <Typography
+                            variant="muted"
+                            className="mt-1 text-xs opacity-60"
+                          >
+                            {message.model} · {message.queryTimeMs}ms
+                          </Typography>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
-                {isSending && (
-                  <div className="flex gap-3">
-                    <div className="bg-primary flex size-8 shrink-0 items-center justify-center rounded-full">
-                      <BotIcon className="size-4 text-white" />
+                      {message.role === "user" && (
+                        <div className="bg-muted flex size-8 shrink-0 items-center justify-center rounded-full">
+                          <UserIcon className="size-4" />
+                        </div>
+                      )}
                     </div>
-                    <div className="bg-muted rounded-lg p-3">
-                      <div className="flex gap-1">
-                        <span className="bg-foreground/30 size-2 animate-bounce rounded-full" />
-                        <span className="bg-foreground/30 size-2 animate-bounce rounded-full [animation-delay:0.1s]" />
-                        <span className="bg-foreground/30 size-2 animate-bounce rounded-full [animation-delay:0.2s]" />
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  );
+                })}
                 <div ref={chatEndRef} />
               </div>
             </ScrollArea>

@@ -1,8 +1,11 @@
 """RAG question-answering DTOs."""
 
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+from app.schemas.errors import ErrorBody
 
 
 class RagRequest(BaseModel):
@@ -59,3 +62,69 @@ class RagResponse(BaseModel):
     query_time_ms: int = Field(
         ..., description="Total query + generation time in milliseconds"
     )
+
+
+# --------------------------------------------------------------------------
+# Streaming (SSE) events
+#
+# The wire format on ``POST /rag/stream`` is a sequence of Server-Sent
+# Events. Each frame is one ``StreamEvent`` instance, serialized to JSON,
+# with the SSE ``event:`` header echoing the discriminator so native
+# ``EventSource`` consumers can register named listeners too.
+#
+# Order on a successful query:
+#   citations  (fires once, before any delta)
+#   delta      (fires many times, one per LLM text delta)
+#   done       (fires once at the end, carries model + timing)
+#
+# If retrieval returns no hits: ``done`` fires alone (no citations, no
+# deltas). If the LLM fails mid-stream: ``error`` fires and the stream
+# closes.
+# --------------------------------------------------------------------------
+
+
+class StreamDone(BaseModel):
+    """Final-event payload: model identifier and total elapsed time."""
+
+    model: str = Field(
+        ...,
+        description="LLM model that produced the answer.",
+        examples=["claude-sonnet-4-5-20250514"],
+    )
+    query_time_ms: int = Field(
+        ..., description="Total query + generation time in milliseconds."
+    )
+
+
+class CitationsEvent(BaseModel):
+    """First event on the stream: the source chunks feeding the answer."""
+
+    event: Literal["citations"] = "citations"
+    data: list[SourceCitation]
+
+
+class DeltaEvent(BaseModel):
+    """A text delta from the model. Many of these per answer."""
+
+    event: Literal["delta"] = "delta"
+    data: str
+
+
+class DoneEvent(BaseModel):
+    """Terminal success event. Carries summary metadata."""
+
+    event: Literal["done"] = "done"
+    data: StreamDone
+
+
+class ErrorEvent(BaseModel):
+    """Terminal failure event. Reuses the project-wide error envelope."""
+
+    event: Literal["error"] = "error"
+    data: ErrorBody
+
+
+StreamEvent = Annotated[
+    CitationsEvent | DeltaEvent | DoneEvent | ErrorEvent,
+    Field(discriminator="event"),
+]

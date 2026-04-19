@@ -11,6 +11,7 @@ the first time a second implementation shows up.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -130,11 +131,28 @@ class VisionProvider(Protocol):
 
 @runtime_checkable
 class LlmProvider(Protocol):
-    """Text-to-text LLM completion. Synchronous — call via
-    ``asyncio.to_thread`` from async routes.
+    """Text-to-text LLM access.
+
+    Two entry points. ``complete`` is synchronous — call via
+    ``asyncio.to_thread`` from async routes, and use directly from
+    Celery workers (classifiers, contextualizers). ``stream`` is an
+    async generator — consume from async code only; it exists because
+    all streaming SDKs we target expose native async APIs and a
+    sync-iterator-bridged-via-queue shape would be a workaround.
     """
 
     def complete(self, system: str, user: str) -> str: ...
+
+    def stream(self, system: str, user: str) -> AsyncIterator[str]:
+        """Yield text deltas as the model generates.
+
+        Declared as plain ``def`` returning ``AsyncIterator[str]`` (not
+        ``async def``) so implementations are free to use the
+        idiomatic ``async def ... yield`` async-generator shape.
+        ``@runtime_checkable`` verifies method presence, not the
+        sync/async qualifier on the signature.
+        """
+        ...
 
     @property
     def model_name(self) -> str: ...
