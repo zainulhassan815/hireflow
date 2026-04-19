@@ -389,7 +389,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - [x] **F90.d** `/impeccable:layout` — break the identical 4-KPI-card
     hero on Dashboard + Documents. Page-specific primary metrics with
     visualization; demote the rest.
-  - [ ] **F90.e** `/impeccable:bolder` — commit to `--radius: 0` opinion
+  - [x] **F90.e** `/impeccable:bolder` — commit to `--radius: 0` opinion
     across all surfaces or abandon it. No half-hedging with rounded
     avatars/icons alongside sharp cards.
   - [ ] **F90.f** `/impeccable:harden` — destructive-action confirms,
