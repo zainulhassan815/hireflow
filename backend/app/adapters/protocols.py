@@ -506,8 +506,18 @@ class VectorStore(Protocol):
         document_id: str,
         chunks: list[str],
         metadatas: list[dict[str, Any]],
+        *,
+        embeddings: list[list[float]] | None = None,
     ) -> None:
-        """Index text chunks for a document. Replaces existing chunks."""
+        """Index text chunks for a document. Replaces existing chunks.
+
+        ``embeddings`` (F89.c) lets the caller pre-compute vectors and
+        hand them to the store, so the same vectors can be reused
+        elsewhere (e.g. mean-pooled into a doc-level representation)
+        without paying to embed the same text twice. When omitted, the
+        store embeds internally — backwards-compatible with the F85
+        pre-F89 path.
+        """
         ...
 
     def delete(self, document_id: str) -> None:
@@ -521,6 +531,64 @@ class VectorStore(Protocol):
         where: dict[str, Any] | None = None,
     ) -> list[VectorHit]:
         """Semantic search. Returns chunks ranked by relevance."""
+        ...
+
+
+# ---------- Document-level similarity (F89.c) ----------
+
+
+@dataclass(frozen=True, slots=True)
+class SimilarDocumentHit:
+    """One document-level neighbour from the similarity store.
+
+    Shape mirrors ``VectorHit`` but at whole-document granularity —
+    there's no chunk text, because the unit is the document, not a
+    substring of it. Callers hydrate ``filename`` and other fields from
+    Postgres via ``DocumentRepository.get_many``.
+    """
+
+    document_id: str
+    distance: float
+    metadata: dict[str, Any]
+
+
+@runtime_checkable
+class DocumentSimilarityStore(Protocol):
+    """Doc-level vector store for "find similar documents" queries.
+
+    Deliberately distinct from ``VectorStore`` (chunk-level). Different
+    unit of storage (one vector per document, not per chunk), different
+    query shape (look up by source document id rather than a text query),
+    and different backing Chroma collection. Splitting the Protocols
+    keeps chunk-retrieval code free of doc-level concerns and vice versa;
+    a single concrete adapter can implement both.
+    """
+
+    def upsert_document_vector(
+        self,
+        document_id: str,
+        embedding: list[float],
+        metadata: dict[str, Any],
+    ) -> None:
+        """Store (or replace) the single vector that represents ``document_id``."""
+        ...
+
+    def delete_document_vector(self, document_id: str) -> None:
+        """Remove the doc-level vector for ``document_id`` (no-op if absent)."""
+        ...
+
+    def find_similar_documents(
+        self,
+        source_document_id: str,
+        n_results: int,
+        where: dict[str, Any] | None = None,
+    ) -> list[SimilarDocumentHit]:
+        """Return the ``n_results`` nearest neighbours of the source doc.
+
+        Raises a domain-level ``DocumentNotIndexed`` when
+        ``source_document_id`` has no vector in the collection —
+        callers map that to an explicit "re-index" message.
+        """
         ...
 
 

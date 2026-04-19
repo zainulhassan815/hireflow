@@ -26,6 +26,7 @@ from app.adapters.llm.registry import get_llm_provider
 from app.adapters.minio_storage import MinioBlobStorage
 from app.adapters.protocols import (
     BlobStorage,
+    DocumentSimilarityStore,
     EmailSender,
     GmailOAuth,
     PasswordHasher,
@@ -98,14 +99,20 @@ _blob_storage = MinioBlobStorage(
 try:
     from app.adapters.embeddings.registry import get_embedding_provider
 
-    _vector_store: VectorStore | None = ChromaVectorStore(
+    _chroma_store = ChromaVectorStore(
         host=settings.chroma_host,
         port=settings.chroma_port,
         embedder=get_embedding_provider(settings),
     )
+    _vector_store: VectorStore | None = _chroma_store
+    # F89.c — same adapter implements both Protocols. Binding under
+    # separate names keeps service wiring explicit about which
+    # capability is being consumed.
+    _similarity_store: DocumentSimilarityStore | None = _chroma_store
 except Exception:
     _logger.warning("ChromaDB unavailable at startup; vector search disabled")
     _vector_store = None
+    _similarity_store = None
 
 _llm_provider = get_llm_provider(settings)
 if _llm_provider:
@@ -208,6 +215,10 @@ def get_vector_store() -> VectorStore | None:
     return _vector_store
 
 
+def get_similarity_store() -> DocumentSimilarityStore | None:
+    return _similarity_store
+
+
 def get_blob_storage() -> BlobStorage:
     return _blob_storage
 
@@ -304,6 +315,7 @@ def get_document_service(
         storage,
         max_file_size_bytes=settings.max_file_size_mb * 1024 * 1024,
         vector_store=_vector_store,
+        similarity_store=_similarity_store,
     )
 
 
@@ -313,6 +325,7 @@ def get_search_service(documents: DocumentRepositoryDep) -> SearchService:
         _vector_store,
         reranker=_reranker,
         query_parser=_query_parser,  # F89.a
+        similarity_store=_similarity_store,  # F89.c
     )
 
 
@@ -333,6 +346,7 @@ def get_rag_service(documents: DocumentRepositoryDep) -> RagService | None:
         _vector_store,
         reranker=_reranker,
         query_parser=_query_parser,
+        similarity_store=_similarity_store,
     )
     return RagService(retriever, _llm_provider, _intent_classifier)
 

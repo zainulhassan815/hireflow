@@ -5,8 +5,19 @@ from uuid import UUID
 from fastapi import APIRouter, Query, UploadFile
 from fastapi.responses import Response
 
-from app.api.deps import ActivityServiceDep, CurrentUser, DocumentServiceDep
-from app.schemas.document import DocumentMetadataResponse, DocumentResponse
+from app.api.deps import (
+    ActivityServiceDep,
+    CurrentUser,
+    DocumentServiceDep,
+    SearchServiceDep,
+)
+from app.schemas.document import (
+    DocumentMetadataResponse,
+    DocumentResponse,
+    SimilarDocument,
+    SimilarDocumentsRequest,
+    SimilarDocumentsResponse,
+)
 from app.worker.tasks import extract_document_text
 
 router = APIRouter()
@@ -148,6 +159,55 @@ async def get_document_metadata(
 ) -> DocumentMetadataResponse:
     doc = await documents.get(document_id, actor=current_user)
     return DocumentMetadataResponse.model_validate(doc)
+
+
+@router.post(
+    "/{document_id}/similar",
+    response_model=SimilarDocumentsResponse,
+    summary="Find documents similar to this one",
+    description=(
+        "Return up to `limit` documents most semantically similar to the "
+        "source document, ordered by similarity descending. Similarity is "
+        "cosine similarity over mean-pooled chunk embeddings. HR users see "
+        "only their own documents; admins see across owners. The source "
+        "document itself is excluded from the results."
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not the source document's owner or an admin"},
+        404: {
+            "description": (
+                "Source document not found, not READY, or not yet indexed "
+                "in the similarity store"
+            )
+        },
+        503: {"description": "Similarity search is not configured on this deployment"},
+    },
+)
+async def find_similar_documents(
+    document_id: UUID,
+    body: SimilarDocumentsRequest,
+    current_user: CurrentUser,
+    search: SearchServiceDep,
+) -> SimilarDocumentsResponse:
+    results = await search.find_similar_documents(
+        actor=current_user,
+        source_document_id=document_id,
+        limit=body.limit,
+    )
+    return SimilarDocumentsResponse(
+        source_document_id=document_id,
+        results=[
+            SimilarDocument(
+                document_id=r.document_id,
+                filename=r.filename,
+                document_type=r.document_type,
+                similarity=r.similarity,
+                metadata=r.metadata,
+            )
+            for r in results
+        ],
+    )
 
 
 @router.delete(

@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 
 from app.domain.exceptions import (
     AccountDisabled,
+    DocumentNotIndexed,
     DomainError,
     EmailAlreadyRegistered,
     FileTooLarge,
@@ -45,6 +46,7 @@ _STATUS: dict[type[DomainError], int] = {
     AccountDisabled: 403,
     Forbidden: 403,
     NotFound: 404,
+    DocumentNotIndexed: 404,
     EmailAlreadyRegistered: 409,
     FileTooLarge: 413,
     UnsupportedFileType: 415,

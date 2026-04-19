@@ -233,12 +233,13 @@ async def seeded_fixtures(eval_owner_id: UUID) -> list[tuple[FixtureDoc, UUID]]:
 
     _assert_test_database(settings.database_url)
 
+    embedder_provider = get_embedding_provider(settings)
     store = ChromaVectorStore(
         host=settings.chroma_host,
         port=settings.chroma_port,
-        embedder=get_embedding_provider(settings),
+        embedder=embedder_provider,
     )
-    embedder = EmbeddingService(store)
+    embedder = EmbeddingService(store, embedder_provider, similarity_store=store)
     contextualizer = get_contextualizer(settings)
 
     pairs: list[tuple[FixtureDoc, UUID]] = []

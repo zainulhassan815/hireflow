@@ -27,6 +27,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from app.adapters.protocols import (
+    DocumentSimilarityStore,
     QueryParser,
     RerankCandidate,
     Reranker,
@@ -35,6 +36,7 @@ from app.adapters.protocols import (
     VectorStore,
 )
 from app.core.config import settings
+from app.domain.exceptions import Forbidden, NotFound, ServiceUnavailable
 from app.models import Document, DocumentStatus, DocumentType, User, UserRole
 from app.repositories.document import DocumentRepository
 from app.services.highlight import extract_query_terms, find_match_spans
@@ -54,6 +56,23 @@ class SearchResult:
     highlights: list[dict[str, Any]] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class SimilarDocument:
+    """F89.c — one neighbour from ``find_similar_documents``.
+
+    ``similarity`` is the UX-friendly cosine similarity (1.0 = identical,
+    0.0 = orthogonal), derived from Chroma's cosine distance. Metadata
+    carries whatever the Document row has (skills, experience_years, etc.)
+    so the UI can show compact context without a second round-trip.
+    """
+
+    document_id: UUID
+    filename: str
+    document_type: DocumentType | None
+    similarity: float
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
 class SearchService:
     def __init__(
         self,
@@ -61,10 +80,12 @@ class SearchService:
         vector_store: VectorStore | None,
         reranker: Reranker | None = None,
         query_parser: QueryParser | None = None,
+        similarity_store: DocumentSimilarityStore | None = None,
     ) -> None:
         self._documents = documents
         self._vector_store = vector_store
         self._reranker = reranker
+        self._similarity_store = similarity_store
         # F89.a — NullQueryParser (empty-filter emitter) is a safe
         # default for legacy callers (test harnesses). Production
         # always injects HeuristicQueryParser via the composition root.
@@ -354,6 +375,97 @@ class SearchService:
         if self._reranker is not None and hydrated:
             return self._rerank_chunks(query, hydrated, limit)
         return hydrated[:limit]
+
+    async def find_similar_documents(
+        self,
+        *,
+        actor: User,
+        source_document_id: UUID,
+        limit: int = 10,
+    ) -> list[SimilarDocument]:
+        """F89.c — find documents most similar to ``source_document_id``.
+
+        Semantic similarity is measured between mean-pooled chunk-
+        embedding centroids per document. The source document is
+        excluded from results. HR users are scoped to their own docs;
+        admins see across owners.
+
+        Raises ``ServiceUnavailable`` when the similarity store isn't
+        wired, ``NotFound`` when the source doc doesn't exist,
+        ``Forbidden`` when the actor can't access the source,
+        ``DocumentNotIndexed`` when the source has no doc-level vector
+        (caller should advise re-index).
+        """
+        if self._similarity_store is None:
+            raise ServiceUnavailable(
+                "Similarity search is not available on this deployment."
+            )
+
+        source = await self._documents.get(source_document_id)
+        if source is None:
+            raise NotFound("Document not found.")
+        if actor.role != UserRole.ADMIN and source.owner_id != actor.id:
+            raise Forbidden("You do not have access to this document.")
+        if source.status != DocumentStatus.READY:
+            # A non-READY source doc has no usable vector; behave the
+            # same as "not found" from the caller's POV — don't leak
+            # the status distinction across the ownership boundary.
+            raise NotFound("Document not found.")
+
+        where: dict[str, Any] | None = None
+        if actor.role != UserRole.ADMIN:
+            where = {"owner_id": str(actor.id)}
+
+        # Over-fetch by one so we can drop the source's self-match
+        # without shrinking the user-visible result set. HNSW's
+        # approximate recall can occasionally miss the source entirely,
+        # so we always filter-then-truncate rather than assume index 0.
+        hits = self._similarity_store.find_similar_documents(
+            str(source_document_id),
+            n_results=limit + 1,
+            where=where,
+        )
+
+        # Drop the source document from the neighbour set.
+        neighbour_ids: list[UUID] = []
+        distances: dict[UUID, float] = {}
+        for hit in hits:
+            doc_uuid = _safe_uuid(hit.document_id)
+            if doc_uuid is None or doc_uuid == source_document_id:
+                continue
+            neighbour_ids.append(doc_uuid)
+            distances[doc_uuid] = hit.distance
+
+        if not neighbour_ids:
+            return []
+
+        docs_map = await self._documents.get_many(neighbour_ids)
+
+        results: list[SimilarDocument] = []
+        for doc_id in neighbour_ids:
+            doc = docs_map.get(doc_id)
+            if doc is None or doc.status != DocumentStatus.READY:
+                # Drift safety — parallel of the F86.c chunk-path check.
+                continue
+            # Defence-in-depth owner filter. Chroma's ``where`` already
+            # enforces scoping, but a stale metadata row (e.g. doc
+            # reassigned) must never be the thing that breaks tenant
+            # isolation. Same belt-and-braces shape used by search.
+            if actor.role != UserRole.ADMIN and doc.owner_id != actor.id:
+                continue
+            distance = distances[doc_id]
+            results.append(
+                SimilarDocument(
+                    document_id=doc.id,
+                    filename=doc.filename,
+                    document_type=doc.document_type,
+                    similarity=max(0.0, 1.0 - distance),
+                    metadata=doc.metadata_ or {},
+                )
+            )
+            if len(results) >= limit:
+                break
+        return results
 
     def _rerank_chunks(
         self, query: str, chunks: list[RetrievedChunk], limit: int

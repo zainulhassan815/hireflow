@@ -48,25 +48,27 @@ async def reindex(dry_run: bool = False) -> None:
     )
     logger.info("chroma collection: %s", store.collection_name)
 
-    # Drop the whole collection so re-indexing starts clean. The
-    # per-model naming means we're not nuking other models' data.
+    # Drop both collections so re-indexing starts clean. The per-model
+    # naming means we're not nuking other models' data.
     if not dry_run:
-        try:
-            store._client.delete_collection(store.collection_name)
-            logger.info("deleted collection %s", store.collection_name)
-        except Exception:
-            logger.info(
-                "collection %s did not exist; continuing", store.collection_name
-            )
+        for collection_name in (store.collection_name, store.whole_collection_name):
+            try:
+                store._client.delete_collection(collection_name)
+                logger.info("deleted collection %s", collection_name)
+            except Exception:
+                logger.info("collection %s did not exist; continuing", collection_name)
         # Re-create with a fresh handle so subsequent upserts target the
-        # newly-created collection.
+        # newly-created collections (chunk + whole-doc).
         store = ChromaVectorStore(
             host=settings.chroma_host,
             port=settings.chroma_port,
             embedder=embedder,
         )
 
-    indexing = EmbeddingService(store)
+    # F89.c — feed the same store instance into both VectorStore and
+    # DocumentSimilarityStore slots so the reindex loop populates both
+    # chunk and doc-level collections in one pass.
+    indexing = EmbeddingService(store, embedder, similarity_store=store)
 
     async with SessionLocal() as session:
         # Eagerly load elements via the relationship so we can index

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID, uuid4
 
-from app.adapters.protocols import BlobStorage, VectorStore
+from app.adapters.protocols import BlobStorage, DocumentSimilarityStore, VectorStore
 from app.domain.exceptions import (
     FileTooLarge,
     Forbidden,
@@ -37,11 +37,13 @@ class DocumentService:
         *,
         max_file_size_bytes: int,
         vector_store: VectorStore | None = None,
+        similarity_store: DocumentSimilarityStore | None = None,
     ) -> None:
         self._documents = documents
         self._storage = storage
         self._max_size = max_file_size_bytes
         self._vector_store = vector_store
+        self._similarity_store = similarity_store
 
     @property
     def max_size_bytes(self) -> int:
@@ -97,6 +99,14 @@ class DocumentService:
                 self._vector_store.delete(str(document_id))
             except Exception:
                 logger.warning("failed to remove embeddings for %s", document_id)
+        # F89.c — mirror cleanup for the doc-level similarity vector.
+        # Chroma's ``delete`` is a no-op on missing ids so this is safe
+        # for docs uploaded before F89.c shipped.
+        if self._similarity_store:
+            try:
+                self._similarity_store.delete_document_vector(str(document_id))
+            except Exception:
+                logger.warning("failed to remove doc-level vector for %s", document_id)
         await self._documents.delete(doc)
 
     async def list_for_user(

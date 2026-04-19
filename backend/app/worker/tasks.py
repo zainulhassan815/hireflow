@@ -60,12 +60,22 @@ def extract_document_text(self, document_id: str) -> None:
     try:
         from app.adapters.embeddings.registry import get_embedding_provider
 
+        embedder = get_embedding_provider(settings)
         vector_store = ChromaVectorStore(
             host=settings.chroma_host,
             port=settings.chroma_port,
-            embedder=get_embedding_provider(settings),
+            embedder=embedder,
         )
-        embedding = EmbeddingService(vector_store)
+        # F89.c — same ChromaVectorStore instance implements both the
+        # chunk-level VectorStore and the doc-level
+        # DocumentSimilarityStore Protocols. Pass it in under both slots
+        # so ``index_document`` writes chunk vectors AND the mean-pooled
+        # doc-level vector in a single pass.
+        embedding = EmbeddingService(
+            vector_store,
+            embedder,
+            similarity_store=vector_store,
+        )
     except Exception:
         logger.warning("ChromaDB unavailable, skipping embedding indexing")
         embedding = None

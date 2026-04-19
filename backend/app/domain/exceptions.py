@@ -58,6 +58,17 @@ class NotFound(DomainError):
     """Requested resource does not exist."""
 
 
+class DocumentNotIndexed(DomainError):
+    """Source document has no entry in the document-similarity vector store.
+
+    Raised by the similarity search path (F89.c) when the caller asks for
+    neighbours of a document that was uploaded before doc-level indexing
+    shipped, or whose indexing otherwise never populated the doc vector.
+    Distinct from ``NotFound`` — the document row exists, it just lacks a
+    searchable representation. Route-layer message advises re-indexing.
+    """
+
+
 class FileTooLarge(DomainError):
     """Uploaded file exceeds the configured size limit."""
 

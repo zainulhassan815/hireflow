@@ -20,11 +20,13 @@ from typing import Any
 
 import chromadb
 
-from app.adapters.protocols import EmbeddingProvider, VectorHit
+from app.adapters.protocols import EmbeddingProvider, SimilarDocumentHit, VectorHit
+from app.domain.exceptions import DocumentNotIndexed
 
 logger = logging.getLogger(__name__)
 
 _COLLECTION_PREFIX = "documents"
+_WHOLE_COLLECTION_PREFIX = "documents_whole"
 
 
 def _safe_collection_suffix(model_name: str) -> str:
@@ -55,12 +57,23 @@ class ChromaVectorStore:
         # and lets two models coexist while we A/B them. Switching model
         # = a new collection; old one stays around until manually dropped
         # (see scripts/reindex_embeddings.py).
-        collection_name = (
-            f"{_COLLECTION_PREFIX}_{_safe_collection_suffix(embedder.model_name)}"
-        )
-        self._collection_name = collection_name
+        model_slug = _safe_collection_suffix(embedder.model_name)
+        self._collection_name = f"{_COLLECTION_PREFIX}_{model_slug}"
         self._collection = self._client.get_or_create_collection(
-            name=collection_name,
+            name=self._collection_name,
+            metadata={
+                "hnsw:space": "cosine",
+                "embedding_model": embedder.model_name,
+            },
+        )
+
+        # F89.c: second, separate collection holds one mean-pooled vector
+        # per document. Kept isolated from the chunk collection so chunk
+        # queries never surface doc-level rows (and vice versa) — no
+        # post-filter plumbing needed on either path.
+        self._whole_collection_name = f"{_WHOLE_COLLECTION_PREFIX}_{model_slug}"
+        self._whole_collection = self._client.get_or_create_collection(
+            name=self._whole_collection_name,
             metadata={
                 "hnsw:space": "cosine",
                 "embedding_model": embedder.model_name,
@@ -72,6 +85,10 @@ class ChromaVectorStore:
     @property
     def collection_name(self) -> str:
         return self._collection_name
+
+    @property
+    def whole_collection_name(self) -> str:
+        return self._whole_collection_name
 
     @property
     def embedder(self) -> EmbeddingProvider:
@@ -95,11 +112,15 @@ class ChromaVectorStore:
             existing_meta = self._collection.metadata or {}
             stored_model = existing_meta.get("embedding_model")
             count = self._collection.count()
+            whole_count = self._whole_collection.count()
             logger.info(
-                "ChromaVectorStore ready: collection=%s model=%s chunks=%d",
+                "ChromaVectorStore ready: collection=%s model=%s chunks=%d "
+                "whole-doc-collection=%s documents=%d",
                 self._collection_name,
                 self._embedder.model_name,
                 count,
+                self._whole_collection_name,
+                whole_count,
             )
             if stored_model and stored_model != self._embedder.model_name:
                 logger.warning(
@@ -124,6 +145,7 @@ class ChromaVectorStore:
         metadatas: list[dict[str, Any]],
         *,
         embedding_texts: list[str] | None = None,
+        embeddings: list[list[float]] | None = None,
     ) -> None:
         """Upsert chunks into the collection.
 
@@ -136,6 +158,11 @@ class ChromaVectorStore:
         ``chunks`` as the displayable document field — this separation
         powers contextual retrieval (F82.c): context+chunk feeds the
         vector while plain chunk text stays clean for snippets.
+
+        ``embeddings`` (F89.c) lets a caller pre-compute vectors
+        externally and supply them directly — the same vectors can then
+        be reused (e.g. mean-pooled into a doc-level representation)
+        without a second embedding pass.
         """
         if not chunks:
             return
@@ -149,8 +176,14 @@ class ChromaVectorStore:
             for i, meta in enumerate(metadatas)
         ]
 
-        to_embed = embedding_texts if embedding_texts is not None else chunks
-        embeddings = self._embedder.embed_documents(to_embed)
+        if embeddings is None:
+            to_embed = embedding_texts if embedding_texts is not None else chunks
+            embeddings = self._embedder.embed_documents(to_embed)
+        elif len(embeddings) != len(chunks):
+            raise ValueError(
+                f"Pre-computed embeddings length ({len(embeddings)}) does not "
+                f"match chunks length ({len(chunks)})."
+            )
 
         # ChromaDB has a batch limit; chunk in groups of 500
         batch_size = 500
@@ -221,3 +254,93 @@ class ChromaVectorStore:
                 document_id,
                 exc_info=True,
             )
+
+    # ---- DocumentSimilarityStore (F89.c) -----------------------------------
+
+    def upsert_document_vector(
+        self,
+        document_id: str,
+        embedding: list[float],
+        metadata: dict[str, Any],
+    ) -> None:
+        """Replace the doc-level vector for ``document_id``.
+
+        One vector per document, keyed by ``document_id`` — same value
+        in both the id slot and the metadata slot so metadata-based
+        ``where`` filters (owner scoping) and id-based lookups both
+        work. Chroma's ``upsert`` overwrites an existing id, which is
+        the behaviour we want on re-index.
+        """
+        self._whole_collection.upsert(
+            ids=[document_id],
+            embeddings=[embedding],
+            metadatas=[metadata],
+        )
+
+    def delete_document_vector(self, document_id: str) -> None:
+        """Remove the doc-level vector for ``document_id`` (no-op if absent)."""
+        try:
+            self._whole_collection.delete(ids=[document_id])
+        except Exception:
+            logger.warning(
+                "failed to delete doc-level vector for document %s",
+                document_id,
+                exc_info=True,
+            )
+
+    def find_similar_documents(
+        self,
+        source_document_id: str,
+        n_results: int,
+        where: dict[str, Any] | None = None,
+    ) -> list[SimilarDocumentHit]:
+        """Return the nearest neighbours of ``source_document_id``.
+
+        Fetches the source document's stored vector first, then queries
+        the whole-doc collection with it. Raising
+        ``DocumentNotIndexed`` when the source has no vector is how we
+        distinguish "doc exists but isn't in the similarity index yet"
+        from "no results" — the caller's HTTP translation differs.
+        """
+        source = self._whole_collection.get(
+            ids=[source_document_id],
+            include=["embeddings"],
+        )
+        # Chroma returns either ``None``, an empty list/array, or a list
+        # (or numpy ndarray) of vectors. Normalise via ``len``; `or []`
+        # doesn't work because a populated numpy array makes the boolean
+        # check ambiguous.
+        raw = source.get("embeddings")
+        if raw is None or len(raw) == 0:
+            raise DocumentNotIndexed(
+                "Document is not indexed in the similarity store. "
+                "Re-upload or run scripts/reindex_embeddings.py."
+            )
+        source_vector = list(raw[0])
+
+        kwargs: dict[str, Any] = {
+            "query_embeddings": [source_vector],
+            "n_results": n_results,
+        }
+        if where:
+            kwargs["where"] = where
+
+        results = self._whole_collection.query(**kwargs)
+        if not results["ids"] or not results["ids"][0]:
+            return []
+
+        hits: list[SimilarDocumentHit] = []
+        for doc_id, metadata, distance in zip(
+            results["ids"][0],
+            results["metadatas"][0],
+            results["distances"][0],
+            strict=True,
+        ):
+            hits.append(
+                SimilarDocumentHit(
+                    document_id=doc_id,
+                    distance=distance,
+                    metadata=metadata or {},
+                )
+            )
+        return hits
