@@ -44,6 +44,16 @@ async def nuke() -> None:
     )
 
     async with SessionLocal() as session:
+        # Candidate.source_document_id FK is SET NULL on document
+        # delete, so pre-existing candidates survive the document
+        # loop below as orphans. For a fresh-start nuke we want those
+        # gone too — truncate first, then walk documents.
+        from sqlalchemy import text
+
+        await session.execute(text("TRUNCATE applications, candidates CASCADE"))
+        await session.commit()
+        logger.info("truncated applications + candidates")
+
         docs = (await session.execute(select(Document))).scalars().all()
         logger.info("found %d documents to delete", len(docs))
 
@@ -69,9 +79,7 @@ async def nuke() -> None:
     # Drop every documents_* Chroma collection, including orphans from
     # prior embedding models. Current-model collections are empty after
     # the loop above; drop them too for a clean slate.
-    client = chromadb.HttpClient(
-        host=settings.chroma_host, port=settings.chroma_port
-    )
+    client = chromadb.HttpClient(host=settings.chroma_host, port=settings.chroma_port)
     for c in client.list_collections():
         # Catch every vintage of the name: current per-model form
         # (``documents_<slug>``, ``documents_whole_<slug>``) plus the

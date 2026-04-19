@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import Float, ForeignKey, Integer, String
+from sqlalchemy import Float, ForeignKey, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +30,17 @@ class Candidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """A candidate derived from a processed resume document."""
 
     __tablename__ = "candidates"
+    # Partial unique index: one candidate per (owner, email). NULL
+    # emails are exempt so unparseable resumes don't collide.
+    __table_args__ = (
+        Index(
+            "ix_candidates_owner_email_unique",
+            "owner_id",
+            "email",
+            unique=True,
+            postgresql_where=text("email IS NOT NULL"),
+        ),
+    )
 
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

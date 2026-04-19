@@ -45,10 +45,6 @@ class SyncCandidateService:
             )
 
     def _create_or_update(self, document: Document) -> Candidate:
-        existing = self._session.execute(
-            select(Candidate).where(Candidate.source_document_id == document.id)
-        ).scalar_one_or_none()
-
         meta = document.metadata_ or {}
         name = meta.get("name")
         email = _first(meta.get("emails"))
@@ -56,6 +52,26 @@ class SyncCandidateService:
         skills = meta.get("skills", []) or []
         experience_years = meta.get("experience_years")
         education = meta.get("education")
+
+        # Dedup priority:
+        #   1. Same document reprocessed → match on source_document_id.
+        #   2. Different document, same person → match on (owner, email)
+        #      when the parser produced an email. Point the existing
+        #      candidate at the newest source document so downstream
+        #      views (similar docs, search citations) always resolve to
+        #      the latest resume.
+        existing = self._session.execute(
+            select(Candidate).where(Candidate.source_document_id == document.id)
+        ).scalar_one_or_none()
+        if existing is None and email is not None:
+            existing = self._session.execute(
+                select(Candidate).where(
+                    Candidate.owner_id == document.owner_id,
+                    Candidate.email == email,
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                existing.source_document_id = document.id
 
         if existing is not None:
             existing.name = name or existing.name
