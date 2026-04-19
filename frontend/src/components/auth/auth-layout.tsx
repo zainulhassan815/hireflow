@@ -34,9 +34,7 @@ export function AuthLayout({ children, title, description }: AuthLayoutProps) {
           </p>
         </div>
 
-        <p className="text-primary-foreground/60 text-sm">
-          Sharif College of Engineering & Technology
-        </p>
+        <div aria-hidden />
       </div>
 
       {/* Right side - Form */}

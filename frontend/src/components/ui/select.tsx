@@ -18,13 +18,25 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   );
 }
 
-function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
+function SelectValue({
+  className,
+  placeholder,
+  children,
+  ...props
+}: Omit<SelectPrimitive.Value.Props, "children"> & {
+  placeholder?: string;
+  children?: React.ReactNode | ((value: unknown) => React.ReactNode);
+}) {
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
       className={cn("flex flex-1 text-left", className)}
       {...props}
-    />
+    >
+      {children ??
+        ((value) =>
+          value == null || value === "" ? (placeholder ?? "") : String(value))}
+    </SelectPrimitive.Value>
   );
 }
 

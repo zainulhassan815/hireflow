@@ -138,37 +138,36 @@ export function AppSidebar() {
     return (
       <SidebarMenuItem>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <SidebarMenuButton
-              asChild
-              isActive={isActive}
-              className={cn(
-                "transition-all duration-200",
-                isActive && "bg-primary/10 text-primary font-medium"
-              )}
-            >
-              <NavLink
-                to={item.href}
-                className="flex w-full items-center gap-3"
-              >
-                <Icon
-                  className={cn(
-                    "size-5 shrink-0 transition-colors",
-                    isActive ? "text-primary" : "text-muted-foreground"
-                  )}
-                />
-                <span className="truncate">{item.title}</span>
-                {item.badge && (
-                  <span className="bg-primary/10 text-primary ml-auto flex size-5 items-center justify-center rounded text-[10px] font-semibold">
-                    {item.badge}
-                  </span>
+          <TooltipTrigger
+            render={
+              <SidebarMenuButton
+                isActive={isActive}
+                className={cn(
+                  "transition-all duration-200",
+                  isActive && "bg-primary/10 text-primary font-medium"
                 )}
-                {isActive && !isCollapsed && (
-                  <ChevronRightIcon className="text-primary ml-auto size-4 opacity-60" />
-                )}
-              </NavLink>
-            </SidebarMenuButton>
-          </TooltipTrigger>
+                render={
+                  <NavLink
+                    to={item.href}
+                    className="flex w-full items-center gap-3"
+                  >
+                    <Icon
+                      className={cn(
+                        "size-5 shrink-0 transition-colors",
+                        isActive ? "text-primary" : "text-muted-foreground"
+                      )}
+                    />
+                    <span className="truncate">{item.title}</span>
+                    {item.badge && (
+                      <span className="bg-primary/10 text-primary ml-auto flex size-5 items-center justify-center rounded text-[10px] font-semibold">
+                        {item.badge}
+                      </span>
+                    )}
+                  </NavLink>
+                }
+              />
+            }
+          />
           {isCollapsed && (
             <TooltipContent side="right" className="flex flex-col gap-1">
               <span className="font-medium">{item.title}</span>
@@ -254,21 +253,23 @@ export function AppSidebar() {
       <SidebarFooter className="p-3 group-data-[collapsible=icon]:p-2">
         {/* Quick Action Button */}
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              onClick={() => navigate("/jobs/create")}
-              size={isCollapsed ? "icon" : "default"}
-              className={cn(
-                "w-full gap-2 shadow-sm transition-all",
-                "group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-10 group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:rounded-full"
-              )}
-            >
-              <PlusIcon className="size-5 shrink-0" />
-              <span className="group-data-[collapsible=icon]:sr-only">
-                Post New Job
-              </span>
-            </Button>
-          </TooltipTrigger>
+          <TooltipTrigger
+            render={
+              <Button
+                onClick={() => navigate("/jobs/create")}
+                size={isCollapsed ? "icon" : "default"}
+                className={cn(
+                  "w-full gap-2 shadow-sm transition-all",
+                  "group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-10 group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:rounded-full"
+                )}
+              >
+                <PlusIcon className="size-5 shrink-0" />
+                <span className="group-data-[collapsible=icon]:sr-only">
+                  Post New Job
+                </span>
+              </Button>
+            }
+          />
           {isCollapsed && (
             <TooltipContent side="right">Post New Job</TooltipContent>
           )}
@@ -278,28 +279,30 @@ export function AppSidebar() {
 
         {/* User Profile */}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className={cn(
-                "hover:bg-accent flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors",
-                "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
-                "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2"
-              )}
-            >
-              <div className="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
-                {user ? getInitials(user.full_name ?? user.email) : "U"}
-              </div>
-              <div className="flex min-w-0 flex-1 flex-col group-data-[collapsible=icon]:hidden">
-                <span className="truncate text-sm font-medium">
-                  {user?.full_name || "User"}
-                </span>
-                <span className="text-muted-foreground truncate text-xs">
-                  {user?.email || ""}
-                </span>
-              </div>
-              <ChevronRightIcon className="text-muted-foreground size-4 group-data-[collapsible=icon]:hidden" />
-            </button>
-          </DropdownMenuTrigger>
+          <DropdownMenuTrigger
+            render={
+              <button
+                className={cn(
+                  "hover:bg-accent flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors",
+                  "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
+                  "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2"
+                )}
+              >
+                <div className="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
+                  {user ? getInitials(user.full_name ?? user.email) : "U"}
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col group-data-[collapsible=icon]:hidden">
+                  <span className="truncate text-sm font-medium">
+                    {user?.full_name || "User"}
+                  </span>
+                  <span className="text-muted-foreground truncate text-xs">
+                    {user?.email || ""}
+                  </span>
+                </div>
+                <ChevronRightIcon className="text-muted-foreground size-4 group-data-[collapsible=icon]:hidden" />
+              </button>
+            }
+          />
           <DropdownMenuContent
             align={isCollapsed ? "center" : "start"}
             side={isCollapsed ? "right" : "top"}

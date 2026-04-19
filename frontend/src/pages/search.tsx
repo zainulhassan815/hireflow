@@ -505,20 +505,22 @@ export function SearchPage() {
                             {result.confidence &&
                               CONFIDENCE_DISPLAY[result.confidence] && (
                                 <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Badge
-                                      variant="outline"
-                                      className={cn(
-                                        CONFIDENCE_DISPLAY[result.confidence]
-                                          .className
-                                      )}
-                                    >
-                                      {
-                                        CONFIDENCE_DISPLAY[result.confidence]
-                                          .label
-                                      }
-                                    </Badge>
-                                  </TooltipTrigger>
+                                  <TooltipTrigger
+                                    render={
+                                      <Badge
+                                        variant="outline"
+                                        className={cn(
+                                          CONFIDENCE_DISPLAY[result.confidence]
+                                            .className
+                                        )}
+                                      >
+                                        {
+                                          CONFIDENCE_DISPLAY[result.confidence]
+                                            .label
+                                        }
+                                      </Badge>
+                                    }
+                                  />
                                   <TooltipContent>
                                     {
                                       CONFIDENCE_DISPLAY[result.confidence]
@@ -604,9 +606,9 @@ export function SearchPage() {
                             aria-label="Assistant is thinking"
                             className="flex gap-1 py-1"
                           >
-                            <span className="bg-foreground/30 size-2 animate-bounce rounded-full" />
-                            <span className="bg-foreground/30 size-2 animate-bounce rounded-full [animation-delay:0.1s]" />
-                            <span className="bg-foreground/30 size-2 animate-bounce rounded-full [animation-delay:0.2s]" />
+                            <span className="bg-foreground/30 size-2 animate-pulse rounded-full" />
+                            <span className="bg-foreground/30 size-2 animate-pulse rounded-full [animation-delay:0.1s]" />
+                            <span className="bg-foreground/30 size-2 animate-pulse rounded-full [animation-delay:0.2s]" />
                           </div>
                         ) : message.role === "assistant" ? (
                           <AssistantMarkdown
@@ -676,20 +678,22 @@ export function SearchPage() {
                             {message.confidence &&
                               CONFIDENCE_DISPLAY[message.confidence] && (
                                 <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Badge
-                                      variant="outline"
-                                      className={cn(
-                                        CONFIDENCE_DISPLAY[message.confidence]
-                                          .className
-                                      )}
-                                    >
-                                      {
-                                        CONFIDENCE_DISPLAY[message.confidence]
-                                          .label
-                                      }
-                                    </Badge>
-                                  </TooltipTrigger>
+                                  <TooltipTrigger
+                                    render={
+                                      <Badge
+                                        variant="outline"
+                                        className={cn(
+                                          CONFIDENCE_DISPLAY[message.confidence]
+                                            .className
+                                        )}
+                                      >
+                                        {
+                                          CONFIDENCE_DISPLAY[message.confidence]
+                                            .label
+                                        }
+                                      </Badge>
+                                    }
+                                  />
                                   <TooltipContent>
                                     {
                                       CONFIDENCE_DISPLAY[message.confidence]

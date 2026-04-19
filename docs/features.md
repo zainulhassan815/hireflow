@@ -371,7 +371,7 @@ Improve accuracy, relevance, and usefulness of core AI features.
 
 Production-grade interface with attention to detail, accessibility, and delight.
 
-- [~] **F90 · Design revamp + system baseline** — full visual-identity pass.
+- [x] **F90 · Design revamp + system baseline** — full visual-identity pass.
   Kills AI-slop defaults and establishes tokens that F91–F96 inherit.
   Driven by the `/impeccable:critique` findings in
   `docs/dev/F90-design-revamp/01-critique.md` (baseline heuristic score
@@ -397,7 +397,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     state voice.
   - [x] **F90.g** `/impeccable:delight` — brand moments: login hero,
     empty states, first-use onboarding. Peak-end rule targets.
-  - [ ] **F90.h** `/impeccable:polish` — final pass: pure-black backdrop
+  - [x] **F90.h** `/impeccable:polish` — final pass: pure-black backdrop
     → brand-tinted, kill bounce animation, align spacing drift, document
     the resulting tokens.
 

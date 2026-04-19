@@ -339,11 +339,13 @@ export function DocumentsPage() {
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon-sm">
-                            <MoreHorizontalIcon className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button variant="ghost" size="icon-sm">
+                              <MoreHorizontalIcon className="size-4" />
+                            </Button>
+                          }
+                        />
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => setPreviewDoc(doc)}>
                             <EyeIcon className="mr-2 size-4" />

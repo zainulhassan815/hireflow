@@ -1,14 +1,9 @@
-import * as React from "react";
+import type * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
-// F90.b — editorial-serious type scale.
-// h1–h3 carry the display face (Fraunces) with tuned leading + negative
-// tracking so headlines feel tight and confident. h4–h6 stay on the
-// body sans (Inter) — sub-headline territory where the serif would
-// read as fussy.
 const typographyVariants = cva("", {
   variants: {
     variant: {
@@ -70,37 +65,27 @@ export interface TypographyProps
   as?: ElementType;
 }
 
-const Typography = React.forwardRef<HTMLElement, TypographyProps>(
-  (
-    { className, variant = "p", asChild = false, as, children, ...props },
-    ref
-  ) => {
-    const defaultElement = variantElementMap[variant as VariantType] || "p";
-    const Element = as || defaultElement;
+function Typography({
+  className,
+  variant = "p",
+  asChild = false,
+  as,
+  children,
+  ...props
+}: TypographyProps) {
+  const Element: ElementType =
+    as ?? variantElementMap[variant as VariantType] ?? "p";
+  const Component = asChild ? Slot : Element;
 
-    if (asChild) {
-      return (
-        <Slot
-          className={cn(typographyVariants({ variant }), className)}
-          ref={ref}
-          {...props}
-        >
-          {children}
-        </Slot>
-      );
-    }
-
-    return React.createElement(
-      Element,
-      {
-        className: cn(typographyVariants({ variant }), className),
-        ref,
-        ...props,
-      },
-      children
-    );
-  }
-);
+  return (
+    <Component
+      className={cn(typographyVariants({ variant }), className)}
+      {...props}
+    >
+      {children}
+    </Component>
+  );
+}
 
 Typography.displayName = "Typography";
 

@@ -147,11 +147,13 @@ export function JobsPage() {
                     </Typography>
                   </div>
                   <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon-sm">
-                        <MoreHorizontalIcon className="size-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button variant="ghost" size="icon-sm">
+                          <MoreHorizontalIcon className="size-4" />
+                        </Button>
+                      }
+                    />
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
                         onClick={() => navigate(`/jobs/${job.id}/edit`)}

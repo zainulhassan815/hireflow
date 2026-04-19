@@ -75,8 +75,8 @@ export function JobForm({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  const handleSelectChange = (name: string, value: string | null) => {
+    setFormData((prev) => ({ ...prev, [name]: value ?? "" }));
   };
 
   const handleNumberChange = (name: string, value: string) => {
