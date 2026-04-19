@@ -2,7 +2,9 @@ import { DownloadIcon, FileTextIcon, XIcon } from "lucide-react";
 
 import {
   downloadDocument,
+  getDocument,
   getDocumentMetadata,
+  listDocumentsOptions,
   type DocumentResponse,
   type DocumentMetadataResponse,
 } from "@/api";
@@ -16,9 +18,11 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Typography } from "@/components/ui/typography";
+import { SimilarDocuments } from "@/components/documents/similar-documents";
 import { formatDateTime, formatFileSize } from "@/lib/utils";
 import { toast } from "sonner";
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface DocumentPreviewProps {
   document: DocumentResponse | null;
@@ -31,27 +35,68 @@ export function DocumentPreview({
   open,
   onOpenChange,
 }: DocumentPreviewProps) {
+  const queryClient = useQueryClient();
   const [metadata, setMetadata] =
     React.useState<DocumentMetadataResponse | null>(null);
   const [loading, setLoading] = React.useState(false);
+  // F89.c.1 — when the user clicks a neighbour in the "Similar" section
+  // we swap the preview target in place rather than closing + reopening
+  // the dialog. ``overrideDoc`` takes priority over the parent-supplied
+  // ``doc`` prop while the dialog is open; cleared on close.
+  const [overrideDoc, setOverrideDoc] = React.useState<DocumentResponse | null>(
+    null
+  );
+  const activeDoc = overrideDoc ?? doc;
+  const activeDocId = activeDoc?.id;
 
   React.useEffect(() => {
-    if (!doc || !open) {
+    if (!activeDocId || !open) {
       setMetadata(null);
       return;
     }
     setLoading(true);
-    getDocumentMetadata({ path: { document_id: doc.id } }).then(({ data }) => {
-      if (data) setMetadata(data);
-      setLoading(false);
-    });
-  }, [doc?.id, open]);
+    getDocumentMetadata({ path: { document_id: activeDocId } }).then(
+      ({ data }) => {
+        if (data) setMetadata(data);
+        setLoading(false);
+      }
+    );
+  }, [activeDocId, open]);
 
-  if (!doc) return null;
+  React.useEffect(() => {
+    if (!open) setOverrideDoc(null);
+  }, [open]);
+
+  const handleSelectNeighbour = React.useCallback(
+    async (documentId: string) => {
+      // Prefer the list-cache hydrated by the documents page — zero
+      // extra fetch in the common (HR) case. Admin cross-owner hits
+      // the fallback.
+      const cached = queryClient.getQueryData<DocumentResponse[]>(
+        listDocumentsOptions().queryKey
+      );
+      const hit = cached?.find((d) => d.id === documentId);
+      if (hit) {
+        setOverrideDoc(hit);
+        return;
+      }
+      const { data, error } = await getDocument({
+        path: { document_id: documentId },
+      });
+      if (error) {
+        toast.error("Could not load that document.");
+        return;
+      }
+      if (data) setOverrideDoc(data);
+    },
+    [queryClient]
+  );
+
+  if (!activeDoc) return null;
 
   const handleDownload = async () => {
     const { data, error } = await downloadDocument({
-      path: { document_id: doc.id },
+      path: { document_id: activeDoc.id },
     });
     if (error) {
       toast.error("Download failed");
@@ -61,7 +106,7 @@ export function DocumentPreview({
       const url = URL.createObjectURL(data);
       const a = Object.assign(document.createElement("a"), {
         href: url,
-        download: doc.filename,
+        download: activeDoc.filename,
       });
       a.click();
       URL.revokeObjectURL(url);
@@ -80,16 +125,18 @@ export function DocumentPreview({
               <FileTextIcon className="text-muted-foreground size-5" />
             </div>
             <div>
-              <DialogTitle className="text-left">{doc.filename}</DialogTitle>
+              <DialogTitle className="text-left">
+                {activeDoc.filename}
+              </DialogTitle>
               <Typography variant="muted" className="text-xs">
-                {formatFileSize(doc.size_bytes)} &middot;{" "}
-                {formatDateTime(doc.created_at)}
+                {formatFileSize(activeDoc.size_bytes)} &middot;{" "}
+                {formatDateTime(activeDoc.created_at)}
               </Typography>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto">
+        <div key={activeDoc.id} className="flex-1 overflow-auto">
           <div className="mb-4 rounded-lg border p-4">
             <Typography variant="h6" className="mb-3">
               Document Info
@@ -100,7 +147,7 @@ export function DocumentPreview({
                   Type
                 </Typography>
                 <Badge variant="outline" className="mt-1 capitalize">
-                  {doc.document_type ?? "unclassified"}
+                  {activeDoc.document_type ?? "unclassified"}
                 </Badge>
               </div>
               <div>
@@ -108,10 +155,12 @@ export function DocumentPreview({
                   Status
                 </Typography>
                 <Badge
-                  variant={doc.status === "ready" ? "default" : "secondary"}
+                  variant={
+                    activeDoc.status === "ready" ? "default" : "secondary"
+                  }
                   className="mt-1 capitalize"
                 >
-                  {doc.status}
+                  {activeDoc.status}
                 </Badge>
               </div>
               {skills.length > 0 && (
@@ -145,7 +194,8 @@ export function DocumentPreview({
                   {metadata.extracted_text}
                 </pre>
               </div>
-            ) : doc.status === "processing" || doc.status === "pending" ? (
+            ) : activeDoc.status === "processing" ||
+              activeDoc.status === "pending" ? (
               <div className="bg-muted/50 rounded-lg p-8 text-center">
                 <Typography variant="muted">
                   Document is being processed...
@@ -159,6 +209,14 @@ export function DocumentPreview({
               </div>
             )}
           </div>
+
+          <Separator className="my-4" />
+
+          <SimilarDocuments
+            document={activeDoc}
+            enabled={open}
+            onSelect={handleSelectNeighbour}
+          />
         </div>
 
         <Separator className="my-4" />
