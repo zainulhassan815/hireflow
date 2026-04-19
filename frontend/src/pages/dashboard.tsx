@@ -139,7 +139,7 @@ export function DashboardPage() {
               <Typography variant="muted" className="text-xs">
                 Processed
               </Typography>
-              <CheckCircleIcon className="size-4 text-green-500" />
+              <CheckCircleIcon className="text-success size-4" />
             </div>
             <Typography variant="h3" className="mt-2">
               {stats.processed}

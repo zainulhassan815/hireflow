@@ -383,7 +383,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     Everything downstream depends on this.
   - [x] **F90.b** `/impeccable:typeset` — typography system. Display face
     for headlines, real weight contrast, intentional tracking/leading.
-  - [ ] **F90.c** `/impeccable:colorize` — semantic categorical palette
+  - [x] **F90.c** `/impeccable:colorize` — semantic categorical palette
     via OKLCH hue rotation. Status / intent / confidence get hue
     differentiation; blue stays primary-action only.
   - [ ] **F90.d** `/impeccable:layout` — break the identical 4-KPI-card

@@ -45,8 +45,8 @@ export function AuthLayout({ children, title, description }: AuthLayoutProps) {
           {/* Mobile logo */}
           <div className="flex justify-center lg:hidden">
             <NavLink to="/" className="flex items-center gap-3">
-              <div className="bg-primary flex size-10 items-center justify-center">
-                <span className="font-display text-base font-semibold text-white">
+              <div className="bg-foreground flex size-10 items-center justify-center">
+                <span className="text-background font-display text-base font-semibold">
                   H
                 </span>
               </div>

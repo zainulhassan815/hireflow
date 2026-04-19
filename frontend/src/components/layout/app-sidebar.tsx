@@ -192,8 +192,8 @@ export function AppSidebar() {
           to="/"
           className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center"
         >
-          <div className="bg-primary flex size-10 shrink-0 items-center justify-center">
-            <span className="text-primary-foreground text-base font-bold">
+          <div className="bg-foreground flex size-10 shrink-0 items-center justify-center">
+            <span className="text-background font-display text-base font-semibold">
               H
             </span>
           </div>
@@ -286,7 +286,7 @@ export function AppSidebar() {
                 "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2"
               )}
             >
-              <div className="from-primary/20 to-primary/10 text-primary ring-primary/20 relative flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-sm font-semibold ring-2">
+              <div className="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
                 {user ? getInitials(user.full_name ?? user.email) : "U"}
               </div>
               <div className="flex min-w-0 flex-1 flex-col group-data-[collapsible=icon]:hidden">

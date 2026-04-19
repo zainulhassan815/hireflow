@@ -31,11 +31,27 @@
   --border: oklch(0.928 0.006 264.531);
   --input: oklch(0.928 0.006 264.531);
   --ring: oklch(0.707 0.022 261.325);
-  --chart-1: oklch(0.83 0.1 230);
-  --chart-2: oklch(0.75 0.14 233);
-  --chart-3: oklch(0.68 0.15 237);
-  --chart-4: oklch(0.59 0.14 242);
-  --chart-5: oklch(0.5 0.12 243);
+  /* F90.c — semantic roles. Destructive already carries the "danger"
+   * role (kept for shadcn primitive compatibility); success /
+   * warning / info are new. Blue is reserved for primary action
+   * only, so "info" gets a slightly cooler blue to differentiate. */
+  --success: oklch(0.62 0.14 155);
+  --success-foreground: oklch(0.985 0.005 155);
+  --warning: oklch(0.72 0.14 85);
+  --warning-foreground: oklch(0.22 0.04 85);
+  --info: oklch(0.62 0.13 220);
+  --info-foreground: oklch(0.985 0.005 220);
+
+  /* F90.c — categorical palette (5 hues, 72° rotation). Nominal,
+   * not ordinal: maps to categories (doc type, intent class) that
+   * need distinguishability without implying valence. L + C tuned
+   * per-hue; yellows naturally sit brighter. */
+  --cat-1: oklch(0.65 0.14 242); /* blue */
+  --cat-2: oklch(0.65 0.2 314); /* magenta */
+  --cat-3: oklch(0.65 0.18 26); /* warm red */
+  --cat-4: oklch(0.82 0.16 98); /* chartreuse */
+  --cat-5: oklch(0.65 0.12 170); /* teal */
+
   --radius: 0;
   --sidebar: oklch(0.985 0.002 247.839);
   --sidebar-foreground: oklch(0.13 0.028 261.692);
@@ -66,11 +82,24 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.83 0.1 230);
-  --chart-2: oklch(0.75 0.14 233);
-  --chart-3: oklch(0.68 0.15 237);
-  --chart-4: oklch(0.59 0.14 242);
-  --chart-5: oklch(0.5 0.12 243);
+
+  /* F90.c — semantic roles (dark). L bumped to ~0.72 so the colors
+   * carry on low-L backgrounds. Destructive stays where shadcn set
+   * it. */
+  --success: oklch(0.72 0.16 155);
+  --success-foreground: oklch(0.18 0.05 155);
+  --warning: oklch(0.78 0.14 85);
+  --warning-foreground: oklch(0.18 0.04 85);
+  --info: oklch(0.72 0.15 220);
+  --info-foreground: oklch(0.18 0.05 220);
+
+  /* F90.c — categorical (dark). Same hue targets, higher L. */
+  --cat-1: oklch(0.72 0.15 242);
+  --cat-2: oklch(0.72 0.2 314);
+  --cat-3: oklch(0.72 0.18 26);
+  --cat-4: oklch(0.85 0.17 98);
+  --cat-5: oklch(0.72 0.13 170);
+
   --sidebar: oklch(0.21 0.034 264.665);
   --sidebar-foreground: oklch(0.985 0.002 247.839);
   --sidebar-primary: oklch(0.75 0.14 233);
@@ -95,11 +124,21 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
+  /* F90.c — semantic role exports. Tailwind utilities: bg-success,
+   * text-warning, border-info, etc. Destructive already exported
+   * above. */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  /* F90.c — categorical exports (bg-cat-1, text-cat-3, etc.). */
+  --color-cat-1: var(--cat-1);
+  --color-cat-2: var(--cat-2);
+  --color-cat-3: var(--cat-3);
+  --color-cat-4: var(--cat-4);
+  --color-cat-5: var(--cat-5);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
