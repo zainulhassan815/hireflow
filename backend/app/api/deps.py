@@ -116,6 +116,33 @@ except Exception:
 
     _reranker = NullReranker()
 
+
+# F81.g — intent classifier. Constructed once at startup; embeds the
+# canonical queries immediately so per-request ``classify()`` is a
+# single ``embed_query`` call + cosine comparisons. If construction
+# fails (embedder down, canonicals malformed), RAG gracefully degrades
+# to "no service configured" via ``get_rag_service`` returning None.
+_intent_classifier = None
+try:
+    if _vector_store is not None and getattr(_vector_store, "embedder", None):
+        from app.services.intent_canonicals import CANONICALS
+        from app.services.intent_classifier import EmbeddingIntentClassifier
+
+        _intent_classifier = EmbeddingIntentClassifier(
+            _vector_store.embedder, CANONICALS
+        )
+        _logger.info(
+            "intent classifier: %d canonical examples across %d intents",
+            sum(len(examples) for examples in CANONICALS.values()),
+            sum(1 for examples in CANONICALS.values() if examples),
+        )
+except Exception:
+    _logger.warning(
+        "intent classifier unavailable at startup; /rag/* will 503",
+        exc_info=True,
+    )
+    _intent_classifier = None
+
 _gmail_oauth: GmailOAuth | None
 if (
     settings.gmail_client_id
@@ -264,14 +291,16 @@ def get_search_service(documents: DocumentRepositoryDep) -> SearchService:
 
 
 def get_rag_service(documents: DocumentRepositoryDep) -> RagService | None:
-    if _vector_store is None or _llm_provider is None:
+    if _vector_store is None or _llm_provider is None or _intent_classifier is None:
         return None
     # F81.k — RAG retrieves through the same hybrid pipeline as /search
     # (vector + lexical + reranker) via SearchService as a ChunkRetriever.
     # SearchService is constructed per-request; the reranker inside is a
     # module-level singleton so the heavy model is loaded once.
+    # F81.g — intent classifier is also a module-level singleton (canonicals
+    # embed once at startup).
     retriever = SearchService(documents, _vector_store, reranker=_reranker)
-    return RagService(retriever, _llm_provider)
+    return RagService(retriever, _llm_provider, _intent_classifier)
 
 
 def get_job_service(jobs: JobRepositoryDep) -> JobService:

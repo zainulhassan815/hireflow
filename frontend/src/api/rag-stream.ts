@@ -22,12 +22,29 @@ import type {
   SourceCitation,
 } from "./generated/types.gen";
 
+export type Intent =
+  | "count"
+  | "comparison"
+  | "ranking"
+  | "yes_no"
+  | "locate"
+  | "summary"
+  | "timeline"
+  | "extract"
+  | "skill_list"
+  | "list"
+  | "general";
+
 export interface StreamDone {
   model: string;
   query_time_ms: number;
   // F81.e — null when no answer was grounded (sentinel path); frontend
   // should hide the badge rather than render "low".
   confidence: "high" | "medium" | "low" | null;
+  // F81.g — classifier output. Always present (defaults to "general"
+  // on the server), so the frontend always has a value to switch on.
+  intent: Intent;
+  intent_confidence: number;
 }
 
 export type RagStreamEvent =

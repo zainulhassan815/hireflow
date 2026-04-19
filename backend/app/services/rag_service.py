@@ -10,7 +10,12 @@ from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
 
-from app.adapters.protocols import ChunkRetriever, LlmProvider, RetrievedChunk
+from app.adapters.protocols import (
+    ChunkRetriever,
+    IntentClassifier,
+    LlmProvider,
+    RetrievedChunk,
+)
 from app.core.config import settings
 from app.domain.exceptions import LlmProviderError
 from app.models import User
@@ -24,6 +29,8 @@ from app.schemas.rag import (
     StreamDone,
 )
 from app.services.highlight import extract_query_terms, find_match_spans
+from app.services.intent_canonicals import Intent
+from app.services.rag_prompts import PROMPT_VERSION, build_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -62,40 +69,11 @@ def _compute_confidence(kept: list[RetrievedChunk]) -> Confidence:
     return "low"
 
 
-# F81.d — tighter system prompt. Rules over prose.
-#
-# Each rule exists for a reason:
-#   1. Hard "I don't know" contract — the assistant returns an exact
-#      sentinel string so the frontend (and downstream consumers) can
-#      detect zero-knowledge answers without heuristic matching.
-#   2. Inline filename citation — makes claims verifiable at a glance
-#      and pairs with the F82.e section_heading metadata that already
-#      travels on each chunk.
-#   3. No preamble — removes the "Based on the documents…" boilerplate
-#      that wastes tokens and burns reader attention.
-#   4. Format hints — bullets for enumerations, tables for comparisons,
-#      so answers are shaped right for the question.
-#   5. Length cap — stops the model from padding.
-_SYSTEM_PROMPT = """\
-You are an HR document-search assistant. Answer questions using only the
-provided document context.
-
-Rules:
-1. If the context does not contain the answer, respond with exactly:
-   Not in the provided documents.
-   Do not guess, do not speculate, do not offer adjacent information.
-2. Cite the source filename inline, in square brackets, for every
-   specific claim — e.g. "Alice has 5 years of Kubernetes experience
-   [alice_resume.pdf]." One citation per claim; do not stack multiple
-   filenames on the same claim.
-3. Be direct. Do not open with phrases like "Based on the documents",
-   "According to the provided context", or "The documents state".
-   Start with the answer itself.
-4. Use bullet points when listing three or more items. Use a markdown
-   table only when comparing the same attribute across two or more
-   documents (e.g. years of experience across three candidates).
-5. Keep the answer under 200 words unless a table or list is warranted.
-"""
+# F81.d → F81.g — system prompt now lives in ``rag_prompts.py`` as a
+# three-layer composition (identity + evidence rules + per-intent
+# format rules + optional few-shot). See the module for the rationale
+# behind each layer. This file just calls ``build_system_prompt(intent)``
+# per request.
 
 _CONTEXT_TEMPLATE = """\
 --- Document: {filename} (chunk {chunk_index}) ---
@@ -112,6 +90,8 @@ class RagResult:
     model: str
     query_time_ms: int
     confidence: Confidence | None = None
+    intent: Intent = "general"
+    intent_confidence: float = 0.0
 
 
 @dataclass
@@ -128,6 +108,8 @@ class _RagContext:
     system_prompt: str
     user_prompt: str
     confidence: Confidence
+    intent: Intent
+    intent_confidence: float
 
 
 class RagService:
@@ -135,9 +117,11 @@ class RagService:
         self,
         retriever: ChunkRetriever,
         llm: LlmProvider,
+        classifier: IntentClassifier,
     ) -> None:
         self._retriever = retriever
         self._llm = llm
+        self._classifier = classifier
 
     async def query(
         self,
@@ -178,6 +162,8 @@ class RagService:
             model=self._llm.model_name,
             query_time_ms=elapsed_ms,
             confidence=ctx.confidence,
+            intent=ctx.intent,
+            intent_confidence=ctx.intent_confidence,
         )
 
     async def stream_query(
@@ -266,6 +252,8 @@ class RagService:
                 model=self._llm.model_name,
                 query_time_ms=elapsed_ms,
                 confidence=ctx.confidence,
+                intent=ctx.intent,
+                intent_confidence=ctx.intent_confidence,
             )
         )
 
@@ -300,16 +288,20 @@ class RagService:
         cutoff = settings.rag_context_max_distance
         budget = settings.rag_context_token_budget
         kept, tokens_used = self._apply_context_gate(chunks, cutoff, budget)
-        logger.info(
-            "rag context: %d/%d chunks kept, ~%d tokens (cutoff=%s, budget=%d)",
-            len(kept),
-            len(chunks),
-            tokens_used,
-            "none" if cutoff is None else f"{cutoff:.2f}",
-            budget,
-        )
         if not kept:
+            logger.info(
+                "rag context: 0/%d chunks kept (cutoff=%s, budget=%d)",
+                len(chunks),
+                "none" if cutoff is None else f"{cutoff:.2f}",
+                budget,
+            )
             return None
+
+        # F81.g — classify intent, compose an intent-specific system
+        # prompt. Classifier is CPU-bound and fast (single embed_query
+        # call + cosine comparisons); no ``to_thread`` hop needed.
+        intent_result = self._classifier.classify(question)
+        system_prompt = build_system_prompt(intent_result.intent)
 
         context_parts: list[str] = []
         citations: list[dict[str, Any]] = []
@@ -341,11 +333,34 @@ class RagService:
 
         context = "\n".join(context_parts)
         user_prompt = f"Context:\n{context}\n\nQuestion: {question}"
+
+        # Single observability line per query — same grep-able format
+        # across F81.b/c (chunks + tokens) and F81.g (intent + prompt
+        # version). ``runner_up`` is how the operator diagnoses
+        # near-tie classifications.
+        logger.info(
+            "rag context: %d/%d chunks kept, ~%d tokens "
+            "(cutoff=%s, budget=%d) | intent=%s conf=%.2f runner=%s "
+            "prompt=%s system_prompt_chars=%d",
+            len(kept),
+            len(chunks),
+            tokens_used,
+            "none" if cutoff is None else f"{cutoff:.2f}",
+            budget,
+            intent_result.intent,
+            intent_result.confidence,
+            intent_result.runner_up or "-",
+            PROMPT_VERSION,
+            len(system_prompt),
+        )
+
         return _RagContext(
             citations=citations,
-            system_prompt=_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             confidence=_compute_confidence(kept),
+            intent=intent_result.intent,
+            intent_confidence=intent_result.confidence,
         )
 
     @staticmethod

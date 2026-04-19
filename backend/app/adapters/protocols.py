@@ -312,6 +312,44 @@ class Reranker(Protocol):
     def model_name(self) -> str: ...
 
 
+# ---------- Intent classifier (F81.g) ----------
+
+
+@dataclass(frozen=True, slots=True)
+class IntentResult:
+    """Output of ``IntentClassifier.classify``.
+
+    ``confidence`` is the cosine similarity to the best-matching
+    canonical example (0..1; higher = better). Values below the
+    classifier's configured threshold are flattened to
+    ``intent="general"`` — the fallback prose mode.
+
+    ``runner_up`` is the second-best intent, preserved for
+    observability. When ``runner_up`` is close to the winner it
+    signals an ambiguous query worth reviewing in the canonicals
+    dict.
+    """
+
+    intent: (
+        str  # Literal["count","comparison",...,"general"] — see intent_canonicals.py
+    )
+    confidence: float
+    runner_up: str | None
+
+
+@runtime_checkable
+class IntentClassifier(Protocol):
+    """Classify a user query into a RAG-answer intent.
+
+    Used by ``RagService`` to pick the right format instructions.
+    Implementations are synchronous — classification should add
+    negligible latency to the request path (well under 10ms for the
+    embedding-based default).
+    """
+
+    def classify(self, query: str) -> IntentResult: ...
+
+
 # ---------- Chunk retriever (F81.k) ----------
 
 

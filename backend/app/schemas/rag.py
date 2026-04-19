@@ -91,6 +91,40 @@ class RagResponse(BaseModel):
         ),
         examples=["high"],
     )
+    intent: Literal[
+        "count",
+        "comparison",
+        "ranking",
+        "yes_no",
+        "locate",
+        "summary",
+        "timeline",
+        "extract",
+        "skill_list",
+        "list",
+        "general",
+    ] = Field(
+        "general",
+        description=(
+            "Classified answer shape (F81.g). Drives the system-prompt "
+            "format instruction on the backend; frontend may optionally "
+            "use it to style the answer. ``general`` is the default "
+            "prose fallback when the embedding classifier is below its "
+            "confidence threshold."
+        ),
+        examples=["comparison"],
+    )
+    intent_confidence: float = Field(
+        0.0,
+        description=(
+            "Cosine similarity to the best-matching canonical query "
+            "(F81.g). 0.0 on fallback. Frontends may hide intent-based "
+            "styling below a self-chosen threshold."
+        ),
+        ge=0.0,
+        le=1.0,
+        examples=[0.78],
+    )
 
 
 # --------------------------------------------------------------------------
@@ -130,6 +164,36 @@ class StreamDone(BaseModel):
             "grounded in documents (empty retrieval → sentinel)."
         ),
         examples=["high"],
+    )
+    intent: Literal[
+        "count",
+        "comparison",
+        "ranking",
+        "yes_no",
+        "locate",
+        "summary",
+        "timeline",
+        "extract",
+        "skill_list",
+        "list",
+        "general",
+    ] = Field(
+        "general",
+        description=(
+            "Classified answer shape (F81.g). Frontends may use this to "
+            "style the message container; the shape of the answer itself "
+            "travels in the ``delta`` events as markdown."
+        ),
+        examples=["comparison"],
+    )
+    intent_confidence: float = Field(
+        0.0,
+        description=(
+            "Cosine similarity to the best-matching canonical query. 0.0 on fallback."
+        ),
+        ge=0.0,
+        le=1.0,
+        examples=[0.78],
     )
 
 

@@ -19,7 +19,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.adapters.protocols import RetrievedChunk
+from app.adapters.protocols import IntentResult, RetrievedChunk
 from app.models import UserRole
 from app.schemas.rag import CitationsEvent, DeltaEvent, DoneEvent, ErrorEvent
 from app.services.rag_service import RagService
@@ -71,6 +71,31 @@ def _fake_user(*, role: UserRole = UserRole.HR) -> Any:
     those attributes.
     """
     return MagicMock(id=uuid4(), role=role)
+
+
+class _FakeIntentClassifier:
+    """Returns a canned ``IntentResult``; no embedder required.
+
+    Default tests use a ``"general"`` classifier so existing
+    expectations (prose-style answers, default prompt) hold. Tests
+    that exercise F81.g specifically pass a classifier that returns
+    a non-default intent.
+    """
+
+    def __init__(
+        self,
+        intent: str = "general",
+        confidence: float = 0.0,
+        runner_up: str | None = None,
+    ) -> None:
+        self._result = IntentResult(
+            intent=intent, confidence=confidence, runner_up=runner_up
+        )
+        self.calls: list[str] = []
+
+    def classify(self, query: str) -> IntentResult:
+        self.calls.append(query)
+        return self._result
 
 
 class _FakeStreamingLlm:
@@ -167,15 +192,24 @@ def _make_service(
     *,
     chunks: list[RetrievedChunk],
     llm: Any,
+    classifier: _FakeIntentClassifier | None = None,
 ) -> tuple[RagService, _FakeChunkRetriever]:
     """Construct RagService backed by a fake chunk retriever.
 
     Returns the service plus the retriever so tests can inspect the
     retriever's recorded calls (e.g. to assert ``actor`` was threaded
     through or ``document_ids`` was forwarded).
+
+    ``classifier`` defaults to a ``"general"`` classifier so existing
+    tests (F81.a–k) see no behavior change. Tests that exercise F81.g
+    pass a classifier returning a specific intent.
     """
     retriever = _FakeChunkRetriever(chunks)
-    service = RagService(retriever=retriever, llm=llm)
+    service = RagService(
+        retriever=retriever,
+        llm=llm,
+        classifier=classifier or _FakeIntentClassifier(),
+    )
     return service, retriever
 
 
@@ -296,25 +330,33 @@ async def test_stream_query_emits_error_event_on_llm_failure(
 # --------------------------------------------------------------------------
 
 
-async def test_system_prompt_carries_fallback_contract_and_anti_preamble_rule(
-    alice_id: UUID,
-) -> None:
-    """Guard against silent regressions in the F81.d prompt rules."""
-    from app.services.rag_service import _SYSTEM_PROMPT
+async def test_system_prompt_carries_fallback_contract_and_evidence_rules() -> None:
+    """Guard against silent regressions in the F81.d contract (now in
+    F81.g's composed prompt stack).
 
-    # The exact fallback sentinel shows up in the prompt so the model
-    # knows what to return when grounded-in-context fails.
-    assert "Not in the provided documents." in _SYSTEM_PROMPT
+    The exact fallback sentinel, inline-citation rule, and the default
+    word cap for general prose all come from the ``general``-intent
+    prompt composition. Each is checked here so an accidental edit to
+    ``EVIDENCE_RULES`` / ``IDENTITY`` / ``FORMAT_RULES`` trips a test
+    rather than silently regressing LLM behavior.
+    """
+    from app.services.rag_prompts import build_system_prompt
 
-    # Inline citation instruction is present.
-    assert "cite the source filename" in _SYSTEM_PROMPT.lower()
-    assert "[alice_resume.pdf]" in _SYSTEM_PROMPT
+    prompt = build_system_prompt("general")
 
-    # Anti-preamble rule mentions at least one concrete forbidden phrase.
-    assert "Based on the documents" in _SYSTEM_PROMPT
+    # Exact fallback sentinel — frontend and eval harness both look
+    # for this literal string.
+    assert "Not in the provided documents." in prompt
 
-    # Length cap.
-    assert "200 words" in _SYSTEM_PROMPT
+    # Inline citation rule with the square-bracket filename example.
+    assert "[alice_resume.pdf]" in prompt
+    assert "square brackets" in prompt
+
+    # Default word cap for the prose intent.
+    assert "200 words" in prompt
+
+    # Voice layer (identity) present.
+    assert "HR research assistant" in prompt
 
 
 async def test_build_context_includes_filename_per_chunk(alice_id: UUID) -> None:
@@ -898,3 +940,85 @@ async def test_missing_section_heading_renders_as_none(alice_id: UUID) -> None:
     assert ctx is not None
     assert ctx.citations[0]["section_heading"] is None
     assert ctx.citations[0]["page_number"] is None
+
+
+# --------------------------------------------------------------------------
+# F81.g — classifier output travels to RagResult + DoneEvent + user prompt
+# --------------------------------------------------------------------------
+
+
+async def test_classified_intent_travels_onto_done_event(
+    alice_id: UUID,
+) -> None:
+    """The classifier's result must reach ``DoneEvent.data.intent`` so
+    the frontend can react to the answer shape. This test locks in
+    the wire contract — changing either the event schema or the
+    threading in ``stream_query`` would trip it."""
+    chunks = [_chunk(alice_id, chunk_index=0, filename="a.pdf", text="x")]
+    classifier = _FakeIntentClassifier(
+        intent="comparison", confidence=0.82, runner_up="ranking"
+    )
+    service, _ = _make_service(
+        chunks=chunks, llm=_FakeStreamingLlm(["ok"]), classifier=classifier
+    )
+
+    events = [e async for e in service.stream_query(actor=_fake_user(), question="q")]
+    done = events[-1]
+    assert isinstance(done, DoneEvent)
+    assert done.data.intent == "comparison"
+    assert done.data.intent_confidence == pytest.approx(0.82)
+
+    # Classifier was invoked with the user's query.
+    assert classifier.calls == ["q"]
+
+
+async def test_sync_query_result_carries_intent(alice_id: UUID) -> None:
+    """Parallel assertion for the sync path — same contract, different
+    return shape."""
+    chunks = [_chunk(alice_id, chunk_index=0, filename="a.pdf", text="x")]
+    classifier = _FakeIntentClassifier(intent="count", confidence=0.65)
+    service, _ = _make_service(
+        chunks=chunks, llm=_FakeStreamingLlm(["ok"]), classifier=classifier
+    )
+
+    result = await service.query(actor=_fake_user(), question="q")
+    assert result.intent == "count"
+    assert result.intent_confidence == pytest.approx(0.65)
+
+
+async def test_intent_format_instructions_reach_the_system_prompt(
+    alice_id: UUID,
+) -> None:
+    """When intent is ``count``, the LLM must receive the
+    count-specific format directive. Without this end-to-end plumbing,
+    structured answers never materialize — the classifier would be
+    observability-only."""
+    chunks = [_chunk(alice_id, chunk_index=0, filename="a.pdf", text="x")]
+    llm = _FakeStreamingLlm(["ok"])
+    classifier = _FakeIntentClassifier(intent="count", confidence=0.9)
+    service, _ = _make_service(chunks=chunks, llm=llm, classifier=classifier)
+
+    ctx = await service._build_context(  # type: ignore[attr-defined]
+        actor=_fake_user(), question="how many", document_ids=None, max_chunks=5
+    )
+    assert ctx is not None
+    # Count intent's format directive: number alone + bullets.
+    assert "number alone on its own line" in ctx.system_prompt
+    # Voice layer still present — prompt composition didn't lose it.
+    assert "HR research assistant" in ctx.system_prompt
+
+
+async def test_fallback_intent_still_carries_general_on_wire(
+    alice_id: UUID,
+) -> None:
+    """Default classifier output (``general``) is valid and the wire
+    should carry it explicitly — never ``null`` or missing, so the
+    frontend has a consistent field to switch on."""
+    chunks = [_chunk(alice_id, chunk_index=0, filename="a.pdf", text="x")]
+    service, _ = _make_service(chunks=chunks, llm=_FakeStreamingLlm(["ok"]))
+
+    events = [e async for e in service.stream_query(actor=_fake_user(), question="q")]
+    done = events[-1]
+    assert isinstance(done, DoneEvent)
+    assert done.data.intent == "general"
+    assert done.data.intent_confidence == 0.0

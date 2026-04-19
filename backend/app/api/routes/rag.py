@@ -66,6 +66,8 @@ async def query_documents(
         model=result.model,
         query_time_ms=result.query_time_ms,
         confidence=result.confidence,
+        intent=result.intent,
+        intent_confidence=result.intent_confidence,
     )
 
 

@@ -7,13 +7,15 @@ import {
   SparklesIcon,
   UserIcon,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import {
   searchDocuments,
   type SearchResultItem,
   type SourceCitation,
 } from "@/api";
-import { streamRagAnswer } from "@/api/rag-stream";
+import { streamRagAnswer, type Intent } from "@/api/rag-stream";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -40,6 +42,7 @@ interface ChatMessage {
   model?: string;
   queryTimeMs?: number;
   confidence?: "high" | "medium" | "low" | null;
+  intent?: Intent;
 }
 
 // F81.j — parse assistant prose into text / citation segments.
@@ -126,6 +129,108 @@ function CitationMarker({
         </div>
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+// F81.g — render assistant content as markdown so intent-specific
+// formats (tables, ordered lists, skill bullets) display with proper
+// structure. F81.j citation chips are preserved: the markdown
+// renderer hands children to our component overrides below, which
+// walk top-level STRING children and replace matching [filename]
+// spans with <CitationMarker> buttons. Non-string children (e.g.
+// <strong>text</strong>) pass through unchanged — a known limitation:
+// citations inside emphasis render as plain text, not chips. Claude
+// doesn't emit that pattern in practice.
+function renderWithCitations(
+  children: React.ReactNode,
+  sources: SourceCitation[] | undefined,
+  messageId: string
+): React.ReactNode {
+  return React.Children.map(children, (child, i) => {
+    if (typeof child !== "string") return child;
+    return parseSegments(child, sources).map((seg, j) =>
+      seg.kind === "text" ? (
+        <React.Fragment key={`${i}-${j}`}>{seg.value}</React.Fragment>
+      ) : (
+        <CitationMarker
+          key={`${i}-${j}`}
+          citation={seg.citation}
+          onClick={() => {
+            const idx =
+              sources?.findIndex(
+                (s) =>
+                  s.filename === seg.citation.filename &&
+                  s.chunk_index === seg.citation.chunk_index
+              ) ?? -1;
+            if (idx >= 0) scrollToSource(messageId, idx);
+          }}
+        />
+      )
+    );
+  });
+}
+
+function AssistantMarkdown({
+  content,
+  sources,
+  messageId,
+  isStreaming,
+}: {
+  content: string;
+  sources?: SourceCitation[];
+  messageId: string;
+  isStreaming: boolean;
+}) {
+  // Memoize component overrides so react-markdown doesn't rebuild
+  // the component map on every delta. Prevents a cascade of
+  // re-renders when tokens stream in.
+  const components = React.useMemo(
+    () => ({
+      p: ({ children }: { children?: React.ReactNode }) => (
+        <p className="mb-2 last:mb-0">
+          {renderWithCitations(children, sources, messageId)}
+        </p>
+      ),
+      li: ({ children }: { children?: React.ReactNode }) => (
+        <li>{renderWithCitations(children, sources, messageId)}</li>
+      ),
+      td: ({ children }: { children?: React.ReactNode }) => (
+        <td className="border px-2 py-1">
+          {renderWithCitations(children, sources, messageId)}
+        </td>
+      ),
+      th: ({ children }: { children?: React.ReactNode }) => (
+        <th className="bg-background/40 border px-2 py-1 text-left font-semibold">
+          {children}
+        </th>
+      ),
+      table: ({ children }: { children?: React.ReactNode }) => (
+        <div className="my-2 overflow-x-auto">
+          <table className="border-collapse text-xs">{children}</table>
+        </div>
+      ),
+      ul: ({ children }: { children?: React.ReactNode }) => (
+        <ul className="mb-2 ml-4 list-disc last:mb-0">{children}</ul>
+      ),
+      ol: ({ children }: { children?: React.ReactNode }) => (
+        <ol className="mb-2 ml-4 list-decimal last:mb-0">{children}</ol>
+      ),
+    }),
+    [sources, messageId]
+  );
+
+  return (
+    <div className="text-sm">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {content}
+      </ReactMarkdown>
+      {isStreaming && (
+        <span
+          aria-hidden
+          className="bg-foreground/60 ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 animate-pulse rounded-sm align-baseline"
+        />
+      )}
+    </div>
   );
 }
 
@@ -229,6 +334,7 @@ export function SearchPage() {
                   model: event.data.model,
                   queryTimeMs: event.data.query_time_ms,
                   confidence: event.data.confidence,
+                  intent: event.data.intent,
                 }));
                 break;
               case "error":
@@ -465,50 +571,19 @@ export function SearchPage() {
                             <span className="bg-foreground/30 size-2 animate-bounce rounded-full [animation-delay:0.1s]" />
                             <span className="bg-foreground/30 size-2 animate-bounce rounded-full [animation-delay:0.2s]" />
                           </div>
+                        ) : message.role === "assistant" ? (
+                          <AssistantMarkdown
+                            content={message.content}
+                            sources={message.sources}
+                            messageId={message.id}
+                            isStreaming={isStreaming}
+                          />
                         ) : (
                           <Typography
                             variant="small"
-                            className={
-                              message.role === "user"
-                                ? "text-primary-foreground whitespace-pre-wrap"
-                                : "whitespace-pre-wrap"
-                            }
+                            className="text-primary-foreground whitespace-pre-wrap"
                           >
-                            {message.role === "assistant"
-                              ? parseSegments(
-                                  message.content,
-                                  message.sources
-                                ).map((seg, i) =>
-                                  seg.kind === "text" ? (
-                                    <React.Fragment key={i}>
-                                      {seg.value}
-                                    </React.Fragment>
-                                  ) : (
-                                    <CitationMarker
-                                      key={i}
-                                      citation={seg.citation}
-                                      onClick={() => {
-                                        const idx =
-                                          message.sources?.findIndex(
-                                            (s) =>
-                                              s.filename ===
-                                                seg.citation.filename &&
-                                              s.chunk_index ===
-                                                seg.citation.chunk_index
-                                          ) ?? -1;
-                                        if (idx >= 0)
-                                          scrollToSource(message.id, idx);
-                                      }}
-                                    />
-                                  )
-                                )
-                              : message.content}
-                            {isStreaming && (
-                              <span
-                                aria-hidden
-                                className="bg-foreground/60 ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 animate-pulse rounded-sm align-baseline"
-                              />
-                            )}
+                            {message.content}
                           </Typography>
                         )}
                         {message.sources && message.sources.length > 0 && (

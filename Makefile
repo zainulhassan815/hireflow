@@ -54,6 +54,9 @@ test: services ## Run backend tests (real postgres + redis; mocked Google HTTP)
 eval: services ## Run search quality eval (slower; hits real ChromaDB)
 	cd backend && $(TEST_ENV) uv run pytest tests/eval -xvs
 
+eval-intent: services ## Run F81.g intent-classification accuracy eval
+	cd backend && $(TEST_ENV) uv run pytest tests/eval/test_intent_accuracy.py -xvs
+
 stop: ## Stop Docker services
 	docker compose down
 
@@ -70,4 +73,4 @@ clean: stop ## Stop services + remove caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	rm -rf backend/.ruff_cache frontend/dist
 
-.PHONY: help setup services api worker beat web tilt tilt-down lint migrate generate test eval stop prod-up prod-down prod-logs clean
+.PHONY: help setup services api worker beat web tilt tilt-down lint migrate generate test eval eval-intent stop prod-up prod-down prod-logs clean
