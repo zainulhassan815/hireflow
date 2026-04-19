@@ -27,6 +27,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from app.adapters.protocols import (
+    QueryParser,
     RerankCandidate,
     Reranker,
     RetrievedChunk,
@@ -59,10 +60,19 @@ class SearchService:
         documents: DocumentRepository,
         vector_store: VectorStore | None,
         reranker: Reranker | None = None,
+        query_parser: QueryParser | None = None,
     ) -> None:
         self._documents = documents
         self._vector_store = vector_store
         self._reranker = reranker
+        # F89.a — NullQueryParser (empty-filter emitter) is a safe
+        # default for legacy callers (test harnesses). Production
+        # always injects HeuristicQueryParser via the composition root.
+        if query_parser is None:
+            from app.services.query_parser import NullQueryParser
+
+            query_parser = NullQueryParser()
+        self._query_parser = query_parser
 
     async def search(
         self,
@@ -91,6 +101,27 @@ class SearchService:
         # paying for a roundtrip to ChromaDB and Postgres for zero hits.
         if not query.strip():
             return [], int((time.monotonic() - start) * 1000)
+
+        # F89.a — parse NL into structured filters. User-provided
+        # filters always win (explicit > implicit). Parsed filters
+        # only fill gaps where the caller passed ``None``.
+        #
+        # Skills are only promoted to a filter alongside a strong
+        # signal (years, seniority, doctype, dates). A standalone
+        # skill mention could be either a filter or a semantic term
+        # ("Python" vs "what is Python used for") — without a strong
+        # signal to disambiguate, leave it to the semantic path.
+        parsed = self._query_parser.parse(query)
+        if document_type is None and parsed.filters.document_type:
+            document_type = _document_type_from_str(parsed.filters.document_type)
+        if min_experience_years is None:
+            min_experience_years = parsed.filters.min_experience_years
+        if date_from is None:
+            date_from = parsed.filters.date_from
+        if date_to is None:
+            date_to = parsed.filters.date_to
+        if not skills and parsed.filters.has_strong_filter and parsed.filters.skills:
+            skills = list(parsed.filters.skills)
 
         owner_filter = None if actor.role == UserRole.ADMIN else actor.id
 
@@ -229,14 +260,26 @@ class SearchService:
         """F81.k — chunk-level hybrid retrieval for RAG.
 
         Runs the same vector + FTS (+ trigram fallback) pipeline as
-        ``search()`` but keeps chunks as the unit of output. SQL
-        metadata path is intentionally excluded: structured filters
-        for RAG come through ``document_ids`` ("ask about these
-        docs"), not skill/date filtering. Ownership is enforced at
-        retrieval — HR users only see their own chunks, admins bypass.
+        ``search()`` but keeps chunks as the unit of output.
+
+        F89.a — when the ``QueryParser`` extracts structured filters
+        from the query ("5+ years Python"), the SQL metadata path
+        activates and its matching document set HARD-filters the
+        vector/lexical hits. Pure-semantic queries (empty parsed
+        filters) skip this path, preserving the F81.k default of
+        "no SQL path for RAG." The intersection semantics
+        (not boost) reflect user intent: a year-threshold is
+        exclusionary, not a hint.
+
+        Ownership is enforced at retrieval — HR users only see their
+        own chunks, admins bypass.
         """
         if not query.strip():
             return []
+
+        # F89.a — parse the query before hitting any retrieval source.
+        # Empty filters = pure-semantic query = unchanged F81.k behavior.
+        parsed = self._query_parser.parse(query)
 
         owner_filter = None if actor.role == UserRole.ADMIN else actor.id
 
@@ -254,6 +297,33 @@ class SearchService:
             lexical_hits = await self._documents.fuzzy_search(
                 query, limit=limit * 3, owner_id=owner_filter
             )
+
+        # F89.a — hard-filter by parsed structured filters before
+        # merging. "5+ years Python" means a candidate with 2 years
+        # Python must not surface; intersection semantics enforce
+        # that. Only runs when a STRONG filter is present — a
+        # standalone skill mention ("what is Python used for") is
+        # ambiguous and preserves the pure-semantic F81.k default.
+        if parsed.filters.has_strong_filter:
+            parsed_doctype = (
+                _document_type_from_str(parsed.filters.document_type)
+                if parsed.filters.document_type
+                else None
+            )
+            sql_docs = await self._documents.search_by_metadata(
+                document_type=parsed_doctype,
+                skills=list(parsed.filters.skills) or None,
+                min_experience_years=parsed.filters.min_experience_years,
+                date_from=parsed.filters.date_from,
+                date_to=parsed.filters.date_to,
+                limit=limit * 3,
+                owner_id=owner_filter,
+            )
+            sql_doc_ids = {doc.id for doc in sql_docs}
+            vector_hits = [
+                h for h in vector_hits if _safe_uuid(h.document_id) in sql_doc_ids
+            ]
+            lexical_hits = [(d, s) for d, s in lexical_hits if d.id in sql_doc_ids]
 
         merge_limit = max(settings.reranker_top_k, limit) if self._reranker else limit
         merged = self._rrf_merge_chunks(
@@ -539,6 +609,20 @@ class SearchService:
 def _safe_uuid(value: str) -> UUID | None:
     try:
         return UUID(value)
+    except ValueError:
+        return None
+
+
+def _document_type_from_str(value: str) -> DocumentType | None:
+    """F89.a — convert a parsed document-type string to the enum.
+
+    ``QueryParser`` emits strings (to avoid import-cycling the enum
+    into ``adapters/protocols.py``); ``SearchService`` converts at
+    the boundary. Unknown values fall back to None rather than
+    raising — a malformed parser output shouldn't 500 the request.
+    """
+    try:
+        return DocumentType(value)
     except ValueError:
         return None
 

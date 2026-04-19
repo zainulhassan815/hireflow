@@ -312,6 +312,92 @@ class Reranker(Protocol):
     def model_name(self) -> str: ...
 
 
+# ---------- Query parser (F89.a) ----------
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedFilters:
+    """Structured filters extracted from a natural-language query.
+
+    Fields mirror what ``SearchService.search`` already accepts from
+    the UI (F32). The parser never overrides explicit caller-provided
+    filters — it fills gaps only.
+
+    ``document_type`` is a string matching ``DocumentType`` enum
+    values (e.g. ``"resume"``, ``"job_description"``); callers convert
+    to the enum at the boundary to keep this Protocol import-cycle-
+    free.
+    """
+
+    skills: tuple[str, ...] = ()
+    min_experience_years: int | None = None
+    document_type: str | None = None
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+
+    @property
+    def is_empty(self) -> bool:
+        """True when the parser extracted no structured filters."""
+        return not (
+            self.skills
+            or self.min_experience_years is not None
+            or self.document_type is not None
+            or self.date_from is not None
+            or self.date_to is not None
+        )
+
+    @property
+    def has_strong_filter(self) -> bool:
+        """True when the parser extracted at least one *unambiguous*
+        filter — a signal that can only mean "hard constraint."
+
+        Skills are deliberately excluded from "strong" because a
+        standalone skill mention can be either a filter (``"Python
+        developer"``) or a semantic query term (``"what is Python
+        used for"``). Years / seniority / document type / dates are
+        unambiguous in the HR-query context, so their presence
+        activates the SQL-intersection path in
+        ``SearchService.retrieve_chunks``. If skills accompany a
+        strong filter, they ride along as part of the SQL query; if
+        they're alone, retrieval stays pure-semantic.
+        """
+        return (
+            self.min_experience_years is not None
+            or self.document_type is not None
+            or self.date_from is not None
+            or self.date_to is not None
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class QueryIntent:
+    """Output of ``QueryParser.parse``.
+
+    ``matched_spans`` records the character offsets the parser
+    claimed ownership of, for observability — operators can see
+    *which* tokens triggered *which* filter without re-running the
+    parser on the same input.
+    """
+
+    raw_query: str
+    filters: ParsedFilters
+    matched_spans: tuple[tuple[int, int, str], ...] = ()
+
+
+@runtime_checkable
+class QueryParser(Protocol):
+    """Parse a natural-language query into structured filters.
+
+    Synchronous by design — implementations should be sub-millisecond
+    so ``SearchService`` / ``RagService`` can call per-request without
+    latency concern. The default implementation
+    (``HeuristicQueryParser``) is regex + known-vocabulary lookup;
+    a future LLM tier can slot in behind the same interface.
+    """
+
+    def parse(self, query: str) -> QueryIntent: ...
+
+
 # ---------- Intent classifier (F81.g) ----------
 
 

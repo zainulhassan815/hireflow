@@ -355,7 +355,13 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - Pagination: add `offset` to `SearchRequest`
   - Mixed-language fallback: try `simple` analyzer when `english` produces empty tsvector
   - Skill normalization (coordinate with F83): canonical form for `python`/`Python`/`py3`
-  - Experience parsing: prose → numeric range (`5+ years`, `senior`)
+  - ~~Experience parsing: prose → numeric range~~ (superseded by F89.a below)
+  - **Query parser family** — parse NL into structured filters + semantic residue before retrieval. Closes the gap between `docs/rag-architecture.md`'s design (query parser emits `QueryIntent`) and the current engine (raw string → hybrid retrieval). Populates structured filters (built in F32, UI-only today) automatically from chat queries.
+    - [x] **F89.a** `QueryParser` Protocol + `HeuristicQueryParser` (regex + known vocabulary; zero LLM, sub-millisecond per call). Extracts years / seniority / skills / document types / date ranges with conservative precedence (explicit wins, longest-match skills via custom non-alphanumeric boundary check for `c++`/`.net`/`node.js`, skills-alone gated behind `has_strong_filter` so loose "what is Python used for" preserves pure-semantic behaviour). Wires into `SearchService.search` (merge with user-provided filters, explicit > implicit) and `SearchService.retrieve_chunks` (activates SQL intersection on strong filters; pure-semantic queries preserve the F81.k default). 54 unit tests; `make eval-parser` with 60+ labeled cases — **100% F1** across every field. Live-verified: structured queries hit SQL intersection, pure-semantic queries unchanged, filter-heavy queries that don't match the corpus now honestly return nothing instead of hallucinating.
+    - [ ] **F89.b** Named-entity extraction — candidate names → `document_ids` scoping ("Alice's Kubernetes experience" retrieves only from Alice's docs). Needs name-to-doc resolution via `DocumentRepository`. Heuristic first (capitalized tokens matched against indexed candidate names), LLM tier opt-in.
+    - [ ] **F89.c** Similarity search — `POST /documents/{id}/similar`. Indexes one full-doc embedding per document alongside the existing chunk embeddings; uses it as the query vector. Unlocks "find more candidates like this shortlist" workflows.
+    - [ ] **F89.d** Synonym / role-family expansion beyond F88.b acronyms — `frontend` → `React`/`Vue`/`Angular`; conservative domain taxonomy with eval-gated precision guards.
+    - [ ] **F89.e** (later, if needed) LLM tier fallback on low-confidence heuristic parses — same pattern as the F81.g classifier Protocol.
 
 ---
 

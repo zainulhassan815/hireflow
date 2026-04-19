@@ -56,6 +56,12 @@ from app.services.gmail_service import GmailService
 from app.services.job_service import JobService
 from app.services.matching_service import MatchingService
 from app.services.password_reset_service import PasswordResetService
+from app.services.query_parser import HeuristicQueryParser
+from app.services.query_parser_vocab import (
+    DOCUMENT_TYPE_KEYWORDS,
+    KNOWN_SKILLS,
+    SENIORITY_THRESHOLDS,
+)
 from app.services.rag_service import RagService
 from app.services.search_service import SearchService
 from app.services.session_service import SessionService
@@ -115,6 +121,21 @@ except Exception:
     from app.adapters.rerankers.null import NullReranker
 
     _reranker = NullReranker()
+
+
+# F89.a — heuristic query parser. Stateless, zero-LLM, sub-millisecond
+# per call. Single shared instance reused across /search and /rag.
+_query_parser = HeuristicQueryParser(
+    seniority=SENIORITY_THRESHOLDS,
+    skills=KNOWN_SKILLS,
+    document_types=DOCUMENT_TYPE_KEYWORDS,
+)
+_logger.info(
+    "query parser: %d skills, %d seniority tokens, %d document-type keywords",
+    len(KNOWN_SKILLS),
+    len(SENIORITY_THRESHOLDS),
+    len(DOCUMENT_TYPE_KEYWORDS),
+)
 
 
 # F81.g — intent classifier. Constructed once at startup; embeds the
@@ -287,7 +308,12 @@ def get_document_service(
 
 
 def get_search_service(documents: DocumentRepositoryDep) -> SearchService:
-    return SearchService(documents, _vector_store, reranker=_reranker)
+    return SearchService(
+        documents,
+        _vector_store,
+        reranker=_reranker,
+        query_parser=_query_parser,  # F89.a
+    )
 
 
 def get_rag_service(documents: DocumentRepositoryDep) -> RagService | None:
@@ -299,7 +325,15 @@ def get_rag_service(documents: DocumentRepositoryDep) -> RagService | None:
     # module-level singleton so the heavy model is loaded once.
     # F81.g — intent classifier is also a module-level singleton (canonicals
     # embed once at startup).
-    retriever = SearchService(documents, _vector_store, reranker=_reranker)
+    # F89.a — query parser is also a module-level singleton; pure
+    # regex + vocab lookup so reconstruction is cheap, but keeping
+    # one shared instance costs nothing.
+    retriever = SearchService(
+        documents,
+        _vector_store,
+        reranker=_reranker,
+        query_parser=_query_parser,
+    )
     return RagService(retriever, _llm_provider, _intent_classifier)
 
 
