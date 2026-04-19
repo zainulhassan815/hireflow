@@ -12,7 +12,12 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 Eval on 7-doc fixture: **P@5 0.252 · R@5 1.000 · MRR 0.859**. Ceiling hit on fixture size; further retrieval wins need corpus growth (more docs with overlapping vocabulary).
 
-**Next track: F81 RAG answer quality** — streaming, confidence, conversation memory, token budget, citation linking. Sub-slices F81.a–h laid out below.
+**Next track: Q&A.** Split across two features, both user-facing:
+
+- **F81 — RAG answer quality** (backend-driven visible changes: streaming, tighter answers, conversation memory, confidence, citations, graceful failure). Sub-slices F81.a–j laid out below.
+- **F92 — Search & RAG UX** (frontend chat polish: streaming UX, inline citations, regenerate, feedback, follow-ups, conversations, keyboard shortcuts, error states). Sub-slices F92.2–11 laid out below.
+
+They compose — e.g. F81.a streaming is the engine, F92.2 is the chat cursor / stop button the user actually sees. Pair sub-slices when shipping.
 
 ---
 
@@ -265,15 +270,17 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - Toggle via `SEARCH_RERANKER_ENABLED` env var for A/B
   - Eval harness measures precision@5 before/after to justify the `sentence-transformers` dep weight
 
-- [ ] **F81 · RAG answer quality** — next track after retrieval. Proposed sub-slices:
-  - [ ] **F81.a** Streaming answers via SSE (server-sent events) — replace the synchronous blob with token-by-token output. Frontend chat shows text as it generates. Claude SDK already supports streaming; wire it through `RagService` + a new `/rag/stream` endpoint.
-  - [ ] **F81.b** Context relevance filtering: drop chunks below a vector-distance cutoff before stuffing the prompt. Reduces LLM noise; makes answers tighter.
-  - [ ] **F81.c** Token budget management: rank chunks by reranker score (F80.5 already computes), include high-score chunks first, stop when a configurable token budget is hit. Prevents context-window overrun on many-chunk retrievals.
-  - [ ] **F81.d** System prompt tuning: be concise, cite filenames inline, refuse to answer when context is thin, say "I don't know" instead of guessing.
-  - [ ] **F81.e** Answer confidence indicator: return a confidence field on `RagResponse` (high/medium/low) driven by top-chunk distance + answer heuristics (mentions-of-"I don't know" etc.). Frontend renders as a badge.
-  - [ ] **F81.f** Conversation memory: track the last N message pairs per session in Redis, inject into the prompt. Enables follow-ups like "what about the other resume?"
-  - [ ] **F81.g** Structured answer templates (optional, nice-to-have): count queries → number + list; comparison queries → markdown table; skill queries → bullet points. Driven by lightweight intent classification or by an LLM hint in the prompt.
-  - [ ] **F81.h** Source citation linking: citations in the UI should click through to the source document at the relevant section. Needs `section_heading` metadata (F82.e already stamps it) + a document-preview route.
+- [ ] **F81 · RAG answer quality** — all user-facing (changes how the answer looks, feels, or what it knows). Proposed sub-slices:
+  - [ ] **F81.a** Streaming answers via SSE — replace the synchronous blob with token-by-token output. **User sees:** text appearing as it generates instead of a spinner. Claude SDK already supports streaming; wire through `RagService` + a new `/rag/stream` endpoint.
+  - [ ] **F81.b** Context relevance filtering: drop chunks below a vector-distance cutoff before stuffing the prompt. **User sees:** tighter, less rambly answers; fewer "the document mentions X but…" filler sentences.
+  - [ ] **F81.c** Token budget management: rank chunks by reranker score (F80.5 already computes), include high-score chunks first, stop at a configurable token budget. **User sees:** RAG works on queries where we'd previously hit context-window errors.
+  - [ ] **F81.d** System prompt tuning: be concise, cite filenames inline, say "I don't know" instead of guessing. **User sees:** fewer hallucinated facts, more "not in the provided documents" when warranted.
+  - [ ] **F81.e** Answer confidence indicator: `confidence` field on `RagResponse` (high/medium/low) driven by top-chunk distance + heuristics. **User sees:** a coloured badge next to the answer — trust at a glance.
+  - [ ] **F81.f** Conversation memory: track the last N message pairs per session in Redis, inject into the prompt. **User sees:** follow-ups like "what about the other resume?" and "show me more like that" work naturally.
+  - [ ] **F81.g** Structured answer templates: count queries → number + list; comparison queries → markdown table; skill queries → bullet points. Driven by lightweight intent classification. **User sees:** answers that look right for the question asked — not prose where a table was obvious.
+  - [ ] **F81.h** Source citation linking: citations click through to the source doc at the relevant section. Needs `section_heading` metadata (F82.e already stamps it) + a doc-preview route. **User sees:** click `[1]` → doc opens at the right section.
+  - [ ] **F81.i** Graceful failure UX: LLM timeout / rate limit / empty retrieval → clear message ("I couldn't find information about X. Try rephrasing or uploading more documents.") instead of silence or raw 500s. **User sees:** the system always says *something* useful.
+  - [ ] **F81.j** Inline citation markers: render `[1]`, `[2]` clickable inline in the answer prose (not just a separate list at the bottom). Hover-preview shows source filename + snippet. Makes citations readable mid-sentence instead of foot-note style. **User sees:** "Jane Doe[1] has Kubernetes experience[2]" with hoverable refs.
 
 - [~] **F82 · Chunking strategy improvements** — mixed-doc corpus, not just resumes
   - [ ] **F82.a** (skipped — went straight to F82.d layout-aware extraction instead)
@@ -354,13 +361,25 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - Inline preview for PDFs (embedded viewer)
   - Bulk actions: select multiple → delete, export, create candidates
 
-- [~] **F92 · Search & RAG UX**
-  - Search-as-you-type with debounce
-  - Filter pills: visual chips for active filters, one-click remove
-  - [x] **F92.1** Search result highlighting: offset-based `match_spans` on `/search` and `/rag/query`; frontend `<HighlightedText>` renders `<mark>`
-  - RAG chat: streaming responses (SSE), typing indicator, copy answer button
-  - Source citation links: click citation → opens document preview at relevant section
-  - Suggested queries: show example queries when search is empty
+- [~] **F92 · Search & RAG UX** — frontend polish. Backend answer-quality lives in F81.
+  - Search page:
+    - Search-as-you-type with debounce
+    - Filter pills: visual chips for active filters, one-click remove
+    - [x] **F92.1** Search result highlighting: offset-based `match_spans` on `/search` and `/rag/query`; frontend `<HighlightedText>` renders `<mark>`
+    - Suggested queries: show example queries when the search box is empty
+    - Recent queries dropdown under the search input
+    - Empty-state with illustrations + "try these" prompts
+  - RAG chat:
+    - [ ] **F92.2** Streaming chat UX: typing indicator, cursor animation while tokens arrive, stop-generation button, auto-scroll lock when the user is reading. Pairs with F81.a backend.
+    - [ ] **F92.3** Inline clickable citation markers in the answer (pairs with F81.j). Hover tooltip shows source filename + context; click opens the source (pairs with F81.h).
+    - [ ] **F92.4** Copy answer button (markdown) and copy-as-plaintext. Per-message copy + full-conversation export (markdown file).
+    - [ ] **F92.5** Regenerate button on each assistant message — retry with same query, optionally with "give me a shorter answer" / "be more technical" variants.
+    - [ ] **F92.6** Thumbs-up / thumbs-down on each answer, persisted to a feedback table. Optional free-text reason on thumbs-down. Drives future prompt-tuning.
+    - [ ] **F92.7** Suggested follow-up questions beneath each assistant message — generated by the LLM in the same turn as the answer (cheap piggyback call). Drives discovery.
+    - [ ] **F92.8** Doc-scope selector: "Ask about: [all documents / this one / selected…]". Limits retrieval to chosen IDs via the existing `document_ids` param on `/rag/query`.
+    - [ ] **F92.9** Conversation management: new-chat button, sidebar list of past conversations, rename, delete, search across conversations. Backs F81.f conversation memory.
+    - [ ] **F92.10** Keyboard shortcuts: ⌘+Enter to send (already works), ⌘+N new chat, ⌘+K focus search, Escape to stop generation, ↑ to edit last message.
+    - [ ] **F92.11** Error / empty-state UX: network down, LLM rate-limited, no retrieval hits — clear messaging + "retry" affordance. Pairs with F81.i backend.
 
 - [ ] **F93 · Jobs & candidates UX**
   - Job detail page with description, requirements, and matched candidates list
