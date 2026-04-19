@@ -408,12 +408,18 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - loading skeletons → F90.f
   - transition animations → F90.e + F90.g
 
-- [ ] **F91 · Documents page polish**
-  - Drag-and-drop upload zone on the main page (not just in dialog)
-  - Upload progress with real percentage (streaming upload)
-  - Document processing status: live polling or WebSocket for pending → ready transition
-  - Inline preview for PDFs (embedded viewer)
-  - Bulk actions: select multiple → delete, export, create candidates
+- [~] **F91 · Documents page polish**
+  - [x] Drag-and-drop upload zone on the main page (not just in dialog)
+    — page-level overlay, drop anywhere on /documents
+  - [ ] Upload progress with real percentage (needs XHR/axios
+    migration from fetch; deferred)
+  - [x] Document processing status: live polling every 3s while any
+    doc is pending/processing, stops when all are settled
+  - [ ] Inline preview for PDFs (embedded viewer) — deferred; pdf.js
+    or iframe approach TBD
+  - [x] Bulk actions: select (checkbox column + select-all),
+    confirm-gated bulk delete. Export + "create candidates" still
+    deferred (needs backend batch endpoints).
 
 - [~] **F92 · Search & RAG UX** — frontend polish. Backend answer-quality lives in F81.
   - Search page:

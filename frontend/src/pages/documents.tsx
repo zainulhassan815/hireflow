@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
+  CloudUploadIcon,
   DownloadIcon,
   EyeIcon,
   FileIcon,
@@ -12,6 +13,7 @@ import {
   SearchIcon,
   TrashIcon,
   UploadIcon,
+  XIcon,
 } from "lucide-react";
 
 import {
@@ -33,6 +35,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,6 +56,7 @@ import {
 import { Typography } from "@/components/ui/typography";
 import { UploadDialog } from "@/components/documents/upload-dialog";
 import { DocumentPreview } from "@/components/documents/document-preview";
+import { uploadFiles } from "@/lib/upload-documents";
 import { cn, formatDate, formatFileSize } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -98,14 +102,36 @@ export function DocumentsPage() {
   const [previewDoc, setPreviewDoc] = React.useState<DocumentResponse | null>(
     null
   );
-  // F90.f — confirm on delete. Lift state so the AlertDialog renders
-  // once at page level rather than per-row.
   const [confirmDelete, setConfirmDelete] =
     React.useState<DocumentResponse | null>(null);
+  // F91 — page-level drag-and-drop. Track drag depth so the overlay
+  // doesn't flicker when dragging over nested children.
+  const [isDragging, setIsDragging] = React.useState(false);
+  const dragDepth = React.useRef(0);
+  // F91 — bulk selection. Set of doc IDs; cleared on filter change.
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
+    () => new Set()
+  );
+  const [bulkConfirmOpen, setBulkConfirmOpen] = React.useState(false);
+
+  const invalidateDocs = React.useCallback(() => {
+    queryClient.invalidateQueries({
+      queryKey: listDocumentsOptions().queryKey,
+    });
+  }, [queryClient]);
 
   const { data: documents = [], isLoading } = useQuery({
     ...listDocumentsOptions(),
     select: (data) => data ?? [],
+    // F91 — live status polling. While any doc is pending/processing,
+    // refetch every 3s so the table updates without a manual refresh.
+    refetchInterval: (q) => {
+      const docs = (q.state.data as DocumentResponse[] | undefined) ?? [];
+      const anyProcessing = docs.some(
+        (d) => d.status === "pending" || d.status === "processing"
+      );
+      return anyProcessing ? 3000 : false;
+    },
   });
 
   const deleteMut = useMutation({
@@ -113,9 +139,7 @@ export function DocumentsPage() {
       deleteDocument({ path: { document_id: doc.id } }),
     onSuccess: (_, doc) => {
       toast.success(`${doc.filename} deleted`);
-      queryClient.invalidateQueries({
-        queryKey: listDocumentsOptions().queryKey,
-      });
+      invalidateDocs();
     },
     onError: (_, doc) => {
       toast.error(`Couldn't delete ${doc.filename}`, {
@@ -147,14 +171,114 @@ export function DocumentsPage() {
   };
 
   const handleUploaded = () => {
-    queryClient.invalidateQueries({
-      queryKey: listDocumentsOptions().queryKey,
-    });
+    invalidateDocs();
+  };
+
+  const handleDropUpload = React.useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      const id = toast.loading(
+        files.length === 1
+          ? `Uploading ${files[0].name}…`
+          : `Uploading ${files.length} files…`
+      );
+      const { succeeded, failed } = await uploadFiles(files);
+      toast.dismiss(id);
+      if (succeeded.length > 0) {
+        toast.success(
+          succeeded.length === 1
+            ? `${succeeded[0].filename} uploaded`
+            : `${succeeded.length} files uploaded`
+        );
+        invalidateDocs();
+      }
+      if (failed.length > 0 && succeeded.length === 0) {
+        // Per-file error toasts already fired inside uploadFiles; no
+        // extra summary needed.
+      }
+    },
+    [invalidateDocs]
+  );
+
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setIsDragging(true);
+  };
+
+  const onDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+  };
+
+  const onDragLeave = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setIsDragging(false);
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    dragDepth.current = 0;
+    setIsDragging(false);
+    void handleDropUpload(Array.from(e.dataTransfer.files));
   };
 
   const filtered = documents.filter((doc) =>
     doc.filename.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // F91 — keep selection coherent with current filter + deletions.
+  React.useEffect(() => {
+    setSelectedIds((prev) => {
+      const visibleIds = new Set(filtered.map((d) => d.id));
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (visibleIds.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [filtered]);
+
+  const allSelected =
+    filtered.length > 0 && filtered.every((d) => selectedIds.has(d.id));
+  const someSelected = selectedIds.size > 0 && !allSelected;
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      if (prev.size > 0) return new Set();
+      return new Set(filtered.map((d) => d.id));
+    });
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const runBulkDelete = async () => {
+    const targets = documents.filter((d) => selectedIds.has(d.id));
+    setBulkConfirmOpen(false);
+    setSelectedIds(new Set());
+    const results = await Promise.allSettled(
+      targets.map((d) => deleteDocument({ path: { document_id: d.id } }))
+    );
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - ok;
+    if (ok > 0) toast.success(`${ok} document${ok === 1 ? "" : "s"} deleted`);
+    if (failed > 0)
+      toast.error(`${failed} couldn't be deleted. Refresh to retry.`);
+    invalidateDocs();
+  };
 
   const stats = {
     total: documents.length,
@@ -191,12 +315,30 @@ export function DocumentsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div
+      className="relative flex flex-col gap-8"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {isDragging && (
+        <div className="bg-foreground/60 pointer-events-none fixed inset-0 z-40 flex items-center justify-center backdrop-blur-sm">
+          <div className="bg-background border-primary flex flex-col items-center gap-3 border-2 border-dashed px-10 py-8">
+            <CloudUploadIcon className="text-primary size-10" />
+            <Typography variant="h5">Drop to upload</Typography>
+            <Typography variant="muted" className="text-sm">
+              PDF, DOC, DOCX, PNG, JPG, TIFF — up to 10MB each.
+            </Typography>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Typography variant="h3">Documents</Typography>
           <Typography variant="muted">
-            Upload, manage, and search your documents.
+            Upload, manage, and search your documents. Drag files anywhere to
+            upload.
           </Typography>
         </div>
         <Button onClick={() => setUploadOpen(true)}>
@@ -274,104 +416,154 @@ export function DocumentsPage() {
           </Button>
         </div>
       ) : view === "list" ? (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Size</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Uploaded</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((doc) => {
-                const TypeIcon =
-                  typeIcons[doc.document_type ?? "other"] ?? FileIcon;
-                return (
-                  <TableRow key={doc.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="bg-muted flex size-8 items-center justify-center rounded">
-                          <TypeIcon className="text-muted-foreground size-4" />
-                        </div>
-                        <Typography variant="small" className="font-medium">
-                          {doc.filename}
-                        </Typography>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "capitalize",
-                          typeBadgeClass[doc.document_type ?? ""]
-                        )}
-                      >
-                        {doc.document_type ?? "—"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Typography
-                        variant="small"
-                        className="font-mono tabular-nums"
-                      >
-                        {formatFileSize(doc.size_bytes)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={statusVariants[doc.status] ?? "secondary"}
-                        className={cn(
-                          "capitalize",
-                          statusBadgeClass[doc.status]
-                        )}
-                      >
-                        {doc.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="muted" className="tabular-nums">
-                        {formatDate(doc.created_at)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button variant="ghost" size="icon-sm">
-                              <MoreHorizontalIcon className="size-4" />
-                            </Button>
-                          }
+        <>
+          {selectedIds.size > 0 && (
+            <div className="bg-muted/50 flex items-center justify-between border px-4 py-2">
+              <Typography variant="small" className="tabular-nums">
+                {selectedIds.size} selected
+              </Typography>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  <XIcon className="size-4" data-icon="inline-start" />
+                  Clear
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setBulkConfirmOpen(true)}
+                >
+                  <TrashIcon className="size-4" data-icon="inline-start" />
+                  Delete
+                </Button>
+              </div>
+            </div>
+          )}
+          <div className="border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onCheckedChange={() => toggleSelectAll()}
+                      aria-label="Select all rows"
+                    />
+                  </TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Uploaded</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((doc) => {
+                  const TypeIcon =
+                    typeIcons[doc.document_type ?? "other"] ?? FileIcon;
+                  const isSelected = selectedIds.has(doc.id);
+                  return (
+                    <TableRow
+                      key={doc.id}
+                      data-state={isSelected ? "selected" : undefined}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSelect(doc.id)}
+                          aria-label={`Select ${doc.filename}`}
                         />
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setPreviewDoc(doc)}>
-                            <EyeIcon className="mr-2 size-4" />
-                            Preview
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDownload(doc)}>
-                            <DownloadIcon className="mr-2 size-4" />
-                            Download
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => setConfirmDelete(doc)}
-                          >
-                            <TrashIcon className="mr-2 size-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="bg-muted flex size-8 items-center justify-center rounded">
+                            <TypeIcon className="text-muted-foreground size-4" />
+                          </div>
+                          <Typography variant="small" className="font-medium">
+                            {doc.filename}
+                          </Typography>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "capitalize",
+                            typeBadgeClass[doc.document_type ?? ""]
+                          )}
+                        >
+                          {doc.document_type ?? "—"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Typography
+                          variant="small"
+                          className="font-mono tabular-nums"
+                        >
+                          {formatFileSize(doc.size_bytes)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={statusVariants[doc.status] ?? "secondary"}
+                          className={cn(
+                            "capitalize",
+                            statusBadgeClass[doc.status]
+                          )}
+                        >
+                          {doc.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="muted" className="tabular-nums">
+                          {formatDate(doc.created_at)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <Button variant="ghost" size="icon-sm">
+                                <MoreHorizontalIcon className="size-4" />
+                              </Button>
+                            }
+                          />
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => setPreviewDoc(doc)}
+                            >
+                              <EyeIcon className="mr-2 size-4" />
+                              Preview
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDownload(doc)}
+                            >
+                              <DownloadIcon className="mr-2 size-4" />
+                              Download
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setConfirmDelete(doc)}
+                            >
+                              <TrashIcon className="mr-2 size-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((doc) => {
@@ -463,6 +655,29 @@ export function DocumentsPage() {
                 if (confirmDelete) deleteMut.mutate(confirmDelete);
                 setConfirmDelete(null);
               }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedIds.size} document
+              {selectedIds.size === 1 ? "" : "s"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the selected documents. It
+              can&rsquo;t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={runBulkDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
