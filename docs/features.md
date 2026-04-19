@@ -12,12 +12,13 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 Eval on 7-doc fixture: **P@5 0.252 · R@5 1.000 · MRR 0.859**. Ceiling hit on fixture size; further retrieval wins need corpus growth (more docs with overlapping vocabulary).
 
-**Next track: Q&A.** Split across two features, both user-facing:
+**Next track: Q&A.** Three features, all user-facing:
 
-- **F81 — RAG answer quality** (backend-driven visible changes: streaming, tighter answers, conversation memory, confidence, citations, graceful failure). Sub-slices F81.a–j laid out below.
-- **F92 — Search & RAG UX** (frontend chat polish: streaming UX, inline citations, regenerate, feedback, follow-ups, conversations, keyboard shortcuts, error states). Sub-slices F92.2–11 laid out below.
+- **F81 — RAG answer quality** (backend-driven visible changes: streaming, tighter answers, confidence, citations, graceful failure). Sub-slices F81.a–j laid out below.
+- **F92 — Search & RAG UX** (frontend chat polish: streaming UX, inline citations, regenerate, feedback, follow-ups, keyboard shortcuts, error states). Sub-slices F92.2–11 laid out below.
+- **F96 — Persistent conversations** (ChatGPT-style): DB-backed chat history, sidebar, URL-per-conversation, survives reload. Foundational — F81.f / F92.9 sit on top of it.
 
-They compose — e.g. F81.a streaming is the engine, F92.2 is the chat cursor / stop button the user actually sees. Pair sub-slices when shipping.
+They compose. Good first slice: **F96.a–e** (DB + API + streaming endpoint + URL routing) unlocks F81.a and F92.2 naturally. Alternative first slice: F81.a + F92.2 (streaming) if you'd rather ship perceived-latency wins before persistence.
 
 ---
 
@@ -404,6 +405,46 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - Lighthouse audit: target 90+ on performance, accessibility, best practices
   - Bundle analysis: lazy-load heavy pages (search, RAG chat)
   - Image optimization: proper formats, lazy loading
+
+- [ ] **F96 · Persistent conversations (ChatGPT-style)** — replaces today's
+  in-memory chat state in `SearchPage` with proper multi-conversation chat:
+  sidebar, history, URL-per-conversation, survives page reload. Compose
+  with F81.f (prompt-injected memory) and F92.9 (UI sidebar) — F96 is the
+  persistence layer both sit on.
+
+  Backend:
+  - [ ] **F96.a** Schema: `conversations` (id, owner_id, title, created_at,
+    updated_at, archived, metadata jsonb) + `chat_messages` (id,
+    conversation_id, role, content, citations jsonb, model, tokens,
+    created_at). Alembic migration + cascade on owner delete.
+  - [ ] **F96.b** REST API: `POST/GET/PATCH/DELETE /conversations`,
+    `POST /conversations/{id}/messages` (replaces direct `/rag/query`),
+    `GET /conversations/{id}/messages`. Owner-scoped per F86.
+  - [ ] **F96.c** Auto-title: after the first exchange, cheap Haiku call
+    summarizes the question into a 3-6 word title. Stored on the
+    conversation row; user-editable.
+  - [ ] **F96.d** Streaming on `POST /conversations/{id}/messages` via SSE —
+    composes with F81.a. Persist the completed assistant message only on
+    stream close; show-but-don't-save during generation.
+
+  Frontend:
+  - [ ] **F96.e** Route per conversation: `/chat/:id`. New-chat creates
+    lazily on first message. Direct URL load hydrates from API.
+  - [ ] **F96.f** Sidebar (replaces the placeholder in F92.9): list
+    conversations grouped by recency (Today / Yesterday / Past week /
+    Older), rename-inline, archive/delete, search across titles + message
+    content.
+  - [ ] **F96.g** Migration path: the current `SearchPage` chat state moves
+    into a dedicated `ChatPage`; the Search tab stays as search-only; the
+    Q&A tab links into the new chat route on first message.
+
+  Decisions worth pinning before starting:
+  - Shared vs private conversations — default private per-user; shareable
+    links as a later F96.h if needed.
+  - Delete = soft (`archived=true`) or hard (remove row + cascade
+    messages)? Default soft for recoverability.
+  - Retention policy — auto-archive conversations with no activity in N
+    days? Default: no auto-archive until we have data to tune on.
 
 ---
 
