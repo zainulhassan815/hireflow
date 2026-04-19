@@ -21,6 +21,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
@@ -177,19 +179,19 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r">
       <SidebarHeader className="p-4 group-data-[collapsible=icon]:p-2">
-        <NavLink
-          to="/"
-          className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center"
-        >
-          <div className="bg-foreground flex size-9 shrink-0 items-center justify-center">
-            <span className="text-background font-display text-base font-semibold">
-              H
+        <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
+          <NavLink to="/" className="flex items-center gap-3">
+            <div className="bg-foreground flex size-9 shrink-0 items-center justify-center">
+              <span className="text-background font-display text-base font-semibold">
+                H
+              </span>
+            </div>
+            <span className="font-display text-lg font-semibold tracking-[-0.01em] group-data-[collapsible=icon]:hidden">
+              Hireflow
             </span>
-          </div>
-          <span className="font-display text-lg font-semibold tracking-[-0.01em] group-data-[collapsible=icon]:hidden">
-            Hireflow
-          </span>
-        </NavLink>
+          </NavLink>
+          <SidebarTrigger className="text-muted-foreground ml-auto size-7 group-data-[collapsible=icon]:hidden" />
+        </div>
       </SidebarHeader>
 
       <SidebarContent className="px-2 group-data-[collapsible=icon]:px-1">
@@ -262,6 +264,7 @@ export function AppSidebar() {
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }
