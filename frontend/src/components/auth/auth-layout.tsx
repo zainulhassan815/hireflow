@@ -13,9 +13,9 @@ export function AuthLayout({ children, title, description }: AuthLayoutProps) {
       <div className="bg-primary hidden w-1/2 flex-col justify-between p-12 lg:flex">
         <NavLink to="/" className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center bg-white">
-            <span className="text-primary text-base font-bold">S</span>
+            <span className="text-primary text-base font-bold">H</span>
           </div>
-          <span className="text-lg font-semibold text-white">ScreenAI</span>
+          <span className="text-lg font-semibold text-white">Hireflow</span>
         </NavLink>
 
         <div className="space-y-6">
@@ -41,9 +41,9 @@ export function AuthLayout({ children, title, description }: AuthLayoutProps) {
           <div className="flex justify-center lg:hidden">
             <NavLink to="/" className="flex items-center gap-3">
               <div className="bg-primary flex size-10 items-center justify-center">
-                <span className="text-base font-bold text-white">S</span>
+                <span className="text-base font-bold text-white">H</span>
               </div>
-              <span className="text-lg font-semibold">ScreenAI</span>
+              <span className="text-lg font-semibold">Hireflow</span>
             </NavLink>
           </div>
 

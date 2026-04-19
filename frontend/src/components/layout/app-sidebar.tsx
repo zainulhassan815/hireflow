@@ -9,7 +9,6 @@ import {
   PlusIcon,
   SearchIcon,
   SettingsIcon,
-  SparklesIcon,
   UsersIcon,
 } from "lucide-react";
 
@@ -72,11 +71,10 @@ const mainNavItems = [
 
 const toolsNavItems = [
   {
-    title: "AI Search",
+    title: "Search",
     href: "/search",
     icon: SearchIcon,
     description: "Semantic document search",
-    badge: "AI",
   },
   {
     title: "Activity Logs",
@@ -194,12 +192,14 @@ export function AppSidebar() {
           to="/"
           className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center"
         >
-          <div className="from-primary to-primary/80 relative flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-md">
-            <SparklesIcon className="size-5 text-white" />
+          <div className="bg-primary flex size-10 shrink-0 items-center justify-center">
+            <span className="text-primary-foreground text-base font-bold">
+              H
+            </span>
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
             <span className="text-lg font-semibold tracking-tight">
-              ScreenAI
+              Hireflow
             </span>
             <span className="text-muted-foreground text-xs">HR Platform</span>
           </div>

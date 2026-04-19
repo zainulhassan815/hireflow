@@ -371,12 +371,42 @@ Improve accuracy, relevance, and usefulness of core AI features.
 
 Production-grade interface with attention to detail, accessibility, and delight.
 
-- [ ] **F90 · Design system audit**
-  - Consistent spacing, typography scale, color usage across all pages
-  - Dark mode: verify every component, fix contrast issues
-  - Responsive: test and fix all pages at mobile, tablet, desktop breakpoints
-  - Loading skeletons on every page (replace spinners with content-shaped placeholders)
-  - Transition animations: page transitions, list item enter/exit, modal open/close
+- [~] **F90 · Design revamp + system baseline** — full visual-identity pass.
+  Kills AI-slop defaults and establishes tokens that F91–F96 inherit.
+  Driven by the `/impeccable:critique` findings in
+  `docs/dev/F90-design-revamp/01-critique.md` (baseline heuristic score
+  23/40). Executed as eight sequential `/impeccable:*` passes; each gets
+  its own dev folder under `docs/dev/F90X-<slug>/` with the standard
+  five-doc workflow.
+  - [x] **F90.a** `/impeccable:shape` — design brief. Pin brand name,
+    voice, audience, tonal direction. Kills "ScreenAI + Sparkles".
+    Everything downstream depends on this.
+  - [ ] **F90.b** `/impeccable:typeset` — typography system. Display face
+    for headlines, real weight contrast, intentional tracking/leading.
+  - [ ] **F90.c** `/impeccable:colorize` — semantic categorical palette
+    via OKLCH hue rotation. Status / intent / confidence get hue
+    differentiation; blue stays primary-action only.
+  - [ ] **F90.d** `/impeccable:layout` — break the identical 4-KPI-card
+    hero on Dashboard + Documents. Page-specific primary metrics with
+    visualization; demote the rest.
+  - [ ] **F90.e** `/impeccable:bolder` — commit to `--radius: 0` opinion
+    across all surfaces or abandon it. No half-hedging with rounded
+    avatars/icons alongside sharp cards.
+  - [ ] **F90.f** `/impeccable:harden` — destructive-action confirms,
+    skeleton loaders replace spinners, retry affordances, real empty-
+    state voice.
+  - [ ] **F90.g** `/impeccable:delight` — brand moments: login hero,
+    empty states, first-use onboarding. Peak-end rule targets.
+  - [ ] **F90.h** `/impeccable:polish` — final pass: pure-black backdrop
+    → brand-tinted, kill bounce animation, align spacing drift, document
+    the resulting tokens.
+
+  Originally-scoped bullets fold into sub-features above:
+  - spacing/typography/color consistency → F90.b + F90.c
+  - dark mode verification → F90.c
+  - responsive audit → F90.h
+  - loading skeletons → F90.f
+  - transition animations → F90.e + F90.g
 
 - [ ] **F91 · Documents page polish**
   - Drag-and-drop upload zone on the main page (not just in dialog)
