@@ -1,30 +1,26 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   BriefcaseIcon,
-  ChevronRightIcon,
+  ChevronDownIcon,
   ClipboardListIcon,
   FileTextIcon,
   LayoutDashboardIcon,
   LogOutIcon,
-  PlusIcon,
   SearchIcon,
   SettingsIcon,
   UsersIcon,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
@@ -42,18 +38,34 @@ import {
 import { useAuth } from "@/providers/use-auth";
 import { cn } from "@/lib/utils";
 
-const mainNavItems = [
+type NavEntry = {
+  title: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  description?: string;
+};
+
+// Usage-frequency order: Priya uploads + searches daily, reviews
+// candidates daily, configures jobs occasionally, checks the
+// dashboard a couple times a day.
+const primaryNav: NavEntry[] = [
   {
     title: "Dashboard",
     href: "/",
     icon: LayoutDashboardIcon,
-    description: "Overview & analytics",
+    description: "Overview",
   },
   {
-    title: "Jobs",
-    href: "/jobs",
-    icon: BriefcaseIcon,
-    description: "Manage job postings",
+    title: "Documents",
+    href: "/documents",
+    icon: FileTextIcon,
+    description: "Upload & manage files",
+  },
+  {
+    title: "Search",
+    href: "/search",
+    icon: SearchIcon,
+    description: "Semantic document search",
   },
   {
     title: "Candidates",
@@ -62,34 +74,19 @@ const mainNavItems = [
     description: "Review applications",
   },
   {
-    title: "Documents",
-    href: "/documents",
-    icon: FileTextIcon,
-    description: "Upload & manage files",
+    title: "Jobs",
+    href: "/jobs",
+    icon: BriefcaseIcon,
+    description: "Manage job postings",
   },
 ];
 
-const toolsNavItems = [
-  {
-    title: "Search",
-    href: "/search",
-    icon: SearchIcon,
-    description: "Semantic document search",
-  },
+const secondaryNav: NavEntry[] = [
   {
     title: "Activity Logs",
     href: "/logs",
     icon: ClipboardListIcon,
     description: "System audit trail",
-  },
-];
-
-const settingsNavItems = [
-  {
-    title: "Settings",
-    href: "/settings",
-    icon: SettingsIcon,
-    description: "Account & preferences",
   },
 ];
 
@@ -123,14 +120,10 @@ export function AppSidebar() {
 
   const NavItem = ({
     item,
+    dim = false,
   }: {
-    item: {
-      title: string;
-      href: string;
-      icon: React.ComponentType<{ className?: string }>;
-      description?: string;
-      badge?: string;
-    };
+    item: NavEntry;
+    dim?: boolean;
   }) => {
     const isActive = isActiveRoute(item.href);
     const Icon = item.icon;
@@ -143,8 +136,11 @@ export function AppSidebar() {
               <SidebarMenuButton
                 isActive={isActive}
                 className={cn(
-                  "transition-all duration-200",
-                  isActive && "bg-primary/10 text-primary font-medium"
+                  // Transparent left border reserves the 3px slot so
+                  // the item doesn't shift when activated.
+                  "border-l-[3px] border-transparent transition-colors",
+                  isActive && "border-primary bg-muted/40 font-medium",
+                  dim && !isActive && "text-muted-foreground"
                 )}
                 render={
                   <NavLink
@@ -153,16 +149,11 @@ export function AppSidebar() {
                   >
                     <Icon
                       className={cn(
-                        "size-5 shrink-0 transition-colors",
-                        isActive ? "text-primary" : "text-muted-foreground"
+                        "size-5 shrink-0",
+                        isActive ? "text-foreground" : "text-muted-foreground"
                       )}
                     />
                     <span className="truncate">{item.title}</span>
-                    {item.badge && (
-                      <span className="bg-primary/10 text-primary ml-auto flex size-5 items-center justify-center rounded text-[10px] font-semibold">
-                        {item.badge}
-                      </span>
-                    )}
                   </NavLink>
                 }
               />
@@ -185,121 +176,62 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="border-r">
-      {/* Header / Logo */}
       <SidebarHeader className="p-4 group-data-[collapsible=icon]:p-2">
         <NavLink
           to="/"
           className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center"
         >
-          <div className="bg-foreground flex size-10 shrink-0 items-center justify-center">
+          <div className="bg-foreground flex size-9 shrink-0 items-center justify-center">
             <span className="text-background font-display text-base font-semibold">
               H
             </span>
           </div>
-          <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <span className="font-display text-lg font-semibold tracking-[-0.01em]">
-              Hireflow
-            </span>
-            <span className="text-muted-foreground text-xs">HR Platform</span>
-          </div>
+          <span className="font-display text-lg font-semibold tracking-[-0.01em] group-data-[collapsible=icon]:hidden">
+            Hireflow
+          </span>
         </NavLink>
       </SidebarHeader>
 
-      <SidebarSeparator />
-
-      {/* Main Content */}
       <SidebarContent className="px-2 group-data-[collapsible=icon]:px-1">
-        {/* Primary Navigation */}
         <SidebarGroup>
-          <SidebarGroupLabel className="text-muted-foreground text-xs font-medium group-data-[collapsible=icon]:hidden">
-            Main Menu
-          </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {mainNavItems.map((item) => (
+            <SidebarMenu className="gap-0.5">
+              {primaryNav.map((item) => (
                 <NavItem key={item.href} item={item} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Tools */}
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-muted-foreground text-xs font-medium group-data-[collapsible=icon]:hidden">
-            Tools
-          </SidebarGroupLabel>
+        <SidebarGroup className="mt-4">
           <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {toolsNavItems.map((item) => (
-                <NavItem key={item.href} item={item} />
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* Settings */}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {settingsNavItems.map((item) => (
-                <NavItem key={item.href} item={item} />
+            <SidebarMenu className="gap-0.5">
+              {secondaryNav.map((item) => (
+                <NavItem key={item.href} item={item} dim />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
-      {/* Footer */}
-      <SidebarFooter className="p-3 group-data-[collapsible=icon]:p-2">
-        {/* Quick Action Button */}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                onClick={() => navigate("/jobs/create")}
-                size={isCollapsed ? "icon" : "default"}
-                className={cn(
-                  "w-full gap-2 shadow-sm transition-all",
-                  "group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-10 group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:rounded-full"
-                )}
-              >
-                <PlusIcon className="size-5 shrink-0" />
-                <span className="group-data-[collapsible=icon]:sr-only">
-                  Post New Job
-                </span>
-              </Button>
-            }
-          />
-          {isCollapsed && (
-            <TooltipContent side="right">Post New Job</TooltipContent>
-          )}
-        </Tooltip>
-
-        <SidebarSeparator className="my-3 group-data-[collapsible=icon]:my-2" />
-
-        {/* User Profile */}
+      <SidebarFooter className="p-2 group-data-[collapsible=icon]:p-1">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
               <button
                 className={cn(
-                  "hover:bg-accent flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors",
+                  "hover:bg-muted/60 flex w-full items-center gap-3 p-2 text-left transition-colors",
                   "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
-                  "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2"
+                  "group-data-[collapsible=icon]:justify-center"
                 )}
               >
-                <div className="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
+                <div className="bg-muted text-muted-foreground flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
                   {user ? getInitials(user.full_name ?? user.email) : "U"}
                 </div>
-                <div className="flex min-w-0 flex-1 flex-col group-data-[collapsible=icon]:hidden">
-                  <span className="truncate text-sm font-medium">
-                    {user?.full_name || "User"}
-                  </span>
-                  <span className="text-muted-foreground truncate text-xs">
-                    {user?.email || ""}
-                  </span>
-                </div>
-                <ChevronRightIcon className="text-muted-foreground size-4 group-data-[collapsible=icon]:hidden" />
+                <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
+                  {user?.full_name || "User"}
+                </span>
+                <ChevronDownIcon className="text-muted-foreground ml-auto size-4 group-data-[collapsible=icon]:hidden" />
               </button>
             }
           />
@@ -310,7 +242,7 @@ export function AppSidebar() {
           >
             <div className="px-2 py-1.5">
               <p className="text-sm font-medium">{user?.full_name || "User"}</p>
-              <p className="text-muted-foreground text-xs">
+              <p className="text-muted-foreground truncate text-xs">
                 {user?.email || ""}
               </p>
             </div>
