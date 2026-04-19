@@ -130,6 +130,25 @@ class Settings(BaseSettings):
     search_confidence_medium: float = 0.01
     search_max_highlights_per_doc: int = 3
 
+    # RAG context gate (F81.b / F81.c). Applied in
+    # ``RagService._build_context`` after ``vector_store.query``.
+    #
+    # Distance cutoff: ``None`` → ask the embedder via
+    # ``EmbeddingProvider.recommended_distance_threshold`` (same path as
+    # search). The RAG path shipped with no distance filter at all
+    # before F81.b; closing that gap is the main value here. An explicit
+    # float always wins over the embedder recommendation — tighten if
+    # answers still drag in off-topic chunks.
+    rag_context_max_distance: float | None = None
+    # Soft cap on context tokens stuffed into the prompt. Estimated via a
+    # 4-chars-per-token heuristic (Anthropic's published approximation) —
+    # never a hard API-limit check. Default 4000 leaves ~2.5k headroom
+    # on an 8k-ctx local model after system prompt + question +
+    # response; trivial for Claude's 200k. A single chunk that exceeds
+    # the whole budget is still included with a WARN log (preserves
+    # answer capability over config-only failures).
+    rag_context_token_budget: int = 4000
+
     # Weighted RRF (F85.c). Multiplies each source's rank contribution
     # before scores accumulate. Boosting lexical reflects the F87
     # filename-A / skills-B index weighting so filename-intent queries

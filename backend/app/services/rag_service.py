@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from app.adapters.protocols import LlmProvider, VectorStore
+from app.adapters.protocols import LlmProvider, VectorHit, VectorStore
+from app.core.config import settings
 from app.repositories.document import DocumentRepository
 from app.schemas.errors import ErrorBody
 from app.schemas.rag import (
@@ -24,6 +25,20 @@ from app.schemas.rag import (
 from app.services.highlight import extract_query_terms, find_match_spans
 
 logger = logging.getLogger(__name__)
+
+# F81.c — token estimator. Anthropic publishes "~4 chars per token" as
+# a rule of thumb for Claude. It's approximate on every model; we use
+# it only for budget soft-capping, never for hard LLM-API limit checks.
+# Ceil-divide so a 5-char string counts as 2 tokens, not 1 (conservative
+# — better to under-pack than to overflow). Promoted to a shared module
+# if a second caller appears; today there's one.
+_CHARS_PER_TOKEN = 4
+
+
+def _estimate_tokens(text: str) -> int:
+    """Approximate token count for budget accounting."""
+    return (len(text) + _CHARS_PER_TOKEN - 1) // _CHARS_PER_TOKEN
+
 
 # F81.d — tighter system prompt. Rules over prose.
 #
@@ -220,9 +235,10 @@ class RagService:
     ) -> _RagContext | None:
         """Retrieve chunks, hydrate filenames, build prompt + citations.
 
-        Returns ``None`` if retrieval produced no hits. Otherwise
-        returns everything both ``query`` and ``stream_query`` need to
-        call the LLM.
+        Returns ``None`` if retrieval produced no usable hits — either
+        zero raw hits, all hits filtered out by the distance cutoff, or
+        (defensively) no chunks surviving the token budget. Callers
+        route ``None`` through the existing no-hits sentinel path.
         """
         where = self._build_where(document_ids)
         hits = self._vector_store.query(
@@ -231,14 +247,30 @@ class RagService:
         if not hits:
             return None
 
-        doc_ids = list({UUID(h.document_id) for h in hits})
+        cutoff = self._resolve_distance_cutoff()
+        budget = settings.rag_context_token_budget
+        kept, tokens_used = self._apply_context_gate(hits, cutoff, budget)
+        logger.info(
+            "rag context: %d/%d chunks kept, ~%d tokens (cutoff=%.2f, budget=%d)",
+            len(kept),
+            len(hits),
+            tokens_used,
+            cutoff,
+            budget,
+        )
+        if not kept:
+            return None
+
+        # Hydrate filenames for the surviving chunks only — no point
+        # loading document rows we won't reference.
+        doc_ids = list({UUID(h.document_id) for h in kept})
         docs_map = await self._documents.get_many(doc_ids)
 
         context_parts: list[str] = []
         citations: list[dict[str, Any]] = []
         terms = extract_query_terms(question)
 
-        for hit in hits:
+        for hit in kept:
             doc_id = UUID(hit.document_id)
             doc = docs_map.get(doc_id)
             filename = doc.filename if doc else "unknown"
@@ -269,6 +301,59 @@ class RagService:
             system_prompt=_SYSTEM_PROMPT,
             user_prompt=user_prompt,
         )
+
+    def _resolve_distance_cutoff(self) -> float:
+        """Return the RAG-context distance cutoff for this request.
+
+        Mirrors ``SearchService._resolve_distance_threshold`` (F85.d)
+        so the two services never drift. Order of precedence:
+
+        1. Explicit ``settings.rag_context_max_distance`` (operator knob)
+        2. Embedder's ``recommended_distance_threshold`` (travels with
+           the active model — auto-updates on model swap)
+        3. ``0.5`` (defensive; unreachable with ``ChromaVectorStore``,
+           which always carries an embedder)
+        """
+        if settings.rag_context_max_distance is not None:
+            return settings.rag_context_max_distance
+        embedder = getattr(self._vector_store, "embedder", None)
+        if embedder is not None:
+            return embedder.recommended_distance_threshold
+        return 0.5
+
+    @staticmethod
+    def _apply_context_gate(
+        hits: list[VectorHit], cutoff: float, budget: int
+    ) -> tuple[list[VectorHit], int]:
+        """Apply F81.b distance filter + F81.c token budget.
+
+        Returns ``(kept, tokens_used)``. Walks ``hits`` in retrieval
+        order (Chroma sorts ascending by distance, so the top chunk
+        leads). A single chunk whose own estimated tokens exceed the
+        entire budget is kept anyway with a WARN log — preserves answer
+        capability in the face of chunking pathologies (F82 regressions
+        etc.); the LLM may error, in which case ``stream_query``'s
+        existing handler converts it to an ``error`` event.
+        """
+        kept: list[VectorHit] = []
+        tokens_used = 0
+        for hit in hits:
+            if hit.distance > cutoff:
+                continue
+            hit_tokens = _estimate_tokens(hit.text)
+            if not kept and hit_tokens > budget:
+                logger.warning(
+                    "rag context: top chunk ~%d tokens exceeds budget %d; "
+                    "keeping it to preserve answer capability",
+                    hit_tokens,
+                    budget,
+                )
+                return [hit], hit_tokens
+            if tokens_used + hit_tokens > budget:
+                break
+            kept.append(hit)
+            tokens_used += hit_tokens
+        return kept, tokens_used
 
     @staticmethod
     def _build_where(document_ids: list[UUID] | None) -> dict[str, Any] | None:

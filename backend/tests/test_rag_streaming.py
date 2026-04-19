@@ -29,12 +29,37 @@ from app.services.rag_service import RagService
 # --------------------------------------------------------------------------
 
 
-class _FakeVectorStore:
-    """Returns a canned list of ``VectorHit``; no real Chroma."""
+class _FakeEmbedder:
+    """Minimal embedder stub — only the RAG-cutoff property is exercised.
 
-    def __init__(self, hits: list[VectorHit]) -> None:
+    Matches the production path where ``RagService._resolve_distance_cutoff``
+    reads ``vector_store.embedder.recommended_distance_threshold``.
+    """
+
+    def __init__(self, threshold: float = 0.5) -> None:
+        self._threshold = threshold
+
+    @property
+    def recommended_distance_threshold(self) -> float:
+        return self._threshold
+
+
+class _FakeVectorStore:
+    """Returns a canned list of ``VectorHit``; no real Chroma.
+
+    Carries an ``embedder`` attribute mirroring ``ChromaVectorStore``,
+    so the distance-cutoff resolution path is exercised end-to-end.
+    """
+
+    def __init__(
+        self,
+        hits: list[VectorHit],
+        *,
+        embedder: _FakeEmbedder | None = None,
+    ) -> None:
         self._hits = hits
         self.query_calls: list[dict[str, Any]] = []
+        self.embedder = embedder or _FakeEmbedder()
 
     def upsert(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError
@@ -309,3 +334,206 @@ async def test_sse_frame_has_event_header_and_json_payload() -> None:
     assert done_frame.startswith("event: done\n")
     assert '"model":"m"' in done_frame
     assert '"query_time_ms":42' in done_frame
+
+
+# --------------------------------------------------------------------------
+# F81.b — distance filter
+# --------------------------------------------------------------------------
+
+
+def _hit_at(doc_id: UUID, *, distance: float, text: str = "x") -> VectorHit:
+    return VectorHit(
+        chunk_id=f"{doc_id}-{distance}",
+        document_id=str(doc_id),
+        text=text,
+        metadata={"chunk_index": 0},
+        distance=distance,
+    )
+
+
+async def test_distance_filter_drops_hits_above_cutoff(
+    monkeypatch: pytest.MonkeyPatch, alice_id: UUID, bob_id: UUID
+) -> None:
+    """Hits above the distance cutoff never reach the LLM or the
+    citations list. Below-cutoff hits do."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "rag_context_max_distance", 0.5)
+    monkeypatch.setattr(settings, "rag_context_token_budget", 10_000)
+
+    charlie_id = uuid4()
+    hits = [
+        _hit_at(alice_id, distance=0.1, text="Alice is kept."),
+        _hit_at(bob_id, distance=0.4, text="Bob is kept."),
+        _hit_at(charlie_id, distance=0.9, text="Charlie is dropped."),
+    ]
+    vector_store = _FakeVectorStore(hits)
+    docs = _FakeDocumentRepo(
+        {alice_id: "alice.pdf", bob_id: "bob.pdf", charlie_id: "charlie.pdf"}
+    )
+    llm = _FakeStreamingLlm(["ok"])
+    service = _make_service(docs=docs, vector_store=vector_store, llm=llm)
+
+    ctx = await service._build_context(  # type: ignore[attr-defined]
+        question="q", document_ids=None, max_chunks=10
+    )
+    assert ctx is not None
+    filenames = {c["filename"] for c in ctx.citations}
+    assert filenames == {"alice.pdf", "bob.pdf"}
+    # Context that would be handed to the LLM must also not mention
+    # the filtered chunk — otherwise the filter is only cosmetic.
+    assert "Charlie is dropped." not in ctx.user_prompt
+
+
+async def test_all_hits_above_cutoff_routes_through_no_hits_fallback(
+    monkeypatch: pytest.MonkeyPatch, alice_id: UUID
+) -> None:
+    """When every hit is over the cutoff, stream_query falls back to
+    the synthetic-delta sentinel path without touching the LLM.
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "rag_context_max_distance", 0.2)
+
+    hits = [_hit_at(alice_id, distance=0.9, text="Off-topic.")]
+    vector_store = _FakeVectorStore(hits)
+    docs = _FakeDocumentRepo({alice_id: "alice.pdf"})
+    llm = _FakeStreamingLlm(["should-not-see-me"])
+    service = _make_service(docs=docs, vector_store=vector_store, llm=llm)
+
+    events = [e async for e in service.stream_query(question="quantum physics")]
+    assert [type(e) for e in events] == [DeltaEvent, DoneEvent]
+    assert events[0].data == "Not in the provided documents."
+    assert llm.stream_calls == []
+
+
+# --------------------------------------------------------------------------
+# F81.c — token budget
+# --------------------------------------------------------------------------
+
+
+async def test_token_budget_truncates_trailing_chunks(
+    monkeypatch: pytest.MonkeyPatch, alice_id: UUID, bob_id: UUID
+) -> None:
+    """With enough chunks to exceed the budget, only the leading
+    chunks that fit are kept. 4 chars ≈ 1 token: a 1200-char chunk
+    ≈ 300 tokens; 5 of them ≈ 1500 tokens. Budget 1000 keeps 3."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "rag_context_max_distance", 0.9)
+    monkeypatch.setattr(settings, "rag_context_token_budget", 1000)
+
+    chunk_text = "x" * 1200  # ~300 tokens
+    charlie_id = uuid4()
+    dora_id = uuid4()
+    eve_id = uuid4()
+    hits = [
+        _hit_at(alice_id, distance=0.1, text=chunk_text),
+        _hit_at(bob_id, distance=0.2, text=chunk_text),
+        _hit_at(charlie_id, distance=0.3, text=chunk_text),
+        _hit_at(dora_id, distance=0.4, text=chunk_text),
+        _hit_at(eve_id, distance=0.5, text=chunk_text),
+    ]
+    vector_store = _FakeVectorStore(hits)
+    docs = _FakeDocumentRepo(
+        {
+            alice_id: "a.pdf",
+            bob_id: "b.pdf",
+            charlie_id: "c.pdf",
+            dora_id: "d.pdf",
+            eve_id: "e.pdf",
+        }
+    )
+    llm = _FakeStreamingLlm(["ok"])
+    service = _make_service(docs=docs, vector_store=vector_store, llm=llm)
+
+    ctx = await service._build_context(  # type: ignore[attr-defined]
+        question="q", document_ids=None, max_chunks=10
+    )
+    assert ctx is not None
+    filenames = [c["filename"] for c in ctx.citations]
+    # First three fit (3 × 300 = 900 < 1000); fourth would push to
+    # 1200 > 1000 and is dropped along with the rest.
+    assert filenames == ["a.pdf", "b.pdf", "c.pdf"]
+
+
+async def test_single_oversized_chunk_kept_with_warn(
+    monkeypatch: pytest.MonkeyPatch,
+    alice_id: UUID,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A top chunk larger than the whole budget is still included —
+    answering from one oversized chunk beats refusing on a config
+    technicality. A WARN log flags the anomaly for operators."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "rag_context_max_distance", 0.9)
+    monkeypatch.setattr(settings, "rag_context_token_budget", 100)
+
+    huge = "x" * 6000  # ~1500 tokens, far over the 100 budget
+    hits = [_hit_at(alice_id, distance=0.1, text=huge)]
+    vector_store = _FakeVectorStore(hits)
+    docs = _FakeDocumentRepo({alice_id: "alice.pdf"})
+    llm = _FakeStreamingLlm(["ok"])
+    service = _make_service(docs=docs, vector_store=vector_store, llm=llm)
+
+    with caplog.at_level("WARNING", logger="app.services.rag_service"):
+        ctx = await service._build_context(  # type: ignore[attr-defined]
+            question="q", document_ids=None, max_chunks=10
+        )
+    assert ctx is not None
+    assert [c["filename"] for c in ctx.citations] == ["alice.pdf"]
+    assert any(
+        "exceeds budget" in record.message and record.levelname == "WARNING"
+        for record in caplog.records
+    )
+
+
+def test_estimate_tokens_is_ceil_four_chars_per_token() -> None:
+    """Sanity check on the heuristic. Off-by-one here would silently
+    blow the budget on long documents."""
+    from app.services.rag_service import _estimate_tokens
+
+    assert _estimate_tokens("") == 0
+    assert _estimate_tokens("x") == 1
+    assert _estimate_tokens("x" * 4) == 1
+    assert _estimate_tokens("x" * 5) == 2  # ceil, not floor
+    assert _estimate_tokens("x" * 1000) == 250
+
+
+# --------------------------------------------------------------------------
+# Distance-cutoff resolution path (mirrors SearchService)
+# --------------------------------------------------------------------------
+
+
+async def test_distance_cutoff_prefers_explicit_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An explicit config value overrides the embedder recommendation."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "rag_context_max_distance", 0.12)
+    vector_store = _FakeVectorStore([], embedder=_FakeEmbedder(threshold=0.99))
+    service = _make_service(
+        docs=_FakeDocumentRepo({}),
+        vector_store=vector_store,
+        llm=_FakeStreamingLlm([]),
+    )
+    assert service._resolve_distance_cutoff() == 0.12  # type: ignore[attr-defined]
+
+
+async def test_distance_cutoff_falls_back_to_embedder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No explicit setting → the embedder's recommendation travels
+    automatically. F85.d relies on this for per-model thresholds."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "rag_context_max_distance", None)
+    vector_store = _FakeVectorStore([], embedder=_FakeEmbedder(threshold=0.33))
+    service = _make_service(
+        docs=_FakeDocumentRepo({}),
+        vector_store=vector_store,
+        llm=_FakeStreamingLlm([]),
+    )
+    assert service._resolve_distance_cutoff() == 0.33  # type: ignore[attr-defined]
