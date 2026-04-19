@@ -392,7 +392,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - [x] **F90.e** `/impeccable:bolder` — commit to `--radius: 0` opinion
     across all surfaces or abandon it. No half-hedging with rounded
     avatars/icons alongside sharp cards.
-  - [ ] **F90.f** `/impeccable:harden` — destructive-action confirms,
+  - [x] **F90.f** `/impeccable:harden` — destructive-action confirms,
     skeleton loaders replace spinners, retry affordances, real empty-
     state voice.
   - [ ] **F90.g** `/impeccable:delight` — brand moments: login hero,

@@ -5,7 +5,7 @@ import { SearchIcon, UsersIcon } from "lucide-react";
 import { listCandidatesOptions } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -35,8 +35,24 @@ export function CandidatesPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <Spinner className="size-8" />
+      <div className="flex flex-col gap-6">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <Skeleton className="h-9 w-full max-w-sm" />
+        <div className="border">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4 border-b p-4">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-4 w-56" />
+              <div className="ml-auto flex gap-1">
+                <Skeleton className="h-5 w-14" />
+                <Skeleton className="h-5 w-14" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

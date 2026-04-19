@@ -20,6 +20,16 @@ import {
   downloadDocument,
   type DocumentResponse,
 } from "@/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,7 +41,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -88,6 +98,10 @@ export function DocumentsPage() {
   const [previewDoc, setPreviewDoc] = React.useState<DocumentResponse | null>(
     null
   );
+  // F90.f — confirm on delete. Lift state so the AlertDialog renders
+  // once at page level rather than per-row.
+  const [confirmDelete, setConfirmDelete] =
+    React.useState<DocumentResponse | null>(null);
 
   const { data: documents = [], isLoading } = useQuery({
     ...listDocumentsOptions(),
@@ -101,6 +115,14 @@ export function DocumentsPage() {
       toast.success(`${doc.filename} deleted`);
       queryClient.invalidateQueries({
         queryKey: listDocumentsOptions().queryKey,
+      });
+    },
+    onError: (_, doc) => {
+      toast.error(`Couldn't delete ${doc.filename}`, {
+        action: {
+          label: "Retry",
+          onClick: () => deleteMut.mutate(doc),
+        },
       });
     },
   });
@@ -145,8 +167,25 @@ export function DocumentsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <Spinner className="size-8" />
+      <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-40" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+          <Skeleton className="h-10 w-40" />
+        </div>
+        <Skeleton className="h-11 w-full max-w-xl" />
+        <div className="border">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4 border-b p-4">
+              <Skeleton className="size-8 shrink-0" />
+              <Skeleton className="h-4 flex-1" />
+              <Skeleton className="h-6 w-20" />
+              <Skeleton className="h-6 w-16" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -316,7 +355,7 @@ export function DocumentsPage() {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-destructive"
-                            onClick={() => deleteMut.mutate(doc)}
+                            onClick={() => setConfirmDelete(doc)}
                           >
                             <TrashIcon className="mr-2 size-4" />
                             Delete
@@ -402,6 +441,32 @@ export function DocumentsPage() {
         open={!!previewDoc}
         onOpenChange={(open) => !open && setPreviewDoc(null)}
       />
+      <AlertDialog
+        open={!!confirmDelete}
+        onOpenChange={(open) => !open && setConfirmDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete?.filename} will be permanently removed. This
+              can&rsquo;t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmDelete) deleteMut.mutate(confirmDelete);
+                setConfirmDelete(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

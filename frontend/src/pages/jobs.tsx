@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
@@ -9,6 +10,16 @@ import {
 } from "lucide-react";
 
 import { listJobsOptions, deleteJob, type JobResponse } from "@/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -19,7 +30,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Typography } from "@/components/ui/typography";
 import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
@@ -37,6 +48,9 @@ const statusVariant: Record<
 export function JobsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [confirmDelete, setConfirmDelete] = React.useState<JobResponse | null>(
+    null
+  );
 
   const { data: jobs = [], isLoading } = useQuery({
     ...listJobsOptions(),
@@ -49,12 +63,42 @@ export function JobsPage() {
       toast.success(`${job.title} deleted`);
       queryClient.invalidateQueries({ queryKey: listJobsOptions().queryKey });
     },
+    onError: (_, job) => {
+      toast.error(`Couldn't delete ${job.title}`, {
+        action: {
+          label: "Retry",
+          onClick: () => deleteMut.mutate(job),
+        },
+      });
+    },
   });
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <Spinner className="size-8" />
+      <div className="flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-28" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+          <Skeleton className="h-10 w-28" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="space-y-3 border p-4">
+              <div className="flex items-start justify-between">
+                <Skeleton className="h-5 w-3/4" />
+                <Skeleton className="size-8 shrink-0" />
+              </div>
+              <Skeleton className="h-4 w-2/3" />
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <Skeleton className="h-5 w-16" />
+                <Skeleton className="h-5 w-20" />
+                <Skeleton className="h-5 w-14" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -117,7 +161,7 @@ export function JobsPage() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="text-destructive"
-                        onClick={() => deleteMut.mutate(job)}
+                        onClick={() => setConfirmDelete(job)}
                       >
                         <TrashIcon className="mr-2 size-4" />
                         Delete
@@ -155,6 +199,32 @@ export function JobsPage() {
           ))}
         </div>
       )}
+      <AlertDialog
+        open={!!confirmDelete}
+        onOpenChange={(open) => !open && setConfirmDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this job?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete?.title} will be removed, along with any candidate
+              matches. This can&rsquo;t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmDelete) deleteMut.mutate(confirmDelete);
+                setConfirmDelete(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

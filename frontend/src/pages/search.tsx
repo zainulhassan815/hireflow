@@ -32,7 +32,33 @@ import {
 } from "@/components/ui/tooltip";
 import { Typography } from "@/components/ui/typography";
 import { extractApiError } from "@/lib/api-errors";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+// F90.f — confidence badge: rename for Priya (brief §8 rule on
+// jargon) and tokenize color to the semantic palette from F90.c.
+// Tooltip explains what drives the label so "Strong match" isn't
+// magic.
+const CONFIDENCE_DISPLAY: Record<
+  "high" | "medium" | "low",
+  { label: string; className: string; tooltip: string }
+> = {
+  high: {
+    label: "Strong match",
+    className: "border-success text-success",
+    tooltip: "Top retrieved chunk is close to your query in meaning.",
+  },
+  medium: {
+    label: "Partial match",
+    className: "border-warning text-warning",
+    tooltip: "Some relevant chunks found, but the match isn't tight.",
+  },
+  low: {
+    label: "Weak match",
+    className: "border-muted-foreground text-muted-foreground",
+    tooltip: "Retrieval scraped something, but nothing highly relevant.",
+  },
+};
 
 interface ChatMessage {
   id: string;
@@ -477,18 +503,31 @@ export function SearchPage() {
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1">
-                            <Badge
-                              variant="outline"
-                              className={
-                                result.confidence === "high"
-                                  ? "border-green-500 text-green-700 dark:text-green-400"
-                                  : result.confidence === "medium"
-                                    ? "border-amber-500 text-amber-700 dark:text-amber-400"
-                                    : "border-muted-foreground text-muted-foreground"
-                              }
-                            >
-                              {result.confidence} relevance
-                            </Badge>
+                            {result.confidence &&
+                              CONFIDENCE_DISPLAY[result.confidence] && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        CONFIDENCE_DISPLAY[result.confidence]
+                                          .className
+                                      )}
+                                    >
+                                      {
+                                        CONFIDENCE_DISPLAY[result.confidence]
+                                          .label
+                                      }
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {
+                                      CONFIDENCE_DISPLAY[result.confidence]
+                                        .tooltip
+                                    }
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                           </div>
                         </div>
                       </CardContent>
@@ -636,20 +675,31 @@ export function SearchPage() {
                             >
                               {message.model} · {message.queryTimeMs}ms
                             </Typography>
-                            {message.confidence && (
-                              <Badge
-                                variant="outline"
-                                className={
-                                  message.confidence === "high"
-                                    ? "border-green-500 text-green-700 dark:text-green-400"
-                                    : message.confidence === "medium"
-                                      ? "border-amber-500 text-amber-700 dark:text-amber-400"
-                                      : "border-muted-foreground text-muted-foreground"
-                                }
-                              >
-                                {message.confidence} confidence
-                              </Badge>
-                            )}
+                            {message.confidence &&
+                              CONFIDENCE_DISPLAY[message.confidence] && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        CONFIDENCE_DISPLAY[message.confidence]
+                                          .className
+                                      )}
+                                    >
+                                      {
+                                        CONFIDENCE_DISPLAY[message.confidence]
+                                          .label
+                                      }
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {
+                                      CONFIDENCE_DISPLAY[message.confidence]
+                                        .tooltip
+                                    }
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                           </div>
                         )}
                       </div>
