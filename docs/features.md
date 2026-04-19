@@ -375,7 +375,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   Kills AI-slop defaults and establishes tokens that F91–F96 inherit.
   Driven by the `/impeccable:critique` findings in
   `docs/dev/F90-design-revamp/01-critique.md` (baseline heuristic score
-  23/40). Executed as eight sequential `/impeccable:*` passes; each gets
+  23/40; post-F90 re-score **31/40**, detector **0 findings**). Executed as eight sequential `/impeccable:*` passes; each gets
   its own dev folder under `docs/dev/F90X-<slug>/` with the standard
   five-doc workflow.
   - [x] **F90.a** `/impeccable:shape` — design brief. Pin brand name,
@@ -442,6 +442,12 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - Match score visualization: radar chart or bar breakdown (skills/experience/vector)
   - One-click "create candidates from all resumes" batch action
   - CSV export button directly on the candidates table
+  - **Data model prerequisite** (flagged by F90.d, post-F90 critique):
+    the per-page heroes in brief §5 (Jobs status bar, Candidates scoring
+    column) depend on (a) Job.status carrying `open / screening /
+    interviewing / closed` states, and (b) a `match_score` field on
+    Candidate or CandidateApplication. Neither exists yet — schema work
+    blocks the layout work.
 
 - [ ] **F94 · Dashboard & navigation**
   - Activity feed: recent actions as a timeline (not just table)
@@ -498,6 +504,66 @@ Production-grade interface with attention to detail, accessibility, and delight.
     messages)? Default soft for recoverability.
   - Retention policy — auto-archive conversations with no activity in N
     days? Default: no auto-archive until we have data to tune on.
+
+- [ ] **F97 · First-use onboarding** — first-visit Priya lands on an empty
+  Dashboard with an "Upload documents" CTA but no guided moment showing
+  the full workflow (upload → process → search → shortlist). Post-F90
+  critique scored Heuristic 10 (Help & Documentation) at 2/4 for exactly
+  this reason. Peak-end rule says we're leaving a win on the table.
+  - [ ] **F97.a** Scope decision: three-card inline explainer on empty
+    Dashboard vs interactive guided tour vs static help panel. Cheapest
+    win: inline explainer that hides once `stats.documents > 0`.
+  - [ ] **F97.b** Implementation: Dashboard empty-state carousel/strip
+    showing (1) upload, (2) search/ask, (3) shortlist — each with an
+    illustration or icon + one sentence + CTA to that page.
+  - [ ] **F97.c** Dismissal: user can skip the explainer; localStorage
+    flag remembers the choice so repeat-visit empty states stay clean.
+  - [ ] **F97.d** Copy pass in F90.g voice ("Upload the stack. / Search
+    the way a person reads. / Keep the shortlist you can defend." is the
+    starting point — each sentence maps to one onboarding step).
+
+- [ ] **F98 · Confirmation hardening** — F90.f added AlertDialog confirms
+  on single-item delete, but high-stakes paths still need more friction.
+  Post-F90 critique flagged this as a P3.
+  - [ ] **F98.a** Type-to-confirm on cascading deletes: deleting a Job
+    with matched Candidates requires typing the job title. Same for any
+    future bulk-delete action on Documents.
+  - [ ] **F98.b** Logout confirm (deliberately skipped in F90.f as low-
+    priority). Revisit if session loss is causing friction — likely not
+    needed.
+  - [ ] **F98.c** Soft-delete + Undo toast: backend supports a soft-
+    delete flag (`archived_at` or similar), delete mutations set it;
+    toast shows "Undo" for 5s; undo clears the flag. Applies first to
+    Documents, later to Jobs.
+
+- [ ] **F99 · Design system documentation** — F90 landed a coherent design
+  system (tokens, typography, color, radius, primitive patterns) but no
+  doc exists for future contributors. Without it, the next Claude session
+  or new engineer won't know why `asChild` is banned, why blue is
+  action-only, why `--radius-2xl/3xl/4xl` are zeroed, etc.
+  - [ ] **F99.a** `docs/design-system.md` covering: token map (font /
+    color / radius / spacing), primitive patterns (the `render={}`
+    migration from `asChild`; why `SelectValue` bridges `placeholder`),
+    voice guide (editorial-serious, second-person, no "just", no "AI"
+    adjective), anti-goal list from brief §10.
+  - [ ] **F99.b** Code examples for each token class (how to use
+    `bg-success` vs hand-coding hex; how to use `font-display`; how to
+    avoid the now-forbidden `asChild`). Runnable snippets.
+  - [ ] **F99.c** "When to reach for" decision table: sharp surface vs
+    rounded interactive, cat-1..5 vs semantic hues, display face vs
+    sans, mono vs proportional.
+
+- [ ] **F100 · RAG confidence label at source** — F90.f rewrote the UI
+  badges (`high / medium / low` → `Strong match / Partial match / Weak
+  match`) via a frontend map. The backend still emits the old enum. If
+  any other consumer (logs dashboard, admin tooling, CSV export) reads
+  the same field, they'll see raw `high/medium/low`.
+  - [ ] **F100.a** Backend: rename the enum values in the response
+    schema; add a migration for any stored values.
+  - [ ] **F100.b** Frontend: delete the `CONFIDENCE_DISPLAY` translation
+    map in `search.tsx`; render the backend value directly.
+  - [ ] **F100.c** Contract test: search + RAG response snapshots
+    updated to match new labels.
 
 ---
 
