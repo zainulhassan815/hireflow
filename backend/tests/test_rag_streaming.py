@@ -811,3 +811,63 @@ async def test_sync_query_confidence_is_none_on_fallback() -> None:
     result = await service.query(question="quantum physics")
     assert result.confidence is None
     assert result.answer == "Not in the provided documents."
+
+
+# --------------------------------------------------------------------------
+# F81.h — section_heading + page_number travel onto citations
+# --------------------------------------------------------------------------
+
+
+async def test_section_heading_and_page_number_travel_onto_citation(
+    alice_id: UUID,
+) -> None:
+    """F82.e stamps ``section_heading`` on chunk metadata; F81.h surfaces
+    it on SourceCitation so the frontend can render the section label."""
+    hit = VectorHit(
+        chunk_id=f"{alice_id}-0",
+        document_id=str(alice_id),
+        text="Alice has Kubernetes experience since 2019.",
+        metadata={
+            "chunk_index": 0,
+            "section_heading": "Experience",
+            "page_number": 2,
+        },
+        distance=0.1,
+    )
+    service = _make_service(
+        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
+        vector_store=_FakeVectorStore([hit]),
+        llm=_FakeStreamingLlm(["ok"]),
+    )
+
+    ctx = await service._build_context(  # type: ignore[attr-defined]
+        question="q", document_ids=None, max_chunks=5
+    )
+    assert ctx is not None
+    assert ctx.citations[0]["section_heading"] == "Experience"
+    assert ctx.citations[0]["page_number"] == 2
+
+
+async def test_missing_section_heading_renders_as_none(alice_id: UUID) -> None:
+    """When the extractor didn't surface a heading (e.g. raw text doc),
+    the citation carries ``section_heading=None`` — the frontend
+    conditionally hides the section label in that case."""
+    hit = VectorHit(
+        chunk_id=f"{alice_id}-0",
+        document_id=str(alice_id),
+        text="plain text, no heading",
+        metadata={"chunk_index": 0},  # no section_heading or page_number
+        distance=0.1,
+    )
+    service = _make_service(
+        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
+        vector_store=_FakeVectorStore([hit]),
+        llm=_FakeStreamingLlm(["ok"]),
+    )
+
+    ctx = await service._build_context(  # type: ignore[attr-defined]
+        question="q", document_ids=None, max_chunks=5
+    )
+    assert ctx is not None
+    assert ctx.citations[0]["section_heading"] is None
+    assert ctx.citations[0]["page_number"] is None

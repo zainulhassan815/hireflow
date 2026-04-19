@@ -23,6 +23,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Typography } from "@/components/ui/typography";
 import { extractApiError } from "@/lib/api-errors";
 import { toast } from "sonner";
@@ -35,6 +40,104 @@ interface ChatMessage {
   model?: string;
   queryTimeMs?: number;
   confidence?: "high" | "medium" | "low" | null;
+}
+
+// F81.j — parse assistant prose into text / citation segments.
+//
+// The F81.d system prompt instructs Claude to cite filenames inline
+// like `[alice_resume.pdf]`. This helper turns those into typed
+// segments the renderer can walk. A bracketed span is promoted to a
+// citation ONLY when its inner text matches a known
+// ``SourceCitation.filename`` (exact first, then case-insensitive) —
+// unknown brackets stay as plain text so we never show false-positive
+// chips (e.g. `[TODO]`, `[note]`).
+//
+// Streaming-safe: incomplete markers (no closing `]` yet) don't match
+// the regex, so they render as plain text until the next delta
+// completes them and the next re-render picks them up.
+type Segment =
+  | { kind: "text"; value: string }
+  | { kind: "citation"; citation: SourceCitation };
+
+function parseSegments(
+  content: string,
+  citations: SourceCitation[] | undefined
+): Segment[] {
+  if (!citations || citations.length === 0) {
+    return [{ kind: "text", value: content }];
+  }
+  const byFilename = new Map(citations.map((c) => [c.filename, c]));
+  const byLower = new Map(citations.map((c) => [c.filename.toLowerCase(), c]));
+  const segments: Segment[] = [];
+  const regex = /\[([^[\]\n]+)\]/g;
+  let lastIndex = 0;
+  for (const match of content.matchAll(regex)) {
+    const [fullMatch, inner] = match;
+    const citation = byFilename.get(inner) ?? byLower.get(inner.toLowerCase());
+    if (!citation) continue;
+    const at = match.index ?? 0;
+    if (at > lastIndex) {
+      segments.push({ kind: "text", value: content.slice(lastIndex, at) });
+    }
+    segments.push({ kind: "citation", citation });
+    lastIndex = at + fullMatch.length;
+  }
+  if (lastIndex < content.length) {
+    segments.push({ kind: "text", value: content.slice(lastIndex) });
+  }
+  return segments;
+}
+
+const sourceDomId = (messageId: string, index: number) =>
+  `source-${messageId}-${index}`;
+
+function CitationMarker({
+  citation,
+  onClick,
+}: {
+  citation: SourceCitation;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            onClick={onClick}
+            className="bg-background/60 hover:bg-accent mx-0.5 inline rounded border px-1 py-0 text-xs font-medium transition-colors"
+          >
+            {citation.filename}
+          </button>
+        }
+      />
+      <TooltipContent side="top" className="max-w-xs">
+        <div className="text-xs font-medium">{citation.filename}</div>
+        {/* opacity-80, not text-muted-foreground: tooltip uses
+            bg-foreground text-background, so muted classes render
+            unreadable on the dark bubble. */}
+        {citation.section_heading && (
+          <div className="mt-0.5 text-xs opacity-80">
+            {citation.section_heading}
+          </div>
+        )}
+        <div className="mt-1 line-clamp-3 text-xs opacity-80">
+          {citation.text}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function scrollToSource(messageId: string, index: number) {
+  const el = document.getElementById(sourceDomId(messageId, index));
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  // Plain classList flash — React state would force a re-render loop
+  // during streaming. The flash disappears on the next render or after
+  // 1.5s, whichever comes first. Either outcome is harmless.
+  el.classList.add("ring-primary", "ring-2");
+  setTimeout(() => el.classList.remove("ring-primary", "ring-2"), 1500);
 }
 
 export function SearchPage() {
@@ -371,7 +474,35 @@ export function SearchPage() {
                                 : "whitespace-pre-wrap"
                             }
                           >
-                            {message.content}
+                            {message.role === "assistant"
+                              ? parseSegments(
+                                  message.content,
+                                  message.sources
+                                ).map((seg, i) =>
+                                  seg.kind === "text" ? (
+                                    <React.Fragment key={i}>
+                                      {seg.value}
+                                    </React.Fragment>
+                                  ) : (
+                                    <CitationMarker
+                                      key={i}
+                                      citation={seg.citation}
+                                      onClick={() => {
+                                        const idx =
+                                          message.sources?.findIndex(
+                                            (s) =>
+                                              s.filename ===
+                                                seg.citation.filename &&
+                                              s.chunk_index ===
+                                                seg.citation.chunk_index
+                                          ) ?? -1;
+                                        if (idx >= 0)
+                                          scrollToSource(message.id, idx);
+                                      }}
+                                    />
+                                  )
+                                )
+                              : message.content}
                             {isStreaming && (
                               <span
                                 aria-hidden
@@ -393,11 +524,24 @@ export function SearchPage() {
                               {message.sources.map((source, idx) => (
                                 <div
                                   key={idx}
-                                  className="bg-background/50 rounded p-2 text-xs"
+                                  id={sourceDomId(message.id, idx)}
+                                  className="bg-background/50 rounded p-2 text-xs transition-shadow"
                                 >
-                                  <span className="font-medium">
-                                    {source.filename}
-                                  </span>
+                                  <div className="flex flex-wrap items-baseline gap-x-2">
+                                    <span className="font-medium">
+                                      {source.filename}
+                                    </span>
+                                    {source.section_heading && (
+                                      <span className="text-muted-foreground">
+                                        · {source.section_heading}
+                                      </span>
+                                    )}
+                                    {source.page_number != null && (
+                                      <span className="text-muted-foreground">
+                                        · p.{source.page_number}
+                                      </span>
+                                    )}
+                                  </div>
                                   <p className="text-muted-foreground mt-0.5 line-clamp-2">
                                     <HighlightedText
                                       text={source.text}

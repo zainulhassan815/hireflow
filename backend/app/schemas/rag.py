@@ -45,6 +45,25 @@ class SourceCitation(BaseModel):
         ),
         examples=[[[0, 8]]],
     )
+    section_heading: str | None = Field(
+        None,
+        description=(
+            "Nearest heading the chunker captured for this chunk "
+            "(F82.e). Null when the chunk is a heading itself or the "
+            "extractor didn't surface one. Frontends display this as a "
+            "section label next to the filename."
+        ),
+        examples=["Experience"],
+    )
+    page_number: int | None = Field(
+        None,
+        description=(
+            "1-based page number from the extractor when available "
+            "(primarily PDFs). Null for formats without paging (e.g. "
+            "plain text, some DOCX)."
+        ),
+        examples=[2],
+    )
 
 
 class RagResponse(BaseModel):

@@ -328,6 +328,11 @@ class RagService:
                     "chunk_index": chunk_index,
                     "text": snippet,
                     "match_spans": find_match_spans(snippet, terms),
+                    # F81.h — surface chunker metadata so the frontend
+                    # can render "filename · section · p.N" without
+                    # another round-trip. Missing keys return None.
+                    "section_heading": hit.metadata.get("section_heading"),
+                    "page_number": hit.metadata.get("page_number"),
                 }
             )
 
