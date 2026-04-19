@@ -13,14 +13,14 @@ integration test at the bottom of this module.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any
+from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
 
-from app.adapters.protocols import VectorHit
-from app.repositories.document import DocumentRepository
+from app.adapters.protocols import RetrievedChunk
+from app.models import UserRole
 from app.schemas.rag import CitationsEvent, DeltaEvent, DoneEvent, ErrorEvent
 from app.services.rag_service import RagService
 
@@ -29,67 +29,48 @@ from app.services.rag_service import RagService
 # --------------------------------------------------------------------------
 
 
-class _FakeEmbedder:
-    """Minimal embedder stub — only the RAG-cutoff property is exercised.
+class _FakeChunkRetriever:
+    """Returns a canned list of ``RetrievedChunk``; no real retrieval.
 
-    Matches the production path where ``RagService._resolve_distance_cutoff``
-    reads ``vector_store.embedder.recommended_distance_threshold``.
+    Replaces the F81.a-era ``_FakeVectorStore`` + ``_FakeDocumentRepo``
+    pair. Under F81.k, ``RagService`` consumes ranked chunks directly —
+    the retriever is the only retrieval collaborator the service sees.
     """
 
-    def __init__(self, threshold: float = 0.5) -> None:
-        self._threshold = threshold
+    def __init__(self, chunks: list[RetrievedChunk]) -> None:
+        self._chunks = chunks
+        self.calls: list[dict[str, Any]] = []
 
-    @property
-    def recommended_distance_threshold(self) -> float:
-        return self._threshold
-
-
-class _FakeVectorStore:
-    """Returns a canned list of ``VectorHit``; no real Chroma.
-
-    Carries an ``embedder`` attribute mirroring ``ChromaVectorStore``,
-    so the distance-cutoff resolution path is exercised end-to-end.
-    """
-
-    def __init__(
+    async def retrieve_chunks(
         self,
-        hits: list[VectorHit],
         *,
-        embedder: _FakeEmbedder | None = None,
-    ) -> None:
-        self._hits = hits
-        self.query_calls: list[dict[str, Any]] = []
-        self.embedder = embedder or _FakeEmbedder()
-
-    def upsert(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError
-
-    def delete(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError
-
-    def query(
-        self,
-        query_text: str,
-        n_results: int = 10,
-        where: dict[str, Any] | None = None,
-    ) -> list[VectorHit]:
-        self.query_calls.append(
-            {"query_text": query_text, "n_results": n_results, "where": where}
+        actor: Any,
+        query: str,
+        document_ids: list[UUID] | None,
+        limit: int,
+    ) -> list[RetrievedChunk]:
+        self.calls.append(
+            {
+                "actor": actor,
+                "query": query,
+                "document_ids": document_ids,
+                "limit": limit,
+            }
         )
-        return list(self._hits)
+        if document_ids is None:
+            return list(self._chunks)
+        requested = set(document_ids)
+        return [c for c in self._chunks if c.document_id in requested]
 
 
-class _FakeDocumentRepo:
-    """Hands back ``SimpleNamespace(filename=...)`` for whatever IDs are asked."""
+def _fake_user(*, role: UserRole = UserRole.HR) -> Any:
+    """Minimal stand-in for ``app.models.User``.
 
-    def __init__(self, filenames: dict[UUID, str]) -> None:
-        self._filenames = filenames
-
-    async def get_many(self, document_ids: list[UUID]) -> dict[UUID, Any]:
-        return {
-            doc_id: SimpleNamespace(filename=self._filenames.get(doc_id, "unknown"))
-            for doc_id in document_ids
-        }
+    ``ChunkRetriever.retrieve_chunks`` only reads ``actor.id`` and
+    ``actor.role`` in production; tests use fakes that expose just
+    those attributes.
+    """
+    return MagicMock(id=uuid4(), role=role)
 
 
 class _FakeStreamingLlm:
@@ -158,34 +139,44 @@ class _TypedFailureLlm:
 # --------------------------------------------------------------------------
 
 
-def _hit(doc_id: UUID, *, chunk_index: int, text: str) -> VectorHit:
-    return VectorHit(
-        chunk_id=f"{doc_id}-{chunk_index}",
-        document_id=str(doc_id),
+def _chunk(
+    doc_id: UUID,
+    *,
+    chunk_index: int,
+    text: str,
+    filename: str = "doc.pdf",
+    distance: float = 0.2,
+    score: float = 0.0,
+    metadata: dict[str, Any] | None = None,
+) -> RetrievedChunk:
+    meta = {"chunk_index": chunk_index}
+    if metadata:
+        meta.update(metadata)
+    return RetrievedChunk(
+        document_id=doc_id,
+        filename=filename,
+        chunk_index=chunk_index,
         text=text,
-        metadata={"chunk_index": chunk_index},
-        distance=0.2,
+        distance=distance,
+        score=score,
+        metadata=meta,
     )
 
 
 def _make_service(
     *,
-    docs: _FakeDocumentRepo,
-    vector_store: _FakeVectorStore,
-    llm: _FakeStreamingLlm | _MidStreamFailureLlm,
-) -> RagService:
-    """Construct RagService with structurally-compatible fakes.
+    chunks: list[RetrievedChunk],
+    llm: Any,
+) -> tuple[RagService, _FakeChunkRetriever]:
+    """Construct RagService backed by a fake chunk retriever.
 
-    ``RagService.__init__`` is typed against concrete classes
-    (``DocumentRepository``) for ergonomic reasons, not Protocols, so
-    the cast is the smallest honest thing we can do to satisfy the
-    type checker without inventing interfaces purely for tests.
+    Returns the service plus the retriever so tests can inspect the
+    retriever's recorded calls (e.g. to assert ``actor`` was threaded
+    through or ``document_ids`` was forwarded).
     """
-    return RagService(
-        documents=cast(DocumentRepository, docs),
-        vector_store=vector_store,
-        llm=llm,
-    )
+    retriever = _FakeChunkRetriever(chunks)
+    service = RagService(retriever=retriever, llm=llm)
+    return service, retriever
 
 
 @pytest.fixture
@@ -206,17 +197,21 @@ def bob_id() -> UUID:
 async def test_stream_query_emits_citations_then_deltas_then_done(
     alice_id: UUID, bob_id: UUID
 ) -> None:
-    hits = [
-        _hit(alice_id, chunk_index=0, text="Alice has 5 years of Kubernetes."),
-        _hit(bob_id, chunk_index=2, text="Bob worked at Google."),
+    chunks = [
+        _chunk(
+            alice_id,
+            chunk_index=0,
+            filename="alice.pdf",
+            text="Alice has 5 years of Kubernetes.",
+        ),
+        _chunk(bob_id, chunk_index=2, filename="bob.pdf", text="Bob worked at Google."),
     ]
-    vector_store = _FakeVectorStore(hits)
-    docs = _FakeDocumentRepo({alice_id: "alice.pdf", bob_id: "bob.pdf"})
     llm = _FakeStreamingLlm(["Alice ", "has ", "Kubernetes."])
+    service, retriever = _make_service(chunks=chunks, llm=llm)
 
-    service = _make_service(docs=docs, vector_store=vector_store, llm=llm)
-
-    events = [e async for e in service.stream_query(question="kubernetes")]
+    events = [
+        e async for e in service.stream_query(actor=_fake_user(), question="kubernetes")
+    ]
 
     # 1 citations + 3 deltas + 1 done = 5 events
     assert len(events) == 5
@@ -230,6 +225,10 @@ async def test_stream_query_emits_citations_then_deltas_then_done(
     assert events[-1].data.model == "fake-llm-1"
     assert events[-1].data.query_time_ms >= 0
 
+    # F81.k — actor is threaded through retrieval.
+    assert len(retriever.calls) == 1
+    assert retriever.calls[0]["query"] == "kubernetes"
+
 
 # --------------------------------------------------------------------------
 # No-hits fallback
@@ -237,13 +236,15 @@ async def test_stream_query_emits_citations_then_deltas_then_done(
 
 
 async def test_stream_query_with_no_hits_emits_fallback_delta_then_done() -> None:
-    vector_store = _FakeVectorStore([])
-    docs = _FakeDocumentRepo({})
     llm = _FakeStreamingLlm(["should not see me"])
+    service, _ = _make_service(chunks=[], llm=llm)
 
-    service = _make_service(docs=docs, vector_store=vector_store, llm=llm)
-
-    events = [e async for e in service.stream_query(question="unknown topic")]
+    events = [
+        e
+        async for e in service.stream_query(
+            actor=_fake_user(), question="unknown topic"
+        )
+    ]
 
     # Exactly one delta (the fallback sentinel) + one done. No
     # citations event. LLM must not have been touched — there was
@@ -264,14 +265,20 @@ async def test_stream_query_with_no_hits_emits_fallback_delta_then_done() -> Non
 async def test_stream_query_emits_error_event_on_llm_failure(
     alice_id: UUID,
 ) -> None:
-    hits = [_hit(alice_id, chunk_index=0, text="Alice has 5 years of Kubernetes.")]
-    vector_store = _FakeVectorStore(hits)
-    docs = _FakeDocumentRepo({alice_id: "alice.pdf"})
+    chunks = [
+        _chunk(
+            alice_id,
+            chunk_index=0,
+            filename="alice.pdf",
+            text="Alice has 5 years of Kubernetes.",
+        )
+    ]
     llm = _MidStreamFailureLlm()
+    service, _ = _make_service(chunks=chunks, llm=llm)
 
-    service = _make_service(docs=docs, vector_store=vector_store, llm=llm)
-
-    events = [e async for e in service.stream_query(question="kubernetes")]
+    events = [
+        e async for e in service.stream_query(actor=_fake_user(), question="kubernetes")
+    ]
 
     # citations + 1 delta (before failure) + error, no done
     assert [type(e) for e in events] == [CitationsEvent, DeltaEvent, ErrorEvent]
@@ -314,14 +321,16 @@ async def test_build_context_includes_filename_per_chunk(alice_id: UUID) -> None
     """The user prompt must expose each chunk's source filename so the
     inline-citation rule in the system prompt has something to read.
     """
-    hits = [_hit(alice_id, chunk_index=3, text="Alice loves Go.")]
-    vector_store = _FakeVectorStore(hits)
-    docs = _FakeDocumentRepo({alice_id: "alice_resume.pdf"})
+    chunks = [
+        _chunk(
+            alice_id, chunk_index=3, filename="alice_resume.pdf", text="Alice loves Go."
+        )
+    ]
     llm = _FakeStreamingLlm(["ok"])
-
-    service = _make_service(docs=docs, vector_store=vector_store, llm=llm)
+    service, _ = _make_service(chunks=chunks, llm=llm)
 
     ctx = await service._build_context(  # type: ignore[attr-defined]
+        actor=_fake_user(),
         question="go experience",
         document_ids=None,
         max_chunks=5,
@@ -364,12 +373,18 @@ async def test_sse_frame_has_event_header_and_json_payload() -> None:
 # --------------------------------------------------------------------------
 
 
-def _hit_at(doc_id: UUID, *, distance: float, text: str = "x") -> VectorHit:
-    return VectorHit(
-        chunk_id=f"{doc_id}-{distance}",
-        document_id=str(doc_id),
+def _chunk_at(
+    doc_id: UUID,
+    *,
+    distance: float,
+    text: str = "x",
+    filename: str = "doc.pdf",
+) -> RetrievedChunk:
+    return _chunk(
+        doc_id,
+        chunk_index=0,
         text=text,
-        metadata={"chunk_index": 0},
+        filename=filename,
         distance=distance,
     )
 
@@ -377,54 +392,54 @@ def _hit_at(doc_id: UUID, *, distance: float, text: str = "x") -> VectorHit:
 async def test_distance_filter_drops_hits_above_cutoff(
     monkeypatch: pytest.MonkeyPatch, alice_id: UUID, bob_id: UUID
 ) -> None:
-    """Hits above the distance cutoff never reach the LLM or the
-    citations list. Below-cutoff hits do."""
+    """Chunks above the F81.b cutoff never reach the LLM or citations."""
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "rag_context_max_distance", 0.5)
     monkeypatch.setattr(settings, "rag_context_token_budget", 10_000)
 
     charlie_id = uuid4()
-    hits = [
-        _hit_at(alice_id, distance=0.1, text="Alice is kept."),
-        _hit_at(bob_id, distance=0.4, text="Bob is kept."),
-        _hit_at(charlie_id, distance=0.9, text="Charlie is dropped."),
+    chunks = [
+        _chunk_at(alice_id, distance=0.1, filename="alice.pdf", text="Alice is kept."),
+        _chunk_at(bob_id, distance=0.4, filename="bob.pdf", text="Bob is kept."),
+        _chunk_at(
+            charlie_id, distance=0.9, filename="charlie.pdf", text="Charlie is dropped."
+        ),
     ]
-    vector_store = _FakeVectorStore(hits)
-    docs = _FakeDocumentRepo(
-        {alice_id: "alice.pdf", bob_id: "bob.pdf", charlie_id: "charlie.pdf"}
-    )
     llm = _FakeStreamingLlm(["ok"])
-    service = _make_service(docs=docs, vector_store=vector_store, llm=llm)
+    service, _ = _make_service(chunks=chunks, llm=llm)
 
     ctx = await service._build_context(  # type: ignore[attr-defined]
-        question="q", document_ids=None, max_chunks=10
+        actor=_fake_user(), question="q", document_ids=None, max_chunks=10
     )
     assert ctx is not None
     filenames = {c["filename"] for c in ctx.citations}
     assert filenames == {"alice.pdf", "bob.pdf"}
-    # Context that would be handed to the LLM must also not mention
-    # the filtered chunk — otherwise the filter is only cosmetic.
+    # The filtered chunk's text must not reach the LLM either —
+    # cosmetic-only filter would be a silent correctness bug.
     assert "Charlie is dropped." not in ctx.user_prompt
 
 
 async def test_all_hits_above_cutoff_routes_through_no_hits_fallback(
     monkeypatch: pytest.MonkeyPatch, alice_id: UUID
 ) -> None:
-    """When every hit is over the cutoff, stream_query falls back to
-    the synthetic-delta sentinel path without touching the LLM.
-    """
+    """Every chunk over the cutoff → sentinel fallback, no LLM call."""
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "rag_context_max_distance", 0.2)
 
-    hits = [_hit_at(alice_id, distance=0.9, text="Off-topic.")]
-    vector_store = _FakeVectorStore(hits)
-    docs = _FakeDocumentRepo({alice_id: "alice.pdf"})
+    chunks = [
+        _chunk_at(alice_id, distance=0.9, filename="alice.pdf", text="Off-topic.")
+    ]
     llm = _FakeStreamingLlm(["should-not-see-me"])
-    service = _make_service(docs=docs, vector_store=vector_store, llm=llm)
+    service, _ = _make_service(chunks=chunks, llm=llm)
 
-    events = [e async for e in service.stream_query(question="quantum physics")]
+    events = [
+        e
+        async for e in service.stream_query(
+            actor=_fake_user(), question="quantum physics"
+        )
+    ]
     assert [type(e) for e in events] == [DeltaEvent, DoneEvent]
     assert events[0].data == "Not in the provided documents."
     assert llm.stream_calls == []
@@ -450,28 +465,18 @@ async def test_token_budget_truncates_trailing_chunks(
     charlie_id = uuid4()
     dora_id = uuid4()
     eve_id = uuid4()
-    hits = [
-        _hit_at(alice_id, distance=0.1, text=chunk_text),
-        _hit_at(bob_id, distance=0.2, text=chunk_text),
-        _hit_at(charlie_id, distance=0.3, text=chunk_text),
-        _hit_at(dora_id, distance=0.4, text=chunk_text),
-        _hit_at(eve_id, distance=0.5, text=chunk_text),
+    chunks = [
+        _chunk_at(alice_id, distance=0.1, filename="a.pdf", text=chunk_text),
+        _chunk_at(bob_id, distance=0.2, filename="b.pdf", text=chunk_text),
+        _chunk_at(charlie_id, distance=0.3, filename="c.pdf", text=chunk_text),
+        _chunk_at(dora_id, distance=0.4, filename="d.pdf", text=chunk_text),
+        _chunk_at(eve_id, distance=0.5, filename="e.pdf", text=chunk_text),
     ]
-    vector_store = _FakeVectorStore(hits)
-    docs = _FakeDocumentRepo(
-        {
-            alice_id: "a.pdf",
-            bob_id: "b.pdf",
-            charlie_id: "c.pdf",
-            dora_id: "d.pdf",
-            eve_id: "e.pdf",
-        }
-    )
     llm = _FakeStreamingLlm(["ok"])
-    service = _make_service(docs=docs, vector_store=vector_store, llm=llm)
+    service, _ = _make_service(chunks=chunks, llm=llm)
 
     ctx = await service._build_context(  # type: ignore[attr-defined]
-        question="q", document_ids=None, max_chunks=10
+        actor=_fake_user(), question="q", document_ids=None, max_chunks=10
     )
     assert ctx is not None
     filenames = [c["filename"] for c in ctx.citations]
@@ -494,15 +499,13 @@ async def test_single_oversized_chunk_kept_with_warn(
     monkeypatch.setattr(settings, "rag_context_token_budget", 100)
 
     huge = "x" * 6000  # ~1500 tokens, far over the 100 budget
-    hits = [_hit_at(alice_id, distance=0.1, text=huge)]
-    vector_store = _FakeVectorStore(hits)
-    docs = _FakeDocumentRepo({alice_id: "alice.pdf"})
+    chunks = [_chunk_at(alice_id, distance=0.1, filename="alice.pdf", text=huge)]
     llm = _FakeStreamingLlm(["ok"])
-    service = _make_service(docs=docs, vector_store=vector_store, llm=llm)
+    service, _ = _make_service(chunks=chunks, llm=llm)
 
     with caplog.at_level("WARNING", logger="app.services.rag_service"):
         ctx = await service._build_context(  # type: ignore[attr-defined]
-            question="q", document_ids=None, max_chunks=10
+            actor=_fake_user(), question="q", document_ids=None, max_chunks=10
         )
     assert ctx is not None
     assert [c["filename"] for c in ctx.citations] == ["alice.pdf"]
@@ -525,41 +528,61 @@ def test_estimate_tokens_is_ceil_four_chars_per_token() -> None:
 
 
 # --------------------------------------------------------------------------
-# Distance-cutoff resolution path (mirrors SearchService)
+# F81.b cutoff after F81.k — now a tightening knob on top of the retriever
 # --------------------------------------------------------------------------
 
 
-async def test_distance_cutoff_prefers_explicit_setting(
-    monkeypatch: pytest.MonkeyPatch,
+async def test_f81b_cutoff_is_noop_when_setting_is_none(
+    monkeypatch: pytest.MonkeyPatch, alice_id: UUID
 ) -> None:
-    """An explicit config value overrides the embedder recommendation."""
-    from app.core.config import settings
-
-    monkeypatch.setattr(settings, "rag_context_max_distance", 0.12)
-    vector_store = _FakeVectorStore([], embedder=_FakeEmbedder(threshold=0.99))
-    service = _make_service(
-        docs=_FakeDocumentRepo({}),
-        vector_store=vector_store,
-        llm=_FakeStreamingLlm([]),
-    )
-    assert service._resolve_distance_cutoff() == 0.12  # type: ignore[attr-defined]
-
-
-async def test_distance_cutoff_falls_back_to_embedder(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """No explicit setting → the embedder's recommendation travels
-    automatically. F85.d relies on this for per-model thresholds."""
+    """When ``rag_context_max_distance`` is None, F81.b skips the
+    distance filter entirely — the retriever already applied the
+    search threshold, so filtering again at the same floor is a
+    double-filter workaround we explicitly avoided."""
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "rag_context_max_distance", None)
-    vector_store = _FakeVectorStore([], embedder=_FakeEmbedder(threshold=0.33))
-    service = _make_service(
-        docs=_FakeDocumentRepo({}),
-        vector_store=vector_store,
-        llm=_FakeStreamingLlm([]),
+    monkeypatch.setattr(settings, "rag_context_token_budget", 10_000)
+
+    # A chunk that would fail ANY embedder threshold (distance 0.99)
+    # still passes because F81.b short-circuits.
+    chunks = [_chunk_at(alice_id, distance=0.99, filename="a.pdf", text="t")]
+    service, _ = _make_service(chunks=chunks, llm=_FakeStreamingLlm(["ok"]))
+
+    ctx = await service._build_context(  # type: ignore[attr-defined]
+        actor=_fake_user(), question="q", document_ids=None, max_chunks=5
     )
-    assert service._resolve_distance_cutoff() == 0.33  # type: ignore[attr-defined]
+    assert ctx is not None
+    assert [c["filename"] for c in ctx.citations] == ["a.pdf"]
+
+
+async def test_document_ids_forwarded_to_retriever(
+    monkeypatch: pytest.MonkeyPatch, alice_id: UUID, bob_id: UUID
+) -> None:
+    """When the RAG request carries ``document_ids``, RagService
+    passes the filter straight through to the retriever. The retriever
+    is responsible for scoping at each retrieval source (F81.k)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "rag_context_max_distance", None)
+    monkeypatch.setattr(settings, "rag_context_token_budget", 10_000)
+
+    chunks = [
+        _chunk_at(alice_id, distance=0.1, filename="a.pdf", text="alice"),
+        _chunk_at(bob_id, distance=0.1, filename="b.pdf", text="bob"),
+    ]
+    service, retriever = _make_service(chunks=chunks, llm=_FakeStreamingLlm(["ok"]))
+
+    ctx = await service._build_context(  # type: ignore[attr-defined]
+        actor=_fake_user(),
+        question="q",
+        document_ids=[alice_id],
+        max_chunks=5,
+    )
+    assert ctx is not None
+    assert retriever.calls[-1]["document_ids"] == [alice_id]
+    # The fake retriever already scopes; assert RagService trusts it.
+    assert {c["filename"] for c in ctx.citations} == {"a.pdf"}
 
 
 # --------------------------------------------------------------------------
@@ -575,14 +598,20 @@ async def test_rate_limit_emits_typed_error_event_with_retry_after(
     countdown UX; frontend switches on the code."""
     from app.domain.exceptions import LlmRateLimited
 
-    hits = [_hit(alice_id, chunk_index=0, text="Alice has 5 years of Kubernetes.")]
-    service = _make_service(
-        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
-        vector_store=_FakeVectorStore(hits),
+    chunks = [
+        _chunk(
+            alice_id,
+            chunk_index=0,
+            filename="alice.pdf",
+            text="Alice has 5 years of Kubernetes.",
+        )
+    ]
+    service, _ = _make_service(
+        chunks=chunks,
         llm=_TypedFailureLlm(LlmRateLimited(retry_after_seconds=30)),
     )
 
-    events = [e async for e in service.stream_query(question="q")]
+    events = [e async for e in service.stream_query(actor=_fake_user(), question="q")]
     assert [type(e) for e in events] == [CitationsEvent, DeltaEvent, ErrorEvent]
     err = events[-1]
     assert isinstance(err, ErrorEvent)
@@ -593,14 +622,17 @@ async def test_rate_limit_emits_typed_error_event_with_retry_after(
 async def test_timeout_emits_llm_timeout_code(alice_id: UUID) -> None:
     from app.domain.exceptions import LlmTimeout
 
-    hits = [_hit(alice_id, chunk_index=0, text="Alice has 5 years of Kubernetes.")]
-    service = _make_service(
-        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
-        vector_store=_FakeVectorStore(hits),
-        llm=_TypedFailureLlm(LlmTimeout("slow")),
-    )
+    chunks = [
+        _chunk(
+            alice_id,
+            chunk_index=0,
+            filename="alice.pdf",
+            text="Alice has 5 years of Kubernetes.",
+        )
+    ]
+    service, _ = _make_service(chunks=chunks, llm=_TypedFailureLlm(LlmTimeout("slow")))
 
-    events = [e async for e in service.stream_query(question="q")]
+    events = [e async for e in service.stream_query(actor=_fake_user(), question="q")]
     err = events[-1]
     assert isinstance(err, ErrorEvent)
     assert err.data.code == "llm_timeout"
@@ -611,14 +643,19 @@ async def test_timeout_emits_llm_timeout_code(alice_id: UUID) -> None:
 async def test_unavailable_emits_llm_unavailable_code(alice_id: UUID) -> None:
     from app.domain.exceptions import LlmUnavailable
 
-    hits = [_hit(alice_id, chunk_index=0, text="Alice has 5 years of Kubernetes.")]
-    service = _make_service(
-        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
-        vector_store=_FakeVectorStore(hits),
-        llm=_TypedFailureLlm(LlmUnavailable("network down")),
+    chunks = [
+        _chunk(
+            alice_id,
+            chunk_index=0,
+            filename="alice.pdf",
+            text="Alice has 5 years of Kubernetes.",
+        )
+    ]
+    service, _ = _make_service(
+        chunks=chunks, llm=_TypedFailureLlm(LlmUnavailable("network down"))
     )
 
-    events = [e async for e in service.stream_query(question="q")]
+    events = [e async for e in service.stream_query(actor=_fake_user(), question="q")]
     err = events[-1]
     assert isinstance(err, ErrorEvent)
     assert err.data.code == "llm_unavailable"
@@ -630,14 +667,19 @@ async def test_unknown_exception_still_falls_back_to_generic_llm_error(
     """Regression guard: a genuinely unknown failure (not one of our
     domain subclasses) still routes to the generic ``llm_error``
     envelope rather than being mis-categorised."""
-    hits = [_hit(alice_id, chunk_index=0, text="Alice has 5 years of Kubernetes.")]
-    service = _make_service(
-        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
-        vector_store=_FakeVectorStore(hits),
-        llm=_TypedFailureLlm(ValueError("completely unexpected")),
+    chunks = [
+        _chunk(
+            alice_id,
+            chunk_index=0,
+            filename="alice.pdf",
+            text="Alice has 5 years of Kubernetes.",
+        )
+    ]
+    service, _ = _make_service(
+        chunks=chunks, llm=_TypedFailureLlm(ValueError("completely unexpected"))
     )
 
-    events = [e async for e in service.stream_query(question="q")]
+    events = [e async for e in service.stream_query(actor=_fake_user(), question="q")]
     err = events[-1]
     assert isinstance(err, ErrorEvent)
     assert err.data.code == "llm_error"
@@ -717,14 +759,8 @@ def test_compute_confidence_bands(top_distance: float, expected: str) -> None:
     configured thresholds. Boundaries are inclusive on the lower side."""
     from app.services.rag_service import _compute_confidence
 
-    hit = VectorHit(
-        chunk_id="x",
-        document_id=str(uuid4()),
-        text="",
-        metadata={},
-        distance=top_distance,
-    )
-    assert _compute_confidence([hit]) == expected
+    chunk = _chunk_at(uuid4(), distance=top_distance, text="")
+    assert _compute_confidence([chunk]) == expected
 
 
 async def test_stream_done_carries_confidence_from_top_hit(
@@ -740,17 +776,20 @@ async def test_stream_done_carries_confidence_from_top_hit(
     # Top chunk at 0.15 → "high"; second chunk (weaker) at 0.28 would
     # be "medium". Confidence must follow the top, not the bottom.
     bob_id = uuid4()
-    hits = [
-        _hit_at(alice_id, distance=0.15, text="Alice is a strong match."),
-        _hit_at(bob_id, distance=0.28, text="Bob is a weaker match."),
+    chunks = [
+        _chunk_at(
+            alice_id,
+            distance=0.15,
+            filename="alice.pdf",
+            text="Alice is a strong match.",
+        ),
+        _chunk_at(
+            bob_id, distance=0.28, filename="bob.pdf", text="Bob is a weaker match."
+        ),
     ]
-    service = _make_service(
-        docs=_FakeDocumentRepo({alice_id: "alice.pdf", bob_id: "bob.pdf"}),
-        vector_store=_FakeVectorStore(hits),
-        llm=_FakeStreamingLlm(["ok"]),
-    )
+    service, _ = _make_service(chunks=chunks, llm=_FakeStreamingLlm(["ok"]))
 
-    events = [e async for e in service.stream_query(question="q")]
+    events = [e async for e in service.stream_query(actor=_fake_user(), question="q")]
     done = events[-1]
     assert isinstance(done, DoneEvent)
     assert done.data.confidence == "high"
@@ -766,13 +805,9 @@ async def test_stream_done_confidence_is_none_on_no_hits_fallback(
 
     monkeypatch.setattr(settings, "rag_context_max_distance", 0.9)
 
-    service = _make_service(
-        docs=_FakeDocumentRepo({}),
-        vector_store=_FakeVectorStore([]),
-        llm=_FakeStreamingLlm(["unused"]),
-    )
+    service, _ = _make_service(chunks=[], llm=_FakeStreamingLlm(["unused"]))
 
-    events = [e async for e in service.stream_query(question="q")]
+    events = [e async for e in service.stream_query(actor=_fake_user(), question="q")]
     done = events[-1]
     assert isinstance(done, DoneEvent)
     assert done.data.confidence is None
@@ -789,26 +824,25 @@ async def test_sync_query_result_carries_confidence(
     monkeypatch.setattr(settings, "rag_context_max_distance", 0.9)
     monkeypatch.setattr(settings, "rag_context_token_budget", 10_000)
 
-    hits = [_hit_at(alice_id, distance=0.10, text="Alice is a perfect match.")]
-    service = _make_service(
-        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
-        vector_store=_FakeVectorStore(hits),
-        llm=_FakeStreamingLlm(["the answer"]),
-    )
+    chunks = [
+        _chunk_at(
+            alice_id,
+            distance=0.10,
+            filename="alice.pdf",
+            text="Alice is a perfect match.",
+        )
+    ]
+    service, _ = _make_service(chunks=chunks, llm=_FakeStreamingLlm(["the answer"]))
 
-    result = await service.query(question="q")
+    result = await service.query(actor=_fake_user(), question="q")
     assert result.confidence == "high"
 
 
 async def test_sync_query_confidence_is_none_on_fallback() -> None:
     """Sync-path fallback also carries None confidence."""
-    service = _make_service(
-        docs=_FakeDocumentRepo({}),
-        vector_store=_FakeVectorStore([]),
-        llm=_FakeStreamingLlm(["unused"]),
-    )
+    service, _ = _make_service(chunks=[], llm=_FakeStreamingLlm(["unused"]))
 
-    result = await service.query(question="quantum physics")
+    result = await service.query(actor=_fake_user(), question="quantum physics")
     assert result.confidence is None
     assert result.answer == "Not in the provided documents."
 
@@ -823,25 +857,20 @@ async def test_section_heading_and_page_number_travel_onto_citation(
 ) -> None:
     """F82.e stamps ``section_heading`` on chunk metadata; F81.h surfaces
     it on SourceCitation so the frontend can render the section label."""
-    hit = VectorHit(
-        chunk_id=f"{alice_id}-0",
-        document_id=str(alice_id),
-        text="Alice has Kubernetes experience since 2019.",
-        metadata={
-            "chunk_index": 0,
-            "section_heading": "Experience",
-            "page_number": 2,
-        },
-        distance=0.1,
-    )
-    service = _make_service(
-        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
-        vector_store=_FakeVectorStore([hit]),
-        llm=_FakeStreamingLlm(["ok"]),
-    )
+    chunks = [
+        _chunk(
+            alice_id,
+            chunk_index=0,
+            filename="alice.pdf",
+            text="Alice has Kubernetes experience since 2019.",
+            distance=0.1,
+            metadata={"section_heading": "Experience", "page_number": 2},
+        )
+    ]
+    service, _ = _make_service(chunks=chunks, llm=_FakeStreamingLlm(["ok"]))
 
     ctx = await service._build_context(  # type: ignore[attr-defined]
-        question="q", document_ids=None, max_chunks=5
+        actor=_fake_user(), question="q", document_ids=None, max_chunks=5
     )
     assert ctx is not None
     assert ctx.citations[0]["section_heading"] == "Experience"
@@ -852,21 +881,19 @@ async def test_missing_section_heading_renders_as_none(alice_id: UUID) -> None:
     """When the extractor didn't surface a heading (e.g. raw text doc),
     the citation carries ``section_heading=None`` — the frontend
     conditionally hides the section label in that case."""
-    hit = VectorHit(
-        chunk_id=f"{alice_id}-0",
-        document_id=str(alice_id),
-        text="plain text, no heading",
-        metadata={"chunk_index": 0},  # no section_heading or page_number
-        distance=0.1,
-    )
-    service = _make_service(
-        docs=_FakeDocumentRepo({alice_id: "alice.pdf"}),
-        vector_store=_FakeVectorStore([hit]),
-        llm=_FakeStreamingLlm(["ok"]),
-    )
+    chunks = [
+        _chunk(
+            alice_id,
+            chunk_index=0,
+            filename="alice.pdf",
+            text="plain text, no heading",
+            distance=0.1,
+        )
+    ]
+    service, _ = _make_service(chunks=chunks, llm=_FakeStreamingLlm(["ok"]))
 
     ctx = await service._build_context(  # type: ignore[attr-defined]
-        question="q", document_ids=None, max_chunks=5
+        actor=_fake_user(), question="q", document_ids=None, max_chunks=5
     )
     assert ctx is not None
     assert ctx.citations[0]["section_heading"] is None

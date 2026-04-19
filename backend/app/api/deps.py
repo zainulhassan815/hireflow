@@ -266,7 +266,12 @@ def get_search_service(documents: DocumentRepositoryDep) -> SearchService:
 def get_rag_service(documents: DocumentRepositoryDep) -> RagService | None:
     if _vector_store is None or _llm_provider is None:
         return None
-    return RagService(documents, _vector_store, _llm_provider)
+    # F81.k — RAG retrieves through the same hybrid pipeline as /search
+    # (vector + lexical + reranker) via SearchService as a ChunkRetriever.
+    # SearchService is constructed per-request; the reranker inside is a
+    # module-level singleton so the heavy model is loaded once.
+    retriever = SearchService(documents, _vector_store, reranker=_reranker)
+    return RagService(retriever, _llm_provider)
 
 
 def get_job_service(jobs: JobRepositoryDep) -> JobService:

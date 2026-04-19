@@ -55,6 +55,7 @@ async def query_documents(
         )
 
     result = await rag.query(
+        actor=current_user,
         question=request.question,
         document_ids=request.document_ids,
         max_chunks=request.max_chunks,
@@ -114,6 +115,7 @@ async def stream_answer(
 
     async def encoded_events() -> AsyncIterator[str]:
         async for event in rag.stream_query(
+            actor=current_user,
             question=request.question,
             document_ids=request.document_ids,
             max_chunks=request.max_chunks,

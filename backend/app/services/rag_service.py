@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
 
-from app.adapters.protocols import LlmProvider, VectorHit, VectorStore
+from app.adapters.protocols import ChunkRetriever, LlmProvider, RetrievedChunk
 from app.core.config import settings
 from app.domain.exceptions import LlmProviderError
-from app.repositories.document import DocumentRepository
+from app.models import User
 from app.schemas.errors import ErrorBody
 from app.schemas.rag import (
     CitationsEvent,
@@ -45,7 +45,7 @@ def _estimate_tokens(text: str) -> int:
 Confidence = Literal["high", "medium", "low"]
 
 
-def _compute_confidence(kept: list[VectorHit]) -> Confidence:
+def _compute_confidence(kept: list[RetrievedChunk]) -> Confidence:
     """Derive the confidence band from the chunks the LLM will see.
 
     Today: top-chunk distance only. The signature takes the full list
@@ -133,24 +133,26 @@ class _RagContext:
 class RagService:
     def __init__(
         self,
-        documents: DocumentRepository,
-        vector_store: VectorStore,
+        retriever: ChunkRetriever,
         llm: LlmProvider,
     ) -> None:
-        self._documents = documents
-        self._vector_store = vector_store
+        self._retriever = retriever
         self._llm = llm
 
     async def query(
         self,
         *,
+        actor: User,
         question: str,
         document_ids: list[UUID] | None = None,
         max_chunks: int = 5,
     ) -> RagResult:
         start = time.monotonic()
         ctx = await self._build_context(
-            question=question, document_ids=document_ids, max_chunks=max_chunks
+            actor=actor,
+            question=question,
+            document_ids=document_ids,
+            max_chunks=max_chunks,
         )
         if ctx is None:
             return RagResult(
@@ -181,6 +183,7 @@ class RagService:
     async def stream_query(
         self,
         *,
+        actor: User,
         question: str,
         document_ids: list[UUID] | None = None,
         max_chunks: int = 5,
@@ -194,7 +197,10 @@ class RagService:
         """
         start = time.monotonic()
         ctx = await self._build_context(
-            question=question, document_ids=document_ids, max_chunks=max_chunks
+            actor=actor,
+            question=question,
+            document_ids=document_ids,
+            max_chunks=max_chunks,
         )
 
         if ctx is None:
@@ -266,73 +272,70 @@ class RagService:
     async def _build_context(
         self,
         *,
+        actor: User,
         question: str,
         document_ids: list[UUID] | None,
         max_chunks: int,
     ) -> _RagContext | None:
-        """Retrieve chunks, hydrate filenames, build prompt + citations.
+        """Retrieve chunks via ChunkRetriever, build prompt + citations.
 
-        Returns ``None`` if retrieval produced no usable hits — either
-        zero raw hits, all hits filtered out by the distance cutoff, or
-        (defensively) no chunks surviving the token budget. Callers
-        route ``None`` through the existing no-hits sentinel path.
+        F81.k — retrieval now goes through ``ChunkRetriever`` (owned
+        by ``SearchService``), inheriting F85.c weighted RRF over
+        vector + lexical hits, F88 acronym/typo tolerance, and F80.5
+        cross-encoder reranking. RagService applies its own tighter
+        gates on top (F81.b distance cutoff, F81.c token budget).
+
+        Returns ``None`` if retrieval produced no usable chunks — the
+        no-hits sentinel path in callers handles the fallback.
         """
-        where = self._build_where(document_ids)
-        hits = self._vector_store.query(
-            query_text=question, n_results=max_chunks, where=where
+        chunks = await self._retriever.retrieve_chunks(
+            actor=actor,
+            query=question,
+            document_ids=document_ids,
+            limit=max_chunks,
         )
-        if not hits:
+        if not chunks:
             return None
 
-        cutoff = self._resolve_distance_cutoff()
+        cutoff = settings.rag_context_max_distance
         budget = settings.rag_context_token_budget
-        kept, tokens_used = self._apply_context_gate(hits, cutoff, budget)
+        kept, tokens_used = self._apply_context_gate(chunks, cutoff, budget)
         logger.info(
-            "rag context: %d/%d chunks kept, ~%d tokens (cutoff=%.2f, budget=%d)",
+            "rag context: %d/%d chunks kept, ~%d tokens (cutoff=%s, budget=%d)",
             len(kept),
-            len(hits),
+            len(chunks),
             tokens_used,
-            cutoff,
+            "none" if cutoff is None else f"{cutoff:.2f}",
             budget,
         )
         if not kept:
             return None
 
-        # Hydrate filenames for the surviving chunks only — no point
-        # loading document rows we won't reference.
-        doc_ids = list({UUID(h.document_id) for h in kept})
-        docs_map = await self._documents.get_many(doc_ids)
-
         context_parts: list[str] = []
         citations: list[dict[str, Any]] = []
         terms = extract_query_terms(question)
 
-        for hit in kept:
-            doc_id = UUID(hit.document_id)
-            doc = docs_map.get(doc_id)
-            filename = doc.filename if doc else "unknown"
-            chunk_index = hit.metadata.get("chunk_index", 0)
-
+        for chunk in kept:
             context_parts.append(
                 _CONTEXT_TEMPLATE.format(
-                    filename=filename,
-                    chunk_index=chunk_index,
-                    text=hit.text,
+                    filename=chunk.filename,
+                    chunk_index=chunk.chunk_index,
+                    text=chunk.text,
                 )
             )
-            snippet = hit.text[:500]
+            snippet = chunk.text[:500]
             citations.append(
                 {
-                    "document_id": doc_id,
-                    "filename": filename,
-                    "chunk_index": chunk_index,
+                    "document_id": chunk.document_id,
+                    "filename": chunk.filename,
+                    "chunk_index": chunk.chunk_index,
                     "text": snippet,
                     "match_spans": find_match_spans(snippet, terms),
                     # F81.h — surface chunker metadata so the frontend
                     # can render "filename · section · p.N" without
                     # another round-trip. Missing keys return None.
-                    "section_heading": hit.metadata.get("section_heading"),
-                    "page_number": hit.metadata.get("page_number"),
+                    "section_heading": chunk.metadata.get("section_heading"),
+                    "page_number": chunk.metadata.get("page_number"),
                 }
             )
 
@@ -345,63 +348,41 @@ class RagService:
             confidence=_compute_confidence(kept),
         )
 
-    def _resolve_distance_cutoff(self) -> float:
-        """Return the RAG-context distance cutoff for this request.
-
-        Mirrors ``SearchService._resolve_distance_threshold`` (F85.d)
-        so the two services never drift. Order of precedence:
-
-        1. Explicit ``settings.rag_context_max_distance`` (operator knob)
-        2. Embedder's ``recommended_distance_threshold`` (travels with
-           the active model — auto-updates on model swap)
-        3. ``0.5`` (defensive; unreachable with ``ChromaVectorStore``,
-           which always carries an embedder)
-        """
-        if settings.rag_context_max_distance is not None:
-            return settings.rag_context_max_distance
-        embedder = getattr(self._vector_store, "embedder", None)
-        if embedder is not None:
-            return embedder.recommended_distance_threshold
-        return 0.5
-
     @staticmethod
     def _apply_context_gate(
-        hits: list[VectorHit], cutoff: float, budget: int
-    ) -> tuple[list[VectorHit], int]:
+        chunks: list[RetrievedChunk], cutoff: float | None, budget: int
+    ) -> tuple[list[RetrievedChunk], int]:
         """Apply F81.b distance filter + F81.c token budget.
 
-        Returns ``(kept, tokens_used)``. Walks ``hits`` in retrieval
-        order (Chroma sorts ascending by distance, so the top chunk
-        leads). A single chunk whose own estimated tokens exceed the
-        entire budget is kept anyway with a WARN log — preserves answer
-        capability in the face of chunking pathologies (F82 regressions
-        etc.); the LLM may error, in which case ``stream_query``'s
-        existing handler converts it to an ``error`` event.
+        Returns ``(kept, tokens_used)``. Walks ``chunks`` in retrieval
+        order (already ranked best-first by the retriever).
+
+        F81.b cutoff is a tightening knob: when ``None``, retrieve_chunks
+        already filtered at the search distance threshold, so no
+        double-filter is needed. An explicit float re-filters tighter.
+
+        A single chunk whose own estimated tokens exceed the entire
+        budget is kept anyway with a WARN log — preserves answer
+        capability in the face of chunking pathologies; the LLM may
+        error, in which case ``stream_query``'s existing handler
+        converts it to an ``error`` event.
         """
-        kept: list[VectorHit] = []
+        kept: list[RetrievedChunk] = []
         tokens_used = 0
-        for hit in hits:
-            if hit.distance > cutoff:
+        for chunk in chunks:
+            if cutoff is not None and chunk.distance > cutoff:
                 continue
-            hit_tokens = _estimate_tokens(hit.text)
-            if not kept and hit_tokens > budget:
+            chunk_tokens = _estimate_tokens(chunk.text)
+            if not kept and chunk_tokens > budget:
                 logger.warning(
                     "rag context: top chunk ~%d tokens exceeds budget %d; "
                     "keeping it to preserve answer capability",
-                    hit_tokens,
+                    chunk_tokens,
                     budget,
                 )
-                return [hit], hit_tokens
-            if tokens_used + hit_tokens > budget:
+                return [chunk], chunk_tokens
+            if tokens_used + chunk_tokens > budget:
                 break
-            kept.append(hit)
-            tokens_used += hit_tokens
+            kept.append(chunk)
+            tokens_used += chunk_tokens
         return kept, tokens_used
-
-    @staticmethod
-    def _build_where(document_ids: list[UUID] | None) -> dict[str, Any] | None:
-        if not document_ids:
-            return None
-        if len(document_ids) == 1:
-            return {"document_id": str(document_ids[0])}
-        return {"document_id": {"$in": [str(d) for d in document_ids]}}

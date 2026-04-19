@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
@@ -29,6 +29,7 @@ from uuid import UUID
 from app.adapters.protocols import (
     RerankCandidate,
     Reranker,
+    RetrievedChunk,
     VectorHit,
     VectorStore,
 )
@@ -216,6 +217,157 @@ class SearchService:
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
         return results, elapsed_ms
+
+    async def retrieve_chunks(
+        self,
+        *,
+        actor: User,
+        query: str,
+        document_ids: list[UUID] | None,
+        limit: int,
+    ) -> list[RetrievedChunk]:
+        """F81.k — chunk-level hybrid retrieval for RAG.
+
+        Runs the same vector + FTS (+ trigram fallback) pipeline as
+        ``search()`` but keeps chunks as the unit of output. SQL
+        metadata path is intentionally excluded: structured filters
+        for RAG come through ``document_ids`` ("ask about these
+        docs"), not skill/date filtering. Ownership is enforced at
+        retrieval — HR users only see their own chunks, admins bypass.
+        """
+        if not query.strip():
+            return []
+
+        owner_filter = None if actor.role == UserRole.ADMIN else actor.id
+
+        # Vector path — reuse the private helper that handles
+        # embedder selection, distance filtering, and the where clause.
+        vector_hits = self._vector_search(query, None, limit * 3, owner_id=owner_filter)
+        vector_hits = await self._drop_orphan_vector_hits(vector_hits)
+
+        # Lexical path — F88 acronym + typo + tech-token preservation.
+        lexical_query = expand_acronyms(normalize_tech_tokens(query))
+        lexical_hits = await self._documents.full_text_search(
+            lexical_query, limit=limit * 3, owner_id=owner_filter
+        )
+        if not lexical_hits:
+            lexical_hits = await self._documents.fuzzy_search(
+                query, limit=limit * 3, owner_id=owner_filter
+            )
+
+        merge_limit = max(settings.reranker_top_k, limit) if self._reranker else limit
+        merged = self._rrf_merge_chunks(
+            vector_hits,
+            lexical_hits,
+            merge_limit,
+            w_vector=settings.rrf_weight_vector,
+            w_lexical=settings.rrf_weight_lexical,
+        )
+
+        # Post-filter by document_ids if set. Pushdown to FTS/SQL
+        # would require widening DocumentRepository signatures;
+        # scope-fenced as a follow-up (F81.k followups).
+        if document_ids:
+            requested = set(document_ids)
+            merged = [c for c in merged if c.document_id in requested]
+
+        # Hydrate filenames and drop non-READY docs in one pass.
+        doc_ids = list({c.document_id for c in merged})
+        docs_map = await self._documents.get_many(doc_ids)
+        hydrated: list[RetrievedChunk] = []
+        for chunk in merged:
+            doc = docs_map.get(chunk.document_id)
+            if doc is None or doc.status != DocumentStatus.READY:
+                continue
+            hydrated.append(replace(chunk, filename=doc.filename))
+
+        if self._reranker is not None and hydrated:
+            return self._rerank_chunks(query, hydrated, limit)
+        return hydrated[:limit]
+
+    def _rerank_chunks(
+        self, query: str, chunks: list[RetrievedChunk], limit: int
+    ) -> list[RetrievedChunk]:
+        """Apply the cross-encoder reranker at chunk granularity.
+
+        Metadata on ``RerankCandidate`` carries the chunk_index so we
+        can match the reordered candidates back to the original chunk
+        records — ``document_id`` alone isn't unique when a doc
+        contributes multiple chunks.
+        """
+        candidates = [
+            RerankCandidate(
+                document_id=c.document_id,
+                text=c.text,
+                original_score=c.score,
+                metadata={"chunk_index": c.chunk_index},
+            )
+            for c in chunks
+        ]
+        try:
+            reranked = self._reranker.rerank(query, candidates, top_n=limit)
+        except Exception:
+            logger.exception("chunk rerank failed; falling back to RRF order")
+            return chunks[:limit]
+
+        by_key = {(c.document_id, c.chunk_index): c for c in chunks}
+        result: list[RetrievedChunk] = []
+        for cand in reranked:
+            chunk_index = cand.metadata.get("chunk_index", 0)
+            chunk = by_key.get((cand.document_id, chunk_index))
+            if chunk is not None:
+                result.append(chunk)
+        return result
+
+    @staticmethod
+    def _rrf_merge_chunks(
+        vector_hits: list[VectorHit],
+        lexical_hits: list[tuple[Document, float]],
+        limit: int,
+        *,
+        w_vector: float,
+        w_lexical: float,
+    ) -> list[RetrievedChunk]:
+        """Chunk-level RRF for RAG retrieval.
+
+        Vector hits are chunks → each gets its own rank contribution.
+        Lexical hits are doc-level → they boost every vector-retrieved
+        chunk from the matching doc but never fabricate chunks for
+        docs where vector found nothing. Keeps the LLM's context
+        grounded in chunks we actually have text for.
+        """
+        chunk_scores: dict[tuple[UUID, int], float] = defaultdict(float)
+        chunk_data: dict[tuple[UUID, int], VectorHit] = {}
+
+        for rank, hit in enumerate(vector_hits):
+            try:
+                doc_id = UUID(hit.document_id)
+            except ValueError:
+                continue
+            chunk_index = hit.metadata.get("chunk_index", 0)
+            key = (doc_id, chunk_index)
+            chunk_scores[key] += w_vector / (_RRF_K + rank + 1)
+            chunk_data[key] = hit
+
+        for rank, (doc, _score) in enumerate(lexical_hits):
+            doc_boost = w_lexical / (_RRF_K + rank + 1)
+            for key in chunk_scores:
+                if key[0] == doc.id:
+                    chunk_scores[key] += doc_boost
+
+        sorted_keys = sorted(chunk_scores, key=lambda k: chunk_scores[k], reverse=True)
+        return [
+            RetrievedChunk(
+                document_id=key[0],
+                filename="",  # hydrated by caller
+                chunk_index=key[1],
+                text=chunk_data[key].text,
+                distance=chunk_data[key].distance,
+                score=chunk_scores[key],
+                metadata=chunk_data[key].metadata,
+            )
+            for key in sorted_keys[:limit]
+        ]
 
     def _rerank_results(
         self, query: str, results: list[dict[str, Any]], limit: int

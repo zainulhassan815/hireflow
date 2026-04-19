@@ -312,6 +312,57 @@ class Reranker(Protocol):
     def model_name(self) -> str: ...
 
 
+# ---------- Chunk retriever (F81.k) ----------
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievedChunk:
+    """A ranked chunk produced by the hybrid retrieval pipeline.
+
+    Every returned chunk has passed vector retrieval at the search
+    distance threshold (F80) — FTS and SQL rank signals boost vector-
+    retrieved chunks from the same document but never introduce
+    phantom chunks the LLM can't actually read.
+
+    ``score`` is the final post-rerank ranking score; descending order
+    means better match. ``distance`` is the original cosine distance
+    from the vector path, preserved for F81.b's tightening knob and
+    F81.e's confidence band.
+    """
+
+    document_id: UUID
+    filename: str
+    chunk_index: int
+    text: str
+    distance: float
+    score: float
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@runtime_checkable
+class ChunkRetriever(Protocol):
+    """Ranked-chunk retrieval for callers that feed an LLM.
+
+    Owned by ``SearchService`` today. Returned chunks already passed
+    the search distance threshold and any configured reranker; RAG
+    callers apply their own tighter gates (F81.b context-distance
+    filter, F81.c token budget) on top.
+    """
+
+    async def retrieve_chunks(
+        self,
+        *,
+        actor: Any,
+        query: str,
+        document_ids: list[UUID] | None,
+        limit: int,
+    ) -> list[RetrievedChunk]:
+        """Return chunks ranked best-first. Typed ``actor: Any`` to
+        avoid an import cycle with ``app.models.User`` — implementations
+        accept a User and apply the role-based owner scoping."""
+        ...
+
+
 # ---------- Vector store ----------
 
 
