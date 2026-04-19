@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { FileTextIcon, UploadIcon, SearchIcon } from "lucide-react";
@@ -81,15 +82,80 @@ export function DashboardPage() {
     );
   }
 
+  // F90.d+ — derive the hero from current state so Priya always
+  // sees a clear "here's what to do next" rather than an abstract
+  // ratio. Priority order: failed > empty > processing-only > ready.
+  const firstName = user?.full_name?.split(" ")[0] ?? "";
+  const hero: {
+    headline: ReactNode;
+    sub: ReactNode | null;
+    cta: { label: string; to: string } | null;
+  } = (() => {
+    if (stats.documents === 0) {
+      return {
+        headline: (
+          <>
+            No documents yet. Upload a few resumes and we&rsquo;ll take it from
+            there.
+          </>
+        ),
+        sub: null,
+        cta: { label: "Upload documents", to: "/documents" },
+      };
+    }
+    const bits: ReactNode[] = [];
+    if (stats.processing > 0) {
+      bits.push(
+        <span key="p" className="text-warning tabular-nums">
+          {stats.processing} still processing
+        </span>
+      );
+    }
+    if (stats.failed > 0) {
+      bits.push(
+        <span key="f" className="text-destructive tabular-nums">
+          {stats.failed} failed
+        </span>
+      );
+    }
+    const sub =
+      bits.length === 0 ? null : (
+        <span className="text-muted-foreground">
+          {bits.map((b, i) => (
+            <span key={i}>
+              {i > 0 ? " · " : ""}
+              {b}
+            </span>
+          ))}
+        </span>
+      );
+    return {
+      headline: (
+        <>
+          <span className="tabular-nums">{stats.processed}</span>{" "}
+          {stats.processed === 1 ? "document is" : "documents are"} ready to
+          screen.
+        </>
+      ),
+      sub,
+      cta:
+        stats.failed > 0
+          ? { label: "Review documents →", to: "/documents" }
+          : stats.processed > 0
+            ? { label: "Open documents →", to: "/documents" }
+            : null,
+    };
+  })();
+
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-10">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Typography variant="h3">
-            Welcome back{user?.full_name ? `, ${user.full_name}` : ""}
+            Welcome back{firstName ? `, ${firstName}` : ""}.
           </Typography>
           <Typography variant="muted">
-            Here&rsquo;s the state of your library today.
+            Here&rsquo;s your library at a glance.
           </Typography>
         </div>
         <div className="flex gap-2">
@@ -104,72 +170,50 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* F90.d — hero: document processing state as the headline
-          metric. Big display number, ratio context, right-rail stat
-          strip for the secondary dimensions (jobs / candidates). */}
-      <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(200px,auto)]">
-        <div className="flex flex-col gap-3">
-          <Typography
-            variant="muted"
-            className="text-xs tracking-[0.1em] uppercase"
-          >
-            Library
-          </Typography>
-          <div className="flex items-baseline gap-3">
-            <span className="font-display text-6xl font-semibold tracking-[-0.02em] tabular-nums">
-              {stats.processed}
-            </span>
-            <Typography variant="muted" className="tabular-nums">
-              of {stats.documents} ready
-            </Typography>
-          </div>
-          {stats.processing > 0 || stats.failed > 0 ? (
-            <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-              {stats.processing > 0 && (
-                <span className="text-warning tabular-nums">
-                  {stats.processing} processing
-                </span>
-              )}
-              {stats.failed > 0 && (
-                <span className="text-destructive tabular-nums">
-                  {stats.failed} failed
-                </span>
-              )}
-            </div>
-          ) : (
-            stats.documents > 0 && (
-              <Typography variant="muted" className="text-sm">
-                All documents processed.
-              </Typography>
-            )
-          )}
-        </div>
-        <div className="text-muted-foreground flex flex-row gap-6 md:flex-col md:items-end md:gap-3 md:text-right">
+      {/* F90.d+ — prose hero. State-derived sentence with one primary
+          CTA. Replaces the ratio + right-rail split that was reading
+          as a chart rather than a briefing. */}
+      <div className="flex flex-col gap-4">
+        <p className="font-display max-w-[32ch] text-3xl leading-[1.2] font-semibold tracking-[-0.015em] sm:text-4xl">
+          {hero.headline}
+        </p>
+        {hero.sub && <div className="text-base">{hero.sub}</div>}
+        {hero.cta && (
           <div>
-            <Typography
-              variant="muted"
-              className="text-xs tracking-[0.1em] uppercase"
-            >
-              Jobs
-            </Typography>
-            <div className="text-foreground mt-1 text-2xl font-semibold tabular-nums">
-              {stats.jobs}
-            </div>
-            <Typography variant="muted" className="text-xs tabular-nums">
-              {stats.openJobs} open
-            </Typography>
+            <Button onClick={() => navigate(hero.cta!.to)}>
+              {hero.cta.label}
+            </Button>
           </div>
-          <div>
-            <Typography
-              variant="muted"
-              className="text-xs tracking-[0.1em] uppercase"
-            >
-              Candidates
-            </Typography>
-            <div className="text-foreground mt-1 text-2xl font-semibold tabular-nums">
+        )}
+
+        {/* Unified stat strip — four entities in one horizontal row,
+            divided by middots. Secondary information; the hero above
+            carries the primary read. */}
+        <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 border-t pt-4 text-sm">
+          <span className="tabular-nums">
+            <span className="text-foreground font-medium">
+              {stats.documents}
+            </span>{" "}
+            {stats.documents === 1 ? "document" : "documents"}
+          </span>
+          <span aria-hidden>·</span>
+          <span className="tabular-nums">
+            <span className="text-foreground font-medium">{stats.jobs}</span>{" "}
+            {stats.jobs === 1 ? "job" : "jobs"}
+            {stats.jobs > 0 && (
+              <span className="text-muted-foreground">
+                {" "}
+                ({stats.openJobs} open)
+              </span>
+            )}
+          </span>
+          <span aria-hidden>·</span>
+          <span className="tabular-nums">
+            <span className="text-foreground font-medium">
               {stats.candidates}
-            </div>
-          </div>
+            </span>{" "}
+            {stats.candidates === 1 ? "candidate" : "candidates"}
+          </span>
         </div>
       </div>
 
