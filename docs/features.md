@@ -6,6 +6,16 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 ---
 
+## Current focus
+
+**Retrieval track complete** — F80, F80.5, F82.c/d/e, F85.a/c, F86, F87, F88 all landed. Pipeline shape: hybrid retrieval (vector + FTS + SQL metadata + trigram fallback) → weighted RRF → cross-encoder rerank → hydration → highlights. See `docs/rag-pipeline.md` for the current diagram.
+
+Eval on 7-doc fixture: **P@5 0.252 · R@5 1.000 · MRR 0.859**. Ceiling hit on fixture size; further retrieval wins need corpus growth (more docs with overlapping vocabulary).
+
+**Next track: F81 RAG answer quality** — streaming, confidence, conversation memory, token budget, citation linking. Sub-slices F81.a–h laid out below.
+
+---
+
 ## Phase 0 — Foundation
 
 - [x] **F00 · Environment & config hardening**
@@ -250,24 +260,26 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - Eval harness: 15-20 curated queries against fixture docs, precision@5 + MRR baseline via `make eval`
   - Deferred to F80.5 (below): query expansion, RRF recency boost, faceted results
 
-- [x] **F80.5 · Cross-encoder reranker** — `Reranker` protocol + `CrossEncoderReranker` (BAAI/bge-reranker-base, local sentence-transformers) + `NullReranker` + registry. Wired into `SearchService` with `reranker_top_k=20`. Default disabled (`reranker_provider=none`) on our small corpus because BGE's neutral semantic scoring can override filename intent (e.g. ranks "Menu Extraction" heading above "Menu Analyzer" filename). Flip to `local` via env to A/B. Works better once F85.c (weighted RRF) lands — reranker should narrow the candidate ordering after filename-boost has the right doc at the top.
+- [x] **F80.5 · Cross-encoder reranker** — `Reranker` protocol + `CrossEncoderReranker` (BAAI/bge-reranker-base, local sentence-transformers) + `NullReranker` + registry. Wired into `SearchService` with `reranker_top_k=20`. Default `reranker_provider=local` after F85.c weighted RRF lands — the candidate set is filename-biased before reranking, so the reranker reshuffles within an already-correct window. Eval: MRR held at 0.859 with the combined stack.
   - Rerank top-20 vector candidates with a local cross-encoder (e.g. `cross-encoder/ms-marco-MiniLM-L-6-v2`)
   - Toggle via `SEARCH_RERANKER_ENABLED` env var for A/B
   - Eval harness measures precision@5 before/after to justify the `sentence-transformers` dep weight
 
-- [ ] **F81 · RAG answer quality**
-  - Structured answer templates: count queries → return number + list, comparison queries → table format, skill queries → bullet points
-  - Context relevance filtering — drop chunks that are below similarity threshold before sending to LLM (reduces noise)
-  - System prompt tuning: be concise, format matters, answer the specific question asked
-  - Token budget management: prioritize high-relevance chunks, truncate low-relevance ones
-  - Answer confidence indicator: if context is thin, say so explicitly and suggest uploading more documents
-  - Support follow-up context (conversation memory within a session)
+- [ ] **F81 · RAG answer quality** — next track after retrieval. Proposed sub-slices:
+  - [ ] **F81.a** Streaming answers via SSE (server-sent events) — replace the synchronous blob with token-by-token output. Frontend chat shows text as it generates. Claude SDK already supports streaming; wire it through `RagService` + a new `/rag/stream` endpoint.
+  - [ ] **F81.b** Context relevance filtering: drop chunks below a vector-distance cutoff before stuffing the prompt. Reduces LLM noise; makes answers tighter.
+  - [ ] **F81.c** Token budget management: rank chunks by reranker score (F80.5 already computes), include high-score chunks first, stop when a configurable token budget is hit. Prevents context-window overrun on many-chunk retrievals.
+  - [ ] **F81.d** System prompt tuning: be concise, cite filenames inline, refuse to answer when context is thin, say "I don't know" instead of guessing.
+  - [ ] **F81.e** Answer confidence indicator: return a confidence field on `RagResponse` (high/medium/low) driven by top-chunk distance + answer heuristics (mentions-of-"I don't know" etc.). Frontend renders as a badge.
+  - [ ] **F81.f** Conversation memory: track the last N message pairs per session in Redis, inject into the prompt. Enables follow-ups like "what about the other resume?"
+  - [ ] **F81.g** Structured answer templates (optional, nice-to-have): count queries → number + list; comparison queries → markdown table; skill queries → bullet points. Driven by lightweight intent classification or by an LLM hint in the prompt.
+  - [ ] **F81.h** Source citation linking: citations in the UI should click through to the source document at the relevant section. Needs `section_heading` metadata (F82.e already stamps it) + a document-preview route.
 
 - [~] **F82 · Chunking strategy improvements** — mixed-doc corpus, not just resumes
   - [ ] **F82.a** (skipped — went straight to F82.d layout-aware extraction instead)
   - [ ] **F82.b** Whole-document chunk: one extra vector per doc with `chunk_kind="document"` holding a concatenated extract (first paragraph + headings + skills list). Helps broad "find me a [persona]" queries that need doc-level signal rather than any single chunk.
-  - [~] **F82.d** Layout-aware extraction via `unstructured.partition` (hi_res strategy, GPU-accelerated via local RTX 5050). Persists typed elements (`Title`, `NarrativeText`, `ListItem`, `Table`, …) to a new `document_elements` table + adds versioning columns to `documents` (`extraction_version`, `chunking_version`, `embedding_model_version`). In-progress.
-  - [~] **F82.e** Element-aware chunker consuming typed elements: heading→new chunk + `section_heading` metadata, tables→own chunk (markdown), lists→intact, narrative→packed. Replaces the character-recursive splitter. Ships with F82.d.
+  - [x] **F82.d** Layout-aware extraction via `unstructured.partition` (hi_res strategy, GPU-accelerated via local RTX 5050). Persists typed elements (`Title`, `NarrativeText`, `ListItem`, `Table`, …) to `document_elements` + version columns on `documents` (`extraction_version`, `chunking_version`, `embedding_model_version`).
+  - [x] **F82.e** Element-aware chunker: headings attached as `section_heading` metadata (not emitted as standalone chunks after F82.c follow-up), tables→own chunk (markdown preferred), lists→intact, narrative→packed ~1200 chars. `CHUNKING_VERSION=v3`.
   - [x] **F82.c** Contextual retrieval (Anthropic): `ChunkContextualizer` protocol backed by any `LlmProvider`; three modes (summary / full_doc / auto). Chunker no longer emits heading-only chunks (CHUNKING_VERSION v3) — heading text lives on subsequent narratives as `section_heading` metadata, saving ~40% of LLM calls per doc. Live wins visible: `menu analyzer` now ranks Menu Analyzer Portfolio at #1 (was #2 under Restaurant Signup). Eval held at P@5 0.252 / R@5 1.000 / MRR 0.859 — fixture corpus too small to show Anthropic's published -35%.
   - [ ] **F82.f** (later) Multi-granularity chunks: sentence + paragraph + section levels with parent-child retrieval. Enables retrieve-small-return-big.
   - Re-index required on any chunk strategy change — `scripts/reindex_embeddings.py` handles it.
