@@ -13,17 +13,22 @@ export function AuthLayout({ children, title, description }: AuthLayoutProps) {
       <div className="bg-primary hidden w-1/2 flex-col justify-between p-12 lg:flex">
         <NavLink to="/" className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center bg-white">
-            <span className="text-primary text-base font-bold">H</span>
+            <span className="font-display text-primary text-base font-semibold">
+              H
+            </span>
           </div>
-          <span className="text-lg font-semibold text-white">Hireflow</span>
+          <span className="font-display text-lg font-semibold tracking-[-0.01em] text-white">
+            Hireflow
+          </span>
         </NavLink>
 
         <div className="space-y-6">
-          <h1 className="text-4xl leading-tight font-bold text-white">
-            AI-Powered HR Screening
-            <br />& Document Retrieval
+          <h1 className="font-display text-5xl leading-[1.05] font-semibold tracking-[-0.02em] text-white">
+            Hiring,
+            <br />
+            without the paperwork.
           </h1>
-          <p className="text-primary-foreground/80 max-w-md text-lg">
+          <p className="text-primary-foreground/80 max-w-md text-lg leading-[1.6]">
             Automate resume screening and enable intelligent document search
             using RAG technology. Reduce manual effort by up to 70%.
           </p>
@@ -41,9 +46,13 @@ export function AuthLayout({ children, title, description }: AuthLayoutProps) {
           <div className="flex justify-center lg:hidden">
             <NavLink to="/" className="flex items-center gap-3">
               <div className="bg-primary flex size-10 items-center justify-center">
-                <span className="text-base font-bold text-white">H</span>
+                <span className="font-display text-base font-semibold text-white">
+                  H
+                </span>
               </div>
-              <span className="text-lg font-semibold">Hireflow</span>
+              <span className="font-display text-lg font-semibold tracking-[-0.01em]">
+                Hireflow
+              </span>
             </NavLink>
           </div>
 

@@ -4,21 +4,26 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+// F90.b — editorial-serious type scale.
+// h1–h3 carry the display face (Fraunces) with tuned leading + negative
+// tracking so headlines feel tight and confident. h4–h6 stay on the
+// body sans (Inter) — sub-headline territory where the serif would
+// read as fussy.
 const typographyVariants = cva("", {
   variants: {
     variant: {
-      h1: "text-4xl font-semibold tracking-tight",
-      h2: "text-3xl font-semibold tracking-tight",
-      h3: "text-2xl font-semibold tracking-tight",
-      h4: "text-xl font-semibold tracking-tight",
-      h5: "text-lg font-medium",
-      h6: "text-base font-medium",
-      lead: "text-lg text-muted-foreground",
-      p: "text-base leading-relaxed",
-      large: "text-lg font-medium",
-      small: "text-sm leading-normal",
-      muted: "text-sm text-muted-foreground",
-      label: "text-sm font-medium leading-none",
+      h1: "font-display text-4xl font-semibold leading-[1.1] tracking-[-0.02em]",
+      h2: "font-display text-3xl font-semibold leading-[1.15] tracking-[-0.02em]",
+      h3: "font-display text-2xl font-semibold leading-[1.2] tracking-[-0.015em]",
+      h4: "text-xl font-semibold leading-[1.25] tracking-[-0.01em]",
+      h5: "text-lg font-medium leading-[1.35]",
+      h6: "text-base font-medium leading-[1.4]",
+      lead: "text-lg leading-[1.6] text-muted-foreground",
+      p: "text-base leading-[1.65]",
+      large: "text-lg font-medium leading-[1.4]",
+      small: "text-sm leading-[1.5]",
+      muted: "text-sm leading-[1.5] text-muted-foreground",
+      label: "text-sm font-medium leading-none tracking-[0.01em]",
     },
   },
   defaultVariants: {

@@ -249,7 +249,10 @@ export function DocumentsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="small">
+                      <Typography
+                        variant="small"
+                        className="font-mono tabular-nums"
+                      >
                         {formatFileSize(doc.size_bytes)}
                       </Typography>
                     </TableCell>

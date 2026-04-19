@@ -198,7 +198,7 @@ export function AppSidebar() {
             </span>
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <span className="text-lg font-semibold tracking-tight">
+            <span className="font-display text-lg font-semibold tracking-[-0.01em]">
               Hireflow
             </span>
             <span className="text-muted-foreground text-xs">HR Platform</span>

@@ -381,7 +381,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - [x] **F90.a** `/impeccable:shape` — design brief. Pin brand name,
     voice, audience, tonal direction. Kills "ScreenAI + Sparkles".
     Everything downstream depends on this.
-  - [ ] **F90.b** `/impeccable:typeset` — typography system. Display face
+  - [x] **F90.b** `/impeccable:typeset` — typography system. Display face
     for headlines, real weight contrast, intentional tracking/leading.
   - [ ] **F90.c** `/impeccable:colorize` — semantic categorical palette
     via OKLCH hue rotation. Status / intent / confidence get hue
