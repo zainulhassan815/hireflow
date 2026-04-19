@@ -565,6 +565,30 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - [ ] **F100.c** Contract test: search + RAG response snapshots
     updated to match new labels.
 
+- [ ] **F102 · Keyboard-first command palette** — Linear-style command
+  palette as the single global shortcut. Phase A (this feature) ships
+  `⌘K` to open a searchable palette with Navigate / Create / Account
+  groups. Phase B (full Linear parity — sequence shortcuts, help
+  overlay, per-page contexts, hint badges) deferred until power-user
+  usage is validated.
+  - [x] **F102.a** `⌘K` global keydown listener in `AppLayout`
+    (Cmd or Ctrl, preventDefault + toggle).
+  - [x] **F102.b** `CommandPalette` component using shadcn's
+    `CommandDialog`. Groups: Navigate (Dashboard / Documents / Search
+    / Candidates / Jobs / Activity Logs / Settings), Create (Upload
+    documents, Create job), Account (Log out). Fuzzy search via cmdk.
+  - [ ] **F102.c** Discoverability: a subtle "⌘K" kbd hint in the
+    sidebar footer or user row. Optional; not shipped with Phase A.
+  - [ ] **F102.d (deferred, Phase B)** Sequence shortcuts: `G D`
+    (Dashboard), `G F` (Files / Documents), `G S` (Search), etc. with
+    1s timeout and a mid-sequence visual indicator.
+  - [ ] **F102.e (deferred, Phase B)** `?` help overlay scoped to
+    current page context.
+  - [ ] **F102.f (deferred, Phase B)** Per-page context shortcuts
+    (`J/K` list nav, `E` edit, `Esc` stop generation on chat).
+  - [ ] **F102.g (deferred, Phase B)** Shortcut hint badges (`<Kbd>`)
+    inline in buttons, menus, and tooltips.
+
 - [ ] **F101 · Document thumbnails** — generate a small preview image
   per document during processing so the Documents grid view, preview
   dialog, and similar-docs list render the first page instead of a

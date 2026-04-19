@@ -1,9 +1,24 @@
+import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "./app-sidebar";
+import { CommandPalette } from "./command-palette";
 
 export function AppLayout() {
+  const [commandOpen, setCommandOpen] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCommandOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -12,6 +27,7 @@ export function AppLayout() {
           <Outlet />
         </main>
       </SidebarInset>
+      <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
     </SidebarProvider>
   );
 }
