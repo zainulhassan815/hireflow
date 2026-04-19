@@ -12,7 +12,7 @@ import logging
 from collections.abc import Callable
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.adapters.protocols import (
@@ -103,24 +103,26 @@ class ExtractionService:
     def _persist_elements(self, doc: Document, elements: list[Element]) -> None:
         """Replace any prior elements with the fresh extraction output.
 
-        Delete-then-insert is simpler than a merge and, on re-extraction,
-        the element set can change wholesale. CASCADE on the FK handles
-        cleanup if the parent doc is ever deleted.
+        Route everything through ``doc.elements`` so the ORM keeps the
+        in-memory relationship collection in sync with the DB. Setting
+        only the FK column via ``session.add(DocumentElement(document_id
+        =doc.id, ...))`` — the previous pattern — left ``doc.elements``
+        stale; a downstream reader in the same transaction (here,
+        ``_index``) saw the pre-extraction (empty) list, chunked to
+        zero, and silently skipped embedding. ``delete-orphan`` cascade
+        on the relationship removes the prior rows on flush.
         """
-        self._session.execute(
-            delete(DocumentElement).where(DocumentElement.document_id == doc.id)
-        )
-        for element in elements:
-            self._session.add(
-                DocumentElement(
-                    document_id=doc.id,
-                    kind=element.kind,
-                    text=element.text,
-                    page_number=element.page_number,
-                    order_index=element.order,
-                    metadata_=element.metadata or None,
-                )
+        doc.elements.clear()
+        doc.elements.extend(
+            DocumentElement(
+                kind=element.kind,
+                text=element.text,
+                page_number=element.page_number,
+                order_index=element.order,
+                metadata_=element.metadata or None,
             )
+            for element in elements
+        )
 
     def _classify(self, doc: Document) -> None:
         text = doc.extracted_text
