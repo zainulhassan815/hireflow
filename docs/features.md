@@ -386,7 +386,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - [x] **F90.c** `/impeccable:colorize` — semantic categorical palette
     via OKLCH hue rotation. Status / intent / confidence get hue
     differentiation; blue stays primary-action only.
-  - [ ] **F90.d** `/impeccable:layout` — break the identical 4-KPI-card
+  - [x] **F90.d** `/impeccable:layout` — break the identical 4-KPI-card
     hero on Dashboard + Documents. Page-specific primary metrics with
     visualization; demote the rest.
   - [ ] **F90.e** `/impeccable:bolder` — commit to `--radius: 0` opinion

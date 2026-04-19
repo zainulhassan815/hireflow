@@ -28,7 +28,7 @@ export function AuthLayout({ children, title, description }: AuthLayoutProps) {
             <br />
             without the paperwork.
           </h1>
-          <p className="text-primary-foreground/80 max-w-md text-lg leading-[1.6]">
+          <p className="text-primary-foreground/80 max-w-[65ch] text-lg leading-[1.6]">
             Automate resume screening and enable intelligent document search
             using RAG technology. Reduce manual effort by up to 70%.
           </p>

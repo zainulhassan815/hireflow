@@ -43,7 +43,7 @@ import {
 import { Typography } from "@/components/ui/typography";
 import { UploadDialog } from "@/components/documents/upload-dialog";
 import { DocumentPreview } from "@/components/documents/document-preview";
-import { formatDate, formatFileSize } from "@/lib/utils";
+import { cn, formatDate, formatFileSize } from "@/lib/utils";
 import { toast } from "sonner";
 
 const typeIcons: Record<string, React.ElementType> = {
@@ -54,14 +54,30 @@ const typeIcons: Record<string, React.ElementType> = {
   other: ImageIcon,
 };
 
+// F90.d — semantic status color: ready → success, processing → warning,
+// pending → outline, failed → destructive. Same map as Dashboard.
+const statusBadgeClass: Record<string, string> = {
+  ready: "bg-success text-success-foreground border-transparent",
+  processing: "bg-warning text-warning-foreground border-transparent",
+};
+
 const statusVariants: Record<
   string,
   "default" | "secondary" | "destructive" | "outline"
 > = {
-  ready: "default",
+  ready: "secondary",
   processing: "secondary",
   pending: "outline",
   failed: "destructive",
+};
+
+// F90.d — categorical doc-type color. cat-3 deliberately skipped to
+// avoid destructive-red collision on rows with a failed status.
+const typeBadgeClass: Record<string, string> = {
+  resume: "border-cat-1 text-cat-1",
+  report: "border-cat-2 text-cat-2",
+  contract: "border-cat-5 text-cat-5",
+  letter: "border-cat-4 text-cat-4",
 };
 
 export function DocumentsPage() {
@@ -136,12 +152,12 @@ export function DocumentsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Typography variant="h3">Documents</Typography>
           <Typography variant="muted">
-            Upload, manage, and search your documents
+            Upload, manage, and search your documents.
           </Typography>
         </div>
         <Button onClick={() => setUploadOpen(true)}>
@@ -150,54 +166,57 @@ export function DocumentsPage() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="relative max-w-sm min-w-[200px] flex-1">
-          <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-          <Input
-            placeholder="Search documents..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+      {/* F90.d — search-as-hero. Replaces the old 4-KPI grid. The
+          count strip below the search field carries the info the
+          grid used to, inline with the filter state. */}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[240px] flex-1">
+            <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-5 -translate-y-1/2" />
+            <Input
+              placeholder="Search by filename…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-11 pl-10 text-base"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant={view === "list" ? "secondary" : "ghost"}
+              size="icon-sm"
+              onClick={() => setView("list")}
+            >
+              <ListIcon className="size-4" />
+            </Button>
+            <Button
+              variant={view === "grid" ? "secondary" : "ghost"}
+              size="icon-sm"
+              onClick={() => setView("grid")}
+            >
+              <GridIcon className="size-4" />
+            </Button>
+          </div>
         </div>
-        <div className="ml-auto flex items-center gap-1">
-          <Button
-            variant={view === "list" ? "secondary" : "ghost"}
-            size="icon-sm"
-            onClick={() => setView("list")}
-          >
-            <ListIcon className="size-4" />
-          </Button>
-          <Button
-            variant={view === "grid" ? "secondary" : "ghost"}
-            size="icon-sm"
-            onClick={() => setView("grid")}
-          >
-            <GridIcon className="size-4" />
-          </Button>
+        <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <span className="tabular-nums">
+            {filtered.length === documents.length
+              ? `${stats.total} total`
+              : `${filtered.length} of ${stats.total}`}
+          </span>
+          {stats.resumes > 0 && (
+            <span className="tabular-nums">· {stats.resumes} resumes</span>
+          )}
+          {stats.processing > 0 && (
+            <span className="text-warning tabular-nums">
+              · {stats.processing} processing
+            </span>
+          )}
+          {stats.failed > 0 && (
+            <span className="text-destructive tabular-nums">
+              · {stats.failed} failed
+            </span>
+          )}
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {(
-          [
-            ["Total", stats.total],
-            ["Resumes", stats.resumes],
-            ["Processing", stats.processing],
-            ["Failed", stats.failed],
-          ] as const
-        ).map(([label, count]) => (
-          <Card key={label}>
-            <CardContent className="p-4">
-              <Typography variant="muted" className="text-xs">
-                {label}
-              </Typography>
-              <Typography variant="h4" className="mt-1">
-                {count}
-              </Typography>
-            </CardContent>
-          </Card>
-        ))}
       </div>
 
       {documents.length === 0 ? (
@@ -244,7 +263,13 @@ export function DocumentsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="capitalize">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "capitalize",
+                          typeBadgeClass[doc.document_type ?? ""]
+                        )}
+                      >
                         {doc.document_type ?? "—"}
                       </Badge>
                     </TableCell>
@@ -259,13 +284,16 @@ export function DocumentsPage() {
                     <TableCell>
                       <Badge
                         variant={statusVariants[doc.status] ?? "secondary"}
-                        className="capitalize"
+                        className={cn(
+                          "capitalize",
+                          statusBadgeClass[doc.status]
+                        )}
                       >
                         {doc.status}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="muted">
+                      <Typography variant="muted" className="tabular-nums">
                         {formatDate(doc.created_at)}
                       </Typography>
                     </TableCell>
@@ -325,20 +353,35 @@ export function DocumentsPage() {
                       {doc.filename}
                     </Typography>
                     <div className="mt-2 flex items-center gap-2">
-                      <Badge variant="outline" className="text-xs capitalize">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-xs capitalize",
+                          typeBadgeClass[doc.document_type ?? ""]
+                        )}
+                      >
                         {doc.document_type ?? "—"}
                       </Badge>
-                      <Typography variant="muted" className="text-xs">
+                      <Typography
+                        variant="muted"
+                        className="font-mono text-xs tabular-nums"
+                      >
                         {formatFileSize(doc.size_bytes)}
                       </Typography>
                     </div>
                     <Badge
                       variant={statusVariants[doc.status] ?? "secondary"}
-                      className="mt-3 capitalize"
+                      className={cn(
+                        "mt-3 capitalize",
+                        statusBadgeClass[doc.status]
+                      )}
                     >
                       {doc.status}
                     </Badge>
-                    <Typography variant="muted" className="mt-2 text-xs">
+                    <Typography
+                      variant="muted"
+                      className="mt-2 text-xs tabular-nums"
+                    >
                       {formatDate(doc.created_at)}
                     </Typography>
                   </div>
