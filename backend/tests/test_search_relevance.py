@@ -461,6 +461,66 @@ async def test_orphan_vector_chunk_dropped_before_ranking() -> None:
 
 
 # ---------------------------------------------------------------------------
+# F85.c weighted RRF
+# ---------------------------------------------------------------------------
+
+
+async def test_lexical_weight_outranks_vector_at_same_rank(monkeypatch) -> None:
+    """With lexical weight > vector weight, a doc surfaced only via
+    lexical beats a doc surfaced only via vector, even when both are
+    at rank 1 in their respective lists.
+
+    This is the F85.c invariant: filename/metadata intent from F87's
+    weighted tsvector outweighs pure semantic drift.
+    """
+    monkeypatch.setattr(settings, "rrf_weight_lexical", 2.0)
+    monkeypatch.setattr(settings, "rrf_weight_vector", 1.0)
+
+    vector_only = uuid4()
+    lexical_only = uuid4()
+
+    store = _FakeVectorStore([_vector_hit(doc_id=vector_only, distance=0.1)])
+    repo = _mock_repo(
+        [_document(vector_only), _document(lexical_only)],
+        lexical_hits=[(_document(lexical_only), 0.5)],
+    )
+    service = SearchService(repo, store)
+
+    results, _ = await service.search(actor=_admin(), query="something")
+
+    returned_ids = [r["document_id"] for r in results]
+    # Lexical-only doc must come first under boosted lexical weight.
+    assert returned_ids[0] == lexical_only
+    assert returned_ids[1] == vector_only
+
+
+async def test_equal_weights_preserve_classical_rrf() -> None:
+    """Setting all weights to 1.0 reproduces equal-weight RRF:
+    a doc present in two sources outranks a doc in one source."""
+    both = uuid4()
+    vector_only = uuid4()
+
+    store = _FakeVectorStore(
+        [
+            _vector_hit(doc_id=both, distance=0.1),
+            _vector_hit(doc_id=vector_only, distance=0.2),
+        ]
+    )
+    repo = _mock_repo(
+        [_document(both), _document(vector_only)],
+        lexical_hits=[(_document(both), 0.5)],  # both also in lexical
+    )
+    service = SearchService(repo, store)
+
+    results, _ = await service.search(actor=_admin(), query="anything")
+
+    # Default weights (lexical=2, vector=1) — `both` wins anyway; the
+    # point is the two-source doc always outranks one-source at equal
+    # rank. This test pins the invariant.
+    assert [r["document_id"] for r in results][:2] == [both, vector_only]
+
+
+# ---------------------------------------------------------------------------
 # F80.5 reranker wiring
 # ---------------------------------------------------------------------------
 

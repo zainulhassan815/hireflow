@@ -2,7 +2,7 @@
   "overall": {
     "p@5": 0.2522,
     "r@5": 1.0,
-    "mrr": 0.8152
+    "mrr": 0.8587
   },
   "cases": [
     {
@@ -80,12 +80,12 @@
         "resume_python_senior"
       ],
       "returned": [
-        "letter_cover_jane",
-        "resume_python_senior"
+        "resume_python_senior",
+        "letter_cover_jane"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
-      "mrr": 0.5,
+      "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": "seniority implied"
     },
@@ -164,13 +164,13 @@
         "resume_python_senior"
       ],
       "returned": [
-        "letter_cover_jane",
         "resume_python_senior",
+        "letter_cover_jane",
         "resume_devops"
       ],
       "p@5": 0.4,
       "r@5": 1.0,
-      "mrr": 0.5,
+      "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": "semantic + skill filter"
     },

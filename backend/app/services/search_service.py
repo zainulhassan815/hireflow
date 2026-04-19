@@ -159,7 +159,15 @@ class SearchService:
         # encoder has enough candidates to reshuffle meaningfully.
         # After rerank, we truncate back to the user's requested limit.
         merge_limit = max(settings.reranker_top_k, limit) if self._reranker else limit
-        merged = self._rrf_merge(vector_hits, sql_docs, lexical_hits, merge_limit)
+        merged = self._rrf_merge(
+            vector_hits,
+            sql_docs,
+            lexical_hits,
+            merge_limit,
+            w_vector=settings.rrf_weight_vector,
+            w_sql=settings.rrf_weight_sql,
+            w_lexical=settings.rrf_weight_lexical,
+        )
 
         doc_ids = [m.document_id for m in merged]
         docs_map = await self._documents.get_many(doc_ids)
@@ -301,13 +309,19 @@ class SearchService:
         sql_docs: list[Document],
         lexical_hits: list[tuple[Document, float]],
         limit: int,
+        *,
+        w_vector: float = 1.0,
+        w_sql: float = 1.0,
+        w_lexical: float = 1.0,
     ) -> list[SearchResult]:
-        """Reciprocal Rank Fusion across vector, SQL-metadata, and lexical lists.
+        """Weighted Reciprocal Rank Fusion across the three retrieval sources.
 
-        Equal-weight RRF: the per-source ``ts_rank_cd`` and cosine distance
-        scores are not comparable on the same axis, so we collapse to ranks
-        and let RRF do the merging. A doc that surfaces in two sources
-        outranks one that appears in only one.
+        Per-source ``ts_rank_cd`` and cosine distance scores aren't on the
+        same axis; we collapse to ranks and let RRF do the merging. The
+        ``w_*`` multipliers (F85.c) let the caller bias sources without
+        normalizing scores — e.g. ``w_lexical=2.0`` gives filename/
+        metadata matches from F87's weighted tsvector a bigger say in the
+        final ordering. Defaults of 1.0 keep classical equal-weight RRF.
         """
         scores: dict[UUID, float] = defaultdict(float)
         highlights_by_doc: dict[UUID, list[dict[str, Any]]] = defaultdict(list)
@@ -317,7 +331,7 @@ class SearchService:
                 doc_id = UUID(hit.document_id)
             except ValueError:
                 continue
-            scores[doc_id] += 1.0 / (_RRF_K + rank + 1)
+            scores[doc_id] += w_vector / (_RRF_K + rank + 1)
             highlights_by_doc[doc_id].append(
                 {
                     "text": hit.text,
@@ -326,10 +340,10 @@ class SearchService:
             )
 
         for rank, doc in enumerate(sql_docs):
-            scores[doc.id] += 1.0 / (_RRF_K + rank + 1)
+            scores[doc.id] += w_sql / (_RRF_K + rank + 1)
 
         for rank, (doc, _ts_score) in enumerate(lexical_hits):
-            scores[doc.id] += 1.0 / (_RRF_K + rank + 1)
+            scores[doc.id] += w_lexical / (_RRF_K + rank + 1)
 
         sorted_ids = sorted(scores, key=lambda did: scores[did], reverse=True)
 

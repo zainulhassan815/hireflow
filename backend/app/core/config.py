@@ -53,12 +53,12 @@ class Settings(BaseSettings):
     # cosine similarity but slower — only run on a small candidate set.
     # ``none`` falls back to NullReranker (passthrough).
     #
-    # Default ``none`` until F85.c (weighted RRF) lands: on a small
-    # corpus, BGE's neutral semantic scoring can override filename /
-    # title intent (e.g. ranking a doc that mentions "menu extraction"
-    # above a doc literally named "Menu Analyzer"). Flip to ``local`` to
-    # A/B against the baseline; the infrastructure is wired either way.
-    reranker_provider: str = "none"
+    # Default ``local`` now that F85.c weighted RRF lands — the
+    # candidate set is filename-biased before reranking, so the reranker
+    # only reshuffles within an already-correct window. Set ``none`` to
+    # disable (useful for eval A/B or if bge-reranker-base fails to
+    # load).
+    reranker_provider: str = "local"
     reranker_model: str = "BAAI/bge-reranker-base"
     # Candidates to hand the reranker. Retrieval runs up to this many,
     # then reranker picks the top-N (N = user's ``limit``).
@@ -131,6 +131,15 @@ class Settings(BaseSettings):
     search_confidence_high: float = 0.02
     search_confidence_medium: float = 0.01
     search_max_highlights_per_doc: int = 3
+
+    # Weighted RRF (F85.c). Multiplies each source's rank contribution
+    # before scores accumulate. Boosting lexical reflects the F87
+    # filename-A / skills-B index weighting so filename-intent queries
+    # don't get cancelled out by vector drift. Set all to 1.0 for the
+    # classical equal-weight RRF.
+    rrf_weight_lexical: float = 2.0
+    rrf_weight_vector: float = 1.0
+    rrf_weight_sql: float = 1.0
 
     # LLM / Embeddings
     llm_provider: str = "anthropic"
