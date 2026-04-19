@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import cast, func, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Document, DocumentStatus, DocumentType
@@ -105,13 +106,41 @@ class DocumentRepository:
             stmt = stmt.where(Document.document_type == document_type)
 
         if skills:
+            # F89.a.1 — JSONB array containment instead of
+            # ``metadata->>'skills' ILIKE '%skill%'``. Old shape
+            # matched substrings in the stringified JSON (so "python"
+            # hit "pythonic", "jython", etc.) and couldn't use a GIN
+            # index. ``@>`` does exact array membership and is
+            # GIN-indexable. Skills stored lowercase by the rule-based
+            # classifier; parser emits lowercase; explicit ``.lower()``
+            # here makes that contract visible.
+            #
+            # Pass the Python list to ``cast(..., JSONB)`` so
+            # SQLAlchemy serialises to real JSON (``["python"]``), not
+            # a JSON-encoded string (``"[\"python\"]"`` — what we got
+            # from ``cast(literal_string, JSONB)``, which silently
+            # broke containment because the right-hand side became a
+            # scalar string, not an array).
             for skill in skills:
+                skill_lower = skill.strip().lower()
+                if not skill_lower:
+                    continue
                 stmt = stmt.where(
-                    Document.metadata_["skills"].astext.ilike(f"%{skill}%")
+                    Document.metadata_["skills"].op("@>")(cast([skill_lower], JSONB))
                 )
 
         if min_experience_years is not None:
+            # F89.a.1 — guard the integer cast with ``jsonb_typeof =
+            # 'number'``. Before the guard, a malformed value (string
+            # "5+", list, bool) would crash the query with a 500;
+            # after, non-numeric values fail the typeof check and the
+            # row is excluded cleanly. Missing key also yields NULL
+            # typeof → UNKNOWN → excluded, which is the intended
+            # semantic (can't meet an experience threshold we don't
+            # know).
             stmt = stmt.where(
+                func.jsonb_typeof(Document.metadata_["experience_years"]) == "number"
+            ).where(
                 Document.metadata_["experience_years"].as_integer()
                 >= min_experience_years
             )
