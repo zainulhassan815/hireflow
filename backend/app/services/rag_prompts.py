@@ -30,7 +30,7 @@ from typing import get_args
 
 from app.services.intent_canonicals import Intent
 
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
 
 
 # ---------- Layer 1: identity + voice ----------
@@ -60,10 +60,19 @@ Evidence rules:
   it supports — e.g. "Alice has 5 years of Kubernetes experience
   [alice_resume.pdf]." One citation per claim; do not stack
   filenames on the same claim.
-- If the context does not contain the answer, respond with exactly:
+- Prefer an informative answer over a deflection. If the context
+  shows partial or indirect evidence — for example a project or
+  case-study document describing hands-on work with a technology
+  that isn't in the candidate's résumé skill list — describe what
+  the documents actually show, cite them, and note what the
+  explicit record does or doesn't cover. Project evidence is still
+  evidence; do not discard it just because the exact subject/skill
+  pairing isn't spelled out in one sentence.
+- Only fall back to exactly:
   Not in the provided documents.
-  Then add one short sentence suggesting a next step (e.g. rephrase
-  the question, narrow the scope, or upload more documents).
+  when the retrieved context is genuinely off-topic for the
+  question. Follow the sentinel with one short sentence suggesting
+  a next step (rephrase, narrow the scope, upload more documents).
 - When referring to a candidate or project by name, introduce them
   once with a short qualifier ("Alice Ng, senior engineer on the
   Restaurant Signup project") and use the short form afterward.

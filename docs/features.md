@@ -595,6 +595,33 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - [ ] **F102.g (deferred, Phase B)** Shortcut hint badges (`<Kbd>`)
     inline in buttons, menus, and tooltips.
 
+- [~] **F103 · RAG indirect-evidence reasoning** — surfaced by a
+  real-world query: *"do we have any candidate with stripe
+  experience?"* Retrieval correctly returned a project case study
+  documenting a Stripe integration; the LLM answered "Not in the
+  provided documents" because the case study didn't explicitly name
+  the candidate, and the candidate's resume skill-list didn't include
+  "stripe" (it was buried in project narrative). The dots exist in
+  the data but nothing connects them. Three layers to the fix, each
+  independent and shippable on its own.
+  - [x] **F103.a** Prompt: loosen the "Not in the provided
+    documents" sentinel in `rag_prompts.EVIDENCE_RULES` so partial /
+    indirect evidence is described and cited rather than deflected.
+    Reserve the sentinel for genuinely off-topic retrievals.
+    PROMPT_VERSION bumped v2 → v3. Shipped as part of this entry.
+  - [ ] **F103.b** Narrative skill extraction: extend the skill
+    classifier to read technologies out of experience / project
+    descriptions, not just explicit "Skills:" sections. Populates
+    the parsed `skills` metadata so retrieval and scoring surface
+    technology hits even when the candidate doesn't list them.
+  - [ ] **F103.c** Author linkage: portfolio / case-study
+    documents are authored by a candidate but the schema has no
+    link. Infer via email-in-document ↔ candidate.email match at
+    ingestion time, or add an explicit `authored_by` foreign key
+    set from extraction metadata. With the link, RAG context can
+    include "this document was authored by {candidate}" so Claude
+    attributes project work to the right person natively.
+
 - [ ] **F101 · Document thumbnails** — generate a small preview image
   per document during processing so the Documents grid view, preview
   dialog, and similar-docs list render the first page instead of a
