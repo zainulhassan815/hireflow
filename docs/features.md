@@ -272,12 +272,23 @@ Wire existing frontend pages to the real backend API. All pages must follow
     top-right — Kanban disabled with "Coming in F93" tooltip.
     Lays the track for the kanban swap so F93 is a new renderer,
     not a new page.
-  - [ ] **F44.d.4** Quick-peek slide-over drawer. Click a row →
-    right-side drawer embeds the resume viewer (`/documents/:id`
-    inline), match-score summary, status history. Escape closes;
-    `j/k` move between rows in the list. Biggest daily-velocity
-    unlock — HR stops losing place in the list every time they
-    need to look at a résumé.
+  - [x] **F44.d.4** Quick-peek slide-over drawer. Click a row →
+    right-side drawer (~768px, vaul-backed) opens with: candidate
+    header (avatar, name, email), status label + inline action
+    buttons, match-score bar (larger, with bold number), skills,
+    and the embedded F105 `DocumentViewer` for the candidate's
+    source resume (or a "No resume on file" fallback). "Open full
+    page" link navigates to `/documents/:id` for focused reading.
+    Drawer's status mutation writes to the same
+    `listJobApplications` cache so the list underneath updates in
+    sync. Escape closes (vaul default). Row activation is click or
+    Enter/Space (role=button + tabIndex=0 for keyboard users).
+    Clicks on the checkbox and action-button columns
+    stopPropagation so they don't also open the drawer. Drawer
+    content mirrors the freshest row from the list cache on each
+    render, so bulk actions / refresh-scores / row-level flips
+    stay in sync while the drawer is open. Keyboard row-to-row
+    nav (`j/k`) is separate — that's F44.d.5.
   - [ ] **F44.d.5** Keyboard shortcuts: `j/k` row nav, `s`
     shortlist, `r` reject, `u` undo, `x` clear selection, `/`
     focus search, `Enter` open drawer. Pairs with F102 command

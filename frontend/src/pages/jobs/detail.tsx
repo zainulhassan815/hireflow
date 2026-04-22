@@ -22,6 +22,7 @@ import {
   matchCandidatesMutation,
   type ApplicationResponse,
 } from "@/api";
+import { CandidateDrawer } from "@/components/jobs/candidate-drawer";
 import { JobCandidateList } from "@/components/jobs/job-candidate-list";
 import {
   AlertDialog,
@@ -72,6 +73,11 @@ export function JobDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  // F44.d.4 — which application is currently being peeked in the
+  // slide-over drawer. Setting to null closes the drawer.
+  const [drawerApp, setDrawerApp] = React.useState<ApplicationResponse | null>(
+    null
+  );
 
   const {
     data: job,
@@ -297,8 +303,25 @@ export function JobDetailPage() {
         <JobCandidateList
           applications={applications}
           onStatusChanged={onStatusChanged}
+          onOpenCandidate={setDrawerApp}
         />
       )}
+
+      {/* Drawer — mirror the freshest application from the list cache
+          so status changes outside the drawer stay in sync while it's
+          open (optimistic updates from the row-level mutation, bulk
+          actions, refetches after "Refresh scores", etc.). */}
+      <CandidateDrawer
+        app={
+          drawerApp
+            ? (applications.find((a) => a.id === drawerApp.id) ?? drawerApp)
+            : null
+        }
+        onOpenChange={(open) => {
+          if (!open) setDrawerApp(null);
+        }}
+        onStatusChanged={onStatusChanged}
+      />
 
       {/* Delete confirm */}
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>

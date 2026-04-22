@@ -11,7 +11,6 @@ import {
   XIcon,
 } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
@@ -83,11 +82,13 @@ const STATUS_LIST: {
 interface JobCandidateListProps {
   applications: ApplicationResponse[];
   onStatusChanged: () => void;
+  onOpenCandidate: (app: ApplicationResponse) => void;
 }
 
 export function JobCandidateList({
   applications,
   onStatusChanged,
+  onOpenCandidate,
 }: JobCandidateListProps) {
   const [search, setSearch] = React.useState("");
   const [scoreTier, setScoreTier] = React.useState<ScoreTier>("all");
@@ -178,14 +179,17 @@ export function JobCandidateList({
   );
 
   const requestSort = (key: SortKey) => {
-    setSortKey((prevKey) => {
-      if (prevKey === key) {
-        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-        return prevKey;
-      }
+    // Don't nest setSortDir inside a setSortKey updater — React calls
+    // updater fns twice in StrictMode and the toggle cancels itself,
+    // which is exactly the "clicking the same column does nothing" bug
+    // this replaces. Compute against the closure-captured current
+    // state; React batches both setStates from the same event.
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
       setSortDir(key === "name" ? "asc" : "desc");
-      return key;
-    });
+    }
   };
 
   const activeFilterCount =
@@ -297,6 +301,7 @@ export function JobCandidateList({
                 selected={selectedIds.has(app.id)}
                 onToggleSelect={() => toggleRow(app.id)}
                 onStatusChanged={onStatusChanged}
+                onOpen={() => onOpenCandidate(app)}
               />
             ))}
             {sorted.length === 0 && (
@@ -635,11 +640,13 @@ function CandidateRow({
   selected,
   onToggleSelect,
   onStatusChanged,
+  onOpen,
 }: {
   app: ApplicationResponse;
   selected: boolean;
   onToggleSelect: () => void;
   onStatusChanged: () => void;
+  onOpen: () => void;
 }) {
   const queryClient = useQueryClient();
   const queryKey = listJobApplicationsQueryKey({
@@ -680,15 +687,29 @@ function CandidateRow({
   const score100 = Math.round((app.score ?? 0) * 100);
   const updated = new Date(app.updated_at);
 
+  // Row-level click opens the drawer — a pointer-only convenience,
+  // not a semantic claim. The keyboard-accessible trigger is the
+  // name button inside the Candidate cell. Interactive children
+  // (checkbox, name button, action buttons) stopPropagation so they
+  // don't bubble back into this handler.
+  const openDrawerFromRowClick = (e: React.MouseEvent) => {
+    if (e.defaultPrevented) return;
+    onOpen();
+  };
+
   return (
     <tr
       className={cn(
-        "group relative border-b last:border-0",
+        "group relative cursor-pointer border-b last:border-0",
         selected ? "bg-primary/5" : "hover:bg-muted/30"
       )}
+      onClick={openDrawerFromRowClick}
     >
-      <td className="relative px-3 py-3 align-middle">
-        {/* Selection marker — Notion-style 2px accent strip */}
+      <td
+        className="relative px-3 py-3 align-middle"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Selection marker — Notion-style 3px accent strip */}
         {selected && (
           <span
             aria-hidden
@@ -706,33 +727,26 @@ function CandidateRow({
           <Avatar name={c.name} email={c.email} />
           <div className="flex min-w-0 flex-col gap-0.5">
             <div className="flex items-center gap-2">
-              {c.source_document_id ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Link
-                        to={`/documents/${c.source_document_id}`}
-                        className="inline-flex items-center gap-1 font-medium hover:underline"
-                      >
-                        {displayName}
-                        <ChevronRightIcon className="size-3 opacity-40" />
-                      </Link>
-                    }
-                  />
-                  <TooltipContent>
-                    Updated {formatDistanceToNow(updated, { addSuffix: true })}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={<span className="font-medium">{displayName}</span>}
-                  />
-                  <TooltipContent>
-                    Updated {formatDistanceToNow(updated, { addSuffix: true })}
-                  </TooltipContent>
-                </Tooltip>
-              )}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpen();
+                      }}
+                      className="focus-visible:ring-ring/50 inline-flex items-center gap-1 rounded text-left font-medium hover:underline focus-visible:ring-2 focus-visible:outline-none"
+                    >
+                      {displayName}
+                      <ChevronRightIcon className="size-3 opacity-40" />
+                    </button>
+                  }
+                />
+                <TooltipContent>
+                  Updated {formatDistanceToNow(updated, { addSuffix: true })}
+                </TooltipContent>
+              </Tooltip>
               {c.email && (
                 <span className="text-muted-foreground truncate text-xs">
                   {c.email}
@@ -772,7 +786,10 @@ function CandidateRow({
       <td className="px-4 py-3 align-middle">
         <StatusLabel status={app.status} />
       </td>
-      <td className="px-4 py-3 text-right align-middle">
+      <td
+        className="px-4 py-3 text-right align-middle"
+        onClick={(e) => e.stopPropagation()}
+      >
         <ActionButtons
           status={app.status}
           onSetStatus={setStatus}
