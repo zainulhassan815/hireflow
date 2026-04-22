@@ -1,5 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeftIcon, DownloadIcon, Loader2Icon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  DownloadIcon,
+  FileTextIcon,
+  Loader2Icon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
@@ -10,19 +15,27 @@ import {
 } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Typography } from "@/components/ui/typography";
 import { DocumentViewer } from "@/components/documents/document-viewer";
 import { SimilarDocuments } from "@/components/documents/similar-documents";
-import { formatDateTime, formatFileSize } from "@/lib/utils";
+import {
+  cn,
+  formatDateTime,
+  formatFileSize,
+  skillHueClass,
+  typeBadgeClass,
+  typeIconClass,
+} from "@/lib/utils";
 
 /**
  * F105.e — focused document page at `/documents/:id`.
  *
- * Same `<DocumentViewer>` as the dialog, but given the whole viewport:
- * viewer occupies the main column with fuller chrome (back button,
- * filename in the header), metadata + similar-docs move to a sticky
- * right sidebar. Pair with the dialog, which stays for quick peeks.
+ * Full-viewport reading surface: header bar on top (back, tinted
+ * glyph, title, download), viewer fills the main column, metadata
+ * + text + similar documents live in a tabbed right rail. Replaces
+ * the old preview Dialog entirely — list row-click and grid card-
+ * click both navigate here.
  */
 export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -71,7 +84,7 @@ export function DocumentDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[60vh] items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <Loader2Icon className="text-muted-foreground size-6 animate-spin" />
       </div>
     );
@@ -79,7 +92,7 @@ export function DocumentDetailPage() {
 
   if (isError || !doc) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
         <Typography variant="h4">Document not found</Typography>
         <Typography variant="muted">
           It may have been deleted, or you don&apos;t have access.
@@ -94,10 +107,27 @@ export function DocumentDetailPage() {
 
   const meta = metadata?.metadata_ as Record<string, unknown> | null;
   const skills: string[] = Array.isArray(meta?.skills) ? meta.skills : [];
+  const docType = doc.document_type ?? "";
+  const statusVariant: "default" | "secondary" | "destructive" | "outline" =
+    doc.status === "failed"
+      ? "destructive"
+      : doc.status === "pending"
+        ? "outline"
+        : "secondary";
+  const statusClass: string | undefined =
+    doc.status === "ready"
+      ? "bg-success text-success-foreground border-transparent"
+      : doc.status === "processing"
+        ? "bg-warning text-warning-foreground border-transparent"
+        : undefined;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-start gap-4">
+    // h-full fills <main>'s content area (app-layout.tsx gives <main>
+    // flex-1 inside SidebarInset). flex-col + flex-1 on the body
+    // lets the viewer + rail grow to the viewport without the outer
+    // main scrolling.
+    <div className="flex h-full flex-col gap-4">
+      <div className="flex items-center gap-3 border-b pb-4">
         <Button
           variant="ghost"
           size="icon"
@@ -106,16 +136,32 @@ export function DocumentDetailPage() {
         >
           <ArrowLeftIcon className="size-4" />
         </Button>
+        <div
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded",
+            typeIconClass[docType] ?? "bg-muted text-muted-foreground"
+          )}
+        >
+          <FileTextIcon className="size-5" />
+        </div>
         <div className="min-w-0 flex-1">
-          <Typography variant="h3" className="truncate">
+          <Typography
+            variant="h5"
+            className="truncate text-base font-semibold tracking-tight"
+          >
             {doc.filename}
           </Typography>
-          <Typography variant="muted" className="text-sm">
+          <Typography
+            variant="muted"
+            className="font-mono text-xs tabular-nums"
+          >
             {formatFileSize(doc.size_bytes)} &middot;{" "}
             {formatDateTime(doc.created_at)}
           </Typography>
         </div>
         <Button
+          variant="outline"
+          size="sm"
           onClick={() => downloadMutation.mutate()}
           disabled={downloadMutation.isPending}
         >
@@ -124,45 +170,83 @@ export function DocumentDetailPage() {
         </Button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-w-0">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="bg-muted/20 flex min-h-0 flex-col rounded-lg border p-3">
           <DocumentViewer
             documentId={doc.id}
             downloadFallback={() => downloadMutation.mutate()}
           />
         </div>
 
-        <aside className="flex flex-col gap-4">
-          <div className="rounded-lg border p-4">
-            <Typography variant="h6" className="mb-3">
-              Details
-            </Typography>
-            <dl className="grid gap-3 text-sm">
+        <Tabs
+          defaultValue="details"
+          className="flex min-h-0 flex-col gap-0 rounded-lg border"
+        >
+          <TabsList className="bg-background shrink-0 justify-start rounded-none rounded-t-lg border-b px-3">
+            <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="text">Text</TabsTrigger>
+            <TabsTrigger value="similar">Similar</TabsTrigger>
+          </TabsList>
+
+          <TabsContent
+            value="details"
+            className="min-h-0 flex-1 overflow-auto px-4 py-4"
+          >
+            <dl className="flex flex-col gap-4 text-sm">
               <div>
-                <dt className="text-muted-foreground text-xs">Type</dt>
-                <dd className="mt-1">
-                  <Badge variant="outline" className="capitalize">
-                    {doc.document_type ?? "unclassified"}
+                <dt className="text-muted-foreground mb-1 text-xs tracking-wide uppercase">
+                  Type
+                </dt>
+                <dd>
+                  <Badge
+                    variant="outline"
+                    className={cn("capitalize", typeBadgeClass[docType])}
+                  >
+                    {docType || "unclassified"}
                   </Badge>
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground text-xs">Status</dt>
-                <dd className="mt-1">
+                <dt className="text-muted-foreground mb-1 text-xs tracking-wide uppercase">
+                  Status
+                </dt>
+                <dd>
                   <Badge
-                    variant={doc.status === "ready" ? "default" : "secondary"}
-                    className="capitalize"
+                    variant={statusVariant}
+                    className={cn("capitalize", statusClass)}
                   >
                     {doc.status}
                   </Badge>
                 </dd>
               </div>
+              <div>
+                <dt className="text-muted-foreground mb-1 text-xs tracking-wide uppercase">
+                  Size
+                </dt>
+                <dd className="font-mono tabular-nums">
+                  {formatFileSize(doc.size_bytes)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground mb-1 text-xs tracking-wide uppercase">
+                  Uploaded
+                </dt>
+                <dd className="tabular-nums">
+                  {formatDateTime(doc.created_at)}
+                </dd>
+              </div>
               {skills.length > 0 && (
                 <div>
-                  <dt className="text-muted-foreground text-xs">Skills</dt>
-                  <dd className="mt-1 flex flex-wrap gap-1">
+                  <dt className="text-muted-foreground mb-1 text-xs tracking-wide uppercase">
+                    Skills
+                  </dt>
+                  <dd className="flex flex-wrap gap-1">
                     {skills.map((s) => (
-                      <Badge key={s} variant="secondary" className="text-xs">
+                      <Badge
+                        key={s}
+                        variant="outline"
+                        className={cn("text-xs", skillHueClass(s))}
+                      >
                         {s}
                       </Badge>
                     ))}
@@ -170,18 +254,42 @@ export function DocumentDetailPage() {
                 </div>
               )}
             </dl>
-          </div>
+          </TabsContent>
 
-          <Separator />
+          <TabsContent
+            value="text"
+            className="min-h-0 flex-1 overflow-auto px-4 py-4"
+          >
+            {metadata?.extracted_text ? (
+              <div className="text-foreground/90 font-mono text-xs leading-relaxed whitespace-pre-wrap">
+                {metadata.extracted_text}
+              </div>
+            ) : doc.status === "processing" || doc.status === "pending" ? (
+              <div className="bg-muted/40 flex h-full min-h-[8rem] items-center justify-center rounded-lg p-6 text-center">
+                <Typography variant="muted">
+                  Document is still being processed.
+                </Typography>
+              </div>
+            ) : (
+              <div className="bg-muted/40 flex h-full min-h-[8rem] items-center justify-center rounded-lg p-6 text-center">
+                <Typography variant="muted">
+                  No extracted text available.
+                </Typography>
+              </div>
+            )}
+          </TabsContent>
 
-          <div>
+          <TabsContent
+            value="similar"
+            className="min-h-0 flex-1 overflow-auto px-4 py-4"
+          >
             <SimilarDocuments
               document={doc}
               enabled
               onSelect={(neighbourId) => navigate(`/documents/${neighbourId}`)}
             />
-          </div>
-        </aside>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

@@ -28,6 +28,26 @@ export function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// F90.d — document-type taxonomy. Shared by the documents table,
+// documents grid, dashboard recent-docs, and the preview Sheet
+// header. cat-3 deliberately skipped to avoid collision with the
+// destructive status badge on failed rows.
+export const typeBadgeClass: Record<string, string> = {
+  resume: "border-cat-1 text-cat-1",
+  report: "border-cat-2 text-cat-2",
+  contract: "border-cat-5 text-cat-5",
+  letter: "border-cat-4 text-cat-4",
+};
+
+// Tinted icon container mirroring the badge taxonomy. 10%-alpha
+// background pairs with solid-hue glyph.
+export const typeIconClass: Record<string, string> = {
+  resume: "bg-cat-1/10 text-cat-1",
+  report: "bg-cat-2/10 text-cat-2",
+  contract: "bg-cat-5/10 text-cat-5",
+  letter: "bg-cat-4/10 text-cat-4",
+};
+
 // Deterministic hash → cat-hue class. Same input always resolves to
 // the same hue across pages, so e.g. "Python" reads identically in
 // the candidates table and on a job card. Case-insensitive so

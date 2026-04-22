@@ -4,8 +4,6 @@ import { useNavigate } from "react-router-dom";
 import {
   CloudUploadIcon,
   DownloadIcon,
-  ExternalLinkIcon,
-  EyeIcon,
   FileIcon,
   FileTextIcon,
   GridIcon,
@@ -57,7 +55,6 @@ import {
 } from "@/components/ui/table";
 import { Typography } from "@/components/ui/typography";
 import { UploadDialog } from "@/components/documents/upload-dialog";
-import { DocumentPreview } from "@/components/documents/document-preview";
 import { uploadFiles } from "@/lib/upload-documents";
 import {
   cn,
@@ -99,9 +96,6 @@ export function DocumentsPage() {
   const [view, setView] = React.useState<"list" | "grid">("list");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [uploadOpen, setUploadOpen] = React.useState(false);
-  const [previewDoc, setPreviewDoc] = React.useState<DocumentResponse | null>(
-    null
-  );
   const [confirmDelete, setConfirmDelete] =
     React.useState<DocumentResponse | null>(null);
   // F91 — page-level drag-and-drop. Track drag depth so the overlay
@@ -473,8 +467,10 @@ export function DocumentsPage() {
                     <TableRow
                       key={doc.id}
                       data-state={isSelected ? "selected" : undefined}
+                      className="hover:bg-muted/40 cursor-pointer"
+                      onClick={() => navigate(`/documents/${doc.id}`)}
                     >
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={() => toggleSelect(doc.id)}
@@ -532,7 +528,7 @@ export function DocumentsPage() {
                           {formatDate(doc.created_at)}
                         </Typography>
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             render={
@@ -542,18 +538,6 @@ export function DocumentsPage() {
                             }
                           />
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => setPreviewDoc(doc)}
-                            >
-                              <EyeIcon className="mr-2 size-4" />
-                              Preview
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => navigate(`/documents/${doc.id}`)}
-                            >
-                              <ExternalLinkIcon className="mr-2 size-4" />
-                              Open
-                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => handleDownload(doc)}
                             >
@@ -587,7 +571,7 @@ export function DocumentsPage() {
               <Card
                 key={doc.id}
                 className="cursor-pointer transition-shadow hover:shadow-md"
-                onClick={() => setPreviewDoc(doc)}
+                onClick={() => navigate(`/documents/${doc.id}`)}
               >
                 <CardContent className="p-4">
                   <div
@@ -650,11 +634,6 @@ export function DocumentsPage() {
         open={uploadOpen}
         onOpenChange={setUploadOpen}
         onUploaded={handleUploaded}
-      />
-      <DocumentPreview
-        document={previewDoc}
-        open={!!previewDoc}
-        onOpenChange={(open) => !open && setPreviewDoc(null)}
       />
       <AlertDialog
         open={!!confirmDelete}

@@ -21,7 +21,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Typography } from "@/components/ui/typography";
-import { cn, formatDate, formatFileSize } from "@/lib/utils";
+import {
+  cn,
+  formatDate,
+  formatFileSize,
+  typeBadgeClass,
+  typeIconClass,
+} from "@/lib/utils";
 import { useAuth } from "@/providers/use-auth";
 
 // F90.d — semantic status badge color map (ready/processing).
@@ -29,23 +35,6 @@ import { useAuth } from "@/providers/use-auth";
 const statusBadgeClass: Record<string, string> = {
   ready: "bg-success text-success-foreground border-transparent",
   processing: "bg-warning text-warning-foreground border-transparent",
-};
-
-// F90.d — categorical doc-type color map. resume → cat-1 (primary
-// category), report → cat-2, contract → cat-5 (avoid cat-3 to dodge
-// destructive-red collision), letter → cat-4.
-const typeBadgeClass: Record<string, string> = {
-  resume: "border-cat-1 text-cat-1",
-  report: "border-cat-2 text-cat-2",
-  contract: "border-cat-5 text-cat-5",
-  letter: "border-cat-4 text-cat-4",
-};
-
-const typeIconClass: Record<string, string> = {
-  resume: "bg-cat-1/10 text-cat-1",
-  report: "bg-cat-2/10 text-cat-2",
-  contract: "bg-cat-5/10 text-cat-5",
-  letter: "bg-cat-4/10 text-cat-4",
 };
 
 export function DashboardPage() {

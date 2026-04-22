@@ -945,38 +945,42 @@ Production-grade interface with attention to detail, accessibility, and delight.
     bindings and theme is a set-once preference; the palette
     path costs three keystrokes and zero collisions.
 
-- [ ] **F108 · Document preview redesign** — today's preview is a
-  `max-w-2xl` Dialog where the viewer is the *last* thing below
-  the fold; users scroll past Document Info + a `<pre>` of raw
-  extracted text to reach the thing they opened the dialog for.
-  The dialog's width chokes multi-page PDFs, its outer scroll
-  container fights the viewer's inner scroll, and Similar
-  Documents is invisible unless you scroll to the bottom. F108
-  replaces it with a full-height Sheet: viewer gets the primary
-  real estate, metadata moves to a right-rail with tabs, one
-  scroll container total. Pairs with the F105 viewer factory
-  (F105.a/b landed) — no changes to the render protocol.
-  - [~] **F108.a** Sheet shell + tabs: Dialog → Sheet (right
-    side, full height). Left 70%: `<DocumentViewer />` fills the
-    pane. Right 30%: tabs — **Details** (type, status, skills,
-    size, uploaded), **Text** (extracted content), **Similar**
-    (neighbours panel). One scroll container per tab; no nested
-    scroll. Tinted header glyph via the F107.a `typeIconClass`
-    so the chrome matches the list row.
-  - [ ] **F108.b** Keyboard navigation: `←` / `→` prev/next
-    inside the current filtered list, `d` download, `⌫` delete
-    (with confirm), `Esc` close. Position indicator in the
-    header (`3 of 47`). Requires passing the ordered list to
-    the preview; today it only gets the one doc. Swap-in-place
-    using the existing `setOverrideDoc` path.
-  - [ ] **F108.c** State + action polish: replace the "Document
-    is being processed..." block with an inline chip next to the
-    status badge (+ subtle polling progress). Demote Close
-    button (Esc + `×` is enough), promote Delete into the action
-    bar. Download stays as a secondary action, not primary — the
-    primary action is *reading the doc* which is already
-    happening. Optional: zoom controls for PDFs if iframe chrome
-    is unreliable on some browsers.
+- [x] **F108 · Document detail page polish** — F105.e landed a
+  dedicated `/documents/:id` page in parallel with an in-flight
+  Sheet-based preview redesign. Two paths to the same "view a
+  doc" intent is worse than one polished path, so F108 deletes
+  the preview Dialog entirely and routes everything to the
+  detail page — row click, grid card click, and the former
+  Preview dropdown item all resolve to `navigate(\`/documents/${id}\`)`.
+  The page itself gets the UX that was planned for the Sheet:
+  tinted header glyph (F107.a `typeIconClass`), tabbed right
+  rail (**Details** / **Text** / **Similar**), pastel skill
+  chips, F90.d semantic status badge, and a full-viewport
+  `h-full` layout so the viewer fills its pane instead of
+  bottoming out at the old 400px floor.
+  - [x] **F108.a** Kill the preview Dialog + polish the detail
+    page. Changes:
+    (1) Delete `components/documents/document-preview.tsx` and
+    all its wiring. The `previewDoc` state and the Preview
+    dropdown item come out of `pages/documents.tsx`. Table row
+    click and grid card click both navigate to the detail page;
+    selection checkbox + actions dropdown `stopPropagation` so
+    they don't trigger the row navigation.
+    (2) Extract `typeBadgeClass` + `typeIconClass` to
+    `lib/utils.ts` — previously duplicated between dashboard.tsx
+    and documents.tsx, now a third consumer (detail.tsx) would
+    have made it a rule-of-three violation.
+    (3) Rewrite `pages/documents/detail.tsx`: header bar with
+    back button + tinted filetype glyph + filename + size·date
+    meta + Download (outline). Body is `grid-cols-[1fr_22rem]`
+    on `lg:` — viewer column fills; right rail is `Tabs` with
+    Details / Text / Similar. Each `TabsContent` owns its own
+    scroll via `min-h-0 flex-1 overflow-auto`. Details dl uses
+    uppercase tracking-wide labels (editorial-serious); skills
+    use `skillHueClass` for cross-page hue consistency; Text
+    tab renders extracted content without a `<pre>` (selection
+    works without the old shenanigans); Similar tab hosts the
+    existing neighbours panel.
 
 ---
 
