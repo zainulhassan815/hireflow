@@ -8,11 +8,28 @@ provider list, since ``accepts()`` returns True unconditionally.
 from __future__ import annotations
 
 from app.adapters.protocols import BlobStorage
-from app.adapters.viewers.protocol import ViewablePayload
+from app.adapters.viewers.protocol import (
+    PreparationResult,
+    StorageGetSync,
+    StoragePutSync,
+    ViewablePayload,
+)
 from app.models import Document
 
 
 class FallbackProvider:
+    def accepts(self, mime_type: str | None) -> bool:
+        return True
+
+    def prepare(
+        self,
+        doc: Document,
+        *,
+        storage_get: StorageGetSync,
+        storage_put: StoragePutSync,
+    ) -> PreparationResult:
+        return PreparationResult(kind="unsupported", key=None)
+
     async def render(self, doc: Document, storage: BlobStorage) -> ViewablePayload:
         return ViewablePayload(
             kind="unsupported",
@@ -22,6 +39,3 @@ class FallbackProvider:
                 "reason": "no_viewer_for_mime",
             },
         )
-
-    def accepts(self, mime_type: str | None) -> bool:
-        return True

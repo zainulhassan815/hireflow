@@ -39,12 +39,14 @@ def extract_document_text(self, document_id: str) -> None:
     from app.adapters.classifiers.registry import get_document_classifier
     from app.adapters.minio_storage import MinioBlobStorage
     from app.adapters.text_extractors import CompositeExtractor
+    from app.adapters.viewers import build_default_registry
     from app.adapters.vision.registry import get_vision_provider
     from app.core.config import settings
     from app.core.db import get_sync_db
     from app.services.embedding_service import EmbeddingService
     from app.services.extraction_service import ExtractionService
     from app.services.sync_candidate_service import SyncCandidateService
+    from app.services.viewer_preparation_service import ViewerPreparationService
 
     storage = MinioBlobStorage(
         endpoint=settings.storage_endpoint,
@@ -105,6 +107,22 @@ def extract_document_text(self, document_id: str) -> None:
         raise self.retry(exc=exc) from exc
     finally:
         session.close()
+
+    # F105.b — viewer-asset prep runs after extraction commits. It uses
+    # its own fresh session so a prep failure can never reverse the
+    # already-committed READY state, and doesn't piggyback on this
+    # task's max_retries=3 (those are for transient extraction
+    # failures, not conversion hiccups).
+    prep_session = get_sync_db()
+    try:
+        ViewerPreparationService(
+            session=prep_session,
+            registry=build_default_registry(),
+            storage_get=storage.get_sync,
+            storage_put=storage.put_sync,
+        ).prepare(UUID(document_id))
+    finally:
+        prep_session.close()
 
 
 # ---------- Gmail sync ----------

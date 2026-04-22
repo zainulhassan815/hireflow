@@ -15,8 +15,10 @@ import pytest
 
 from app.adapters.viewers import (
     FallbackProvider,
+    OfficeToPdfProvider,
     PassthroughImageProvider,
     PassthroughPdfProvider,
+    PreparationResult,
     ViewerRegistry,
     build_default_registry,
 )
@@ -70,9 +72,77 @@ def test_default_registry_dispatch() -> None:
     registry = build_default_registry()
     assert isinstance(registry.for_mime("application/pdf"), PassthroughPdfProvider)
     assert isinstance(registry.for_mime("image/png"), PassthroughImageProvider)
+    assert isinstance(
+        registry.for_mime(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        OfficeToPdfProvider,
+    )
+    assert isinstance(
+        registry.for_mime(
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        ),
+        OfficeToPdfProvider,
+    )
+    # Spreadsheet MIMEs are F105.c's territory — they fall through to
+    # the fallback in F105.b rather than getting converted-to-PDF.
+    assert isinstance(
+        registry.for_mime(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        FallbackProvider,
+    )
     assert isinstance(registry.for_mime("application/zip"), FallbackProvider)
     # None slips through to fallback, not a crash.
     assert isinstance(registry.for_mime(None), FallbackProvider)
+
+
+def test_passthrough_prepare_returns_source_key() -> None:
+    """Passthroughs don't convert — ``prepare`` records source key + kind."""
+    doc = Document(
+        id=uuid4(),
+        owner_id=uuid4(),
+        filename="a.pdf",
+        mime_type="application/pdf",
+        size_bytes=100,
+        storage_key="owner/a.pdf",
+    )
+
+    def _fake_get(_: str) -> bytes:  # unused by passthroughs
+        raise AssertionError("passthrough.prepare must not read source bytes")
+
+    def _fake_put(*_args):  # unused by passthroughs
+        raise AssertionError("passthrough.prepare must not write blobs")
+
+    result = PassthroughPdfProvider().prepare(
+        doc, storage_get=_fake_get, storage_put=_fake_put
+    )
+    assert result == PreparationResult(kind="pdf", key="owner/a.pdf")
+
+    doc.mime_type = "image/png"
+    doc.filename = "a.png"
+    doc.storage_key = "owner/a.png"
+    result = PassthroughImageProvider().prepare(
+        doc, storage_get=_fake_get, storage_put=_fake_put
+    )
+    assert result == PreparationResult(kind="image", key="owner/a.png")
+
+
+def test_fallback_prepare_returns_unsupported() -> None:
+    doc = Document(
+        id=uuid4(),
+        owner_id=uuid4(),
+        filename="x.zip",
+        mime_type="application/zip",
+        size_bytes=10,
+        storage_key="owner/x.zip",
+    )
+    result = FallbackProvider().prepare(
+        doc,
+        storage_get=lambda _: b"",
+        storage_put=lambda *_args: None,  # type: ignore[arg-type]
+    )
+    assert result == PreparationResult(kind="unsupported", key=None)
 
 
 def test_registry_order_is_load_bearing() -> None:

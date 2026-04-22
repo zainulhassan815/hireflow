@@ -96,6 +96,13 @@ class Settings(BaseSettings):
     # File Upload
     max_file_size_mb: int = 10
 
+    # F105.b — LibreOffice headless CLI used by OfficeToPdfProvider.
+    # Override ``libreoffice_bin`` on macOS (``soffice``) or in exotic
+    # installs. Default timeout is generous for small resumes; the
+    # provider aborts hung converters.
+    libreoffice_bin: str = "libreoffice"
+    libreoffice_convert_timeout_seconds: int = 120
+
     # Object storage (MinIO / S3-compatible)
     storage_endpoint: str = "http://localhost:9000"
     storage_access_key: str = "minio"

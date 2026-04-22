@@ -8,11 +8,17 @@ format = one provider file + one registry line. See
 """
 
 from app.adapters.viewers.fallback import FallbackProvider
+from app.adapters.viewers.office import (
+    LibreOfficeError,
+    LibreOfficeUnavailable,
+    OfficeToPdfProvider,
+)
 from app.adapters.viewers.passthrough import (
     PassthroughImageProvider,
     PassthroughPdfProvider,
 )
 from app.adapters.viewers.protocol import (
+    PreparationResult,
     ViewableKind,
     ViewablePayload,
     ViewerProvider,
@@ -21,8 +27,12 @@ from app.adapters.viewers.registry import ViewerRegistry, build_default_registry
 
 __all__ = [
     "FallbackProvider",
+    "LibreOfficeError",
+    "LibreOfficeUnavailable",
+    "OfficeToPdfProvider",
     "PassthroughImageProvider",
     "PassthroughPdfProvider",
+    "PreparationResult",
     "ViewableKind",
     "ViewablePayload",
     "ViewerProvider",

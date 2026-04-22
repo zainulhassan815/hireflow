@@ -802,7 +802,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     PyMuPDF (`pymupdf`) is pure Python wheel. Prefer PyMuPDF for the
     thinner install.
 
-- [~] **F105 · Hybrid document viewer (factory pattern)** (F105.a landed; F105.b–e open) — today a
+- [~] **F105 · Hybrid document viewer (factory pattern)** (F105.a+b landed; F105.c–e open) — today a
   document preview shows metadata + similar docs (F89.c.1) but no
   actual content. We want one entry point (`<DocumentViewer>`) that
   renders anything the corpus holds — PDFs, images, office files,
@@ -836,13 +836,22 @@ Production-grade interface with attention to detail, accessibility, and delight.
     `<DocumentViewer>` component dispatching on `kind`; wired into
     the preview dialog. No schema change (no conversion yet, so no
     second blob to persist). Ships PDFs + images end-to-end.
-  - [ ] **F105.b** `OfficeToPdfProvider`: docx, pptx, odt, odp, rtf,
-    doc, ppt → `pdf` via LibreOffice headless. Adds LibreOffice to
-    the worker Dockerfile and a conversion step to
-    `extract_document_text`. Persists converted asset in MinIO under
-    `viewable/<doc_id>.pdf`; new `documents.viewable_key` +
-    `viewable_kind` columns (Alembic). Frontend renderer unchanged —
-    office files just become `kind: "pdf"`.
+  - [x] **F105.b** `OfficeToPdfProvider`: docx, pptx, odt, odp, rtf,
+    doc, ppt → `pdf` via LibreOffice headless. Protocol gained a
+    `prepare()` hook called from the Celery worker after extraction
+    commits; `ViewerPreparationService` swallows prep failures so a
+    dev machine without LibreOffice still has a working pipeline
+    (office files fall through to the `conversion_pending` download
+    card). Converted asset lives in MinIO at `viewable/<doc_id>.pdf`;
+    new nullable `documents.viewable_kind` + `viewable_key` columns
+    (migration `d82a5f4e9c18`). Backend Dockerfile adds
+    `libreoffice-core` + `-writer` + `-impress` (component subset,
+    not the meta-package — F105.c will append `-calc`). Spreadsheet
+    MIMEs deliberately excluded — reserved for F105.c's real table
+    renderer. Frontend unchanged: office files arrive as
+    `kind: "pdf"` via the F105.a iframe path. 15 new tests incl.
+    back-compat for pre-F105.b PDFs and idempotent re-prepare.
+    Follow-ups: orphan `viewable/` blob cleanup on doc delete.
   - [ ] **F105.c** `SpreadsheetProvider` (xlsx, xls, ods via
     `openpyxl`) + `CsvTsvProvider` (stdlib `csv`) → `table`.
     Frontend `TableRenderer` using TanStack Table (already in repo)

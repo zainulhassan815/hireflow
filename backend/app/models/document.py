@@ -82,6 +82,18 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         String(128), nullable=True
     )
 
+    # F105.b — canonical viewable-asset descriptor, populated after
+    # text extraction by ``ViewerPreparationService``. ``viewable_kind``
+    # matches ``ViewableKind`` (one of ``pdf`` / ``image`` / ``table`` /
+    # ``text`` / ``unsupported``). ``viewable_key`` is the MinIO key
+    # the render path signs (equals ``storage_key`` for passthroughs,
+    # a freshly-written ``viewable/<doc_id>.pdf`` for office conversions,
+    # NULL for unsupported kinds). Both nullable so pre-F105.b rows
+    # stay valid; the render path falls back to ``storage_key`` when
+    # unset.
+    viewable_kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    viewable_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+
     # Read-only Postgres-generated weighted tsvector. Populated automatically
     # by the database on insert/update; never written from the ORM. Powers
     # lexical retrieval via ts_rank_cd in the search service.

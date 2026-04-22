@@ -26,6 +26,8 @@ async def _seed_doc(
     mime_type: str,
     status: DocumentStatus = DocumentStatus.READY,
     filename: str = "file",
+    viewable_kind: str | None = None,
+    viewable_key: str | None = None,
 ) -> Document:
     async with SessionLocal() as session:
         doc = Document(
@@ -35,6 +37,8 @@ async def _seed_doc(
             size_bytes=1024,
             storage_key=f"test/{filename}-{uuid4()}",
             status=status,
+            viewable_kind=viewable_kind,
+            viewable_key=viewable_key,
         )
         session.add(doc)
         await session.commit()
@@ -167,3 +171,81 @@ async def test_admin_bypass_sees_any_document(
     )
     assert response.status_code == 200
     assert response.json()["kind"] == "pdf"
+
+
+# ---------- F105.b: office-file dispatch ----------------------------------
+
+
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+async def test_docx_with_viewable_key_signs_converted_pdf(
+    client, hr_user, hr_token, auth_headers
+) -> None:
+    """Docx with prep complete → frontend sees ``kind="pdf"`` on the converted blob."""
+    viewable_key = f"viewable/{uuid4()}.pdf"
+    doc = await _seed_doc(
+        owner_id=hr_user.id,
+        mime_type=DOCX_MIME,
+        filename="resume.docx",
+        viewable_kind="pdf",
+        viewable_key=viewable_key,
+    )
+
+    response = await client.get(
+        f"/api/documents/{doc.id}/viewable", headers=auth_headers(hr_token)
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "pdf"
+    # Signed URL points at the converted asset, NOT the source docx.
+    assert viewable_key in body["url"]
+    assert doc.storage_key not in body["url"]
+    assert body["meta"]["source_mime_type"] == DOCX_MIME
+
+
+async def test_docx_without_viewable_key_returns_conversion_pending(
+    client, hr_user, hr_token, auth_headers
+) -> None:
+    """Docx seen by the render path before prep completes.
+
+    Expect ``kind="unsupported"`` with ``meta.reason="conversion_pending"``
+    — the frontend renders a download fallback rather than trying to
+    iframe a docx URL that the browser can't render.
+    """
+    doc = await _seed_doc(
+        owner_id=hr_user.id, mime_type=DOCX_MIME, filename="pending.docx"
+    )
+
+    response = await client.get(
+        f"/api/documents/{doc.id}/viewable", headers=auth_headers(hr_token)
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "unsupported"
+    assert body["meta"]["reason"] == "conversion_pending"
+    assert body["meta"]["filename"] == "pending.docx"
+
+
+async def test_pdf_without_viewable_key_still_works(
+    client, hr_user, hr_token, auth_headers
+) -> None:
+    """F105.a-era PDFs (viewable_* NULL) must keep rendering.
+
+    The passthrough provider falls back to ``storage_key`` when
+    ``viewable_key`` is unset. This pins that back-compat so a future
+    "require viewable_key" refactor can't silently break historical
+    rows.
+    """
+    doc = await _seed_doc(owner_id=hr_user.id, mime_type="application/pdf")
+    # Sanity: no prep has happened.
+    assert doc.viewable_key is None
+
+    response = await client.get(
+        f"/api/documents/{doc.id}/viewable", headers=auth_headers(hr_token)
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "pdf"
+    # URL signs the *source* key since no viewable was ever produced.
+    assert doc.storage_key in body["url"]

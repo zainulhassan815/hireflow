@@ -8,6 +8,7 @@ provider placed after it becomes unreachable.
 from __future__ import annotations
 
 from app.adapters.viewers.fallback import FallbackProvider
+from app.adapters.viewers.office import OfficeToPdfProvider
 from app.adapters.viewers.passthrough import (
     PassthroughImageProvider,
     PassthroughPdfProvider,
@@ -43,6 +44,7 @@ def build_default_registry() -> ViewerRegistry:
         [
             PassthroughPdfProvider(),
             PassthroughImageProvider(),
+            OfficeToPdfProvider(),
             # Must stay last — accepts() is unconditional.
             FallbackProvider(),
         ]
