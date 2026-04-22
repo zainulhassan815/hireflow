@@ -196,19 +196,35 @@ Wire existing frontend pages to the real backend API. All pages must follow
   model + `PATCH /applications/{id}/status` endpoint exist, and the
   orphan `resume-viewer.tsx` component has `onShortlist` / `onReject`
   props — but nothing on any page imports it, and HR users have no way
-  to move a candidate from `new` → `shortlisted` in the UI. There's
-  also an authorization hole: `update_application_status` doesn't
-  check that the caller owns the parent job. F93 Kanban is the richer
-  long-term shape; F44 is the MVP that closes the gap today.
+  to move a candidate from `new` → `shortlisted` in the UI. Two auth
+  holes confirmed by pre-F44 survey: `PATCH
+  /applications/{id}/status` AND `GET /candidates/jobs/{id}/applications`
+  both skip the owner check. F93 Kanban is the richer long-term shape;
+  F44 is the MVP that closes the gap today.
   - [ ] **F44.a** Backend: authorize `PATCH /applications/{id}/status`
-    so the caller must own the application's parent job (mirrors the
-    `DocumentService._ensure_access` pattern). Add tests — currently
-    zero coverage on the endpoint.
-  - [ ] **F44.b** Frontend: job detail page (or the existing
-    candidates list) surfaces each matched candidate with status badge
-    + Shortlist / Reject buttons wired to the existing
-    `updateApplicationStatus` mutation. Either wire the orphan
-    `resume-viewer.tsx` or delete it.
+    **and** `GET /candidates/jobs/{id}/applications` so the caller
+    must own the application's parent job (mirrors
+    `DocumentService._ensure_access`). 404 on miss or cross-tenant
+    (hides existence). Admin bypass unchanged. Repository grows
+    `get_with_job(application_id)` that eager-loads the job for the
+    auth check — one round-trip. Tests cover unauth / missing /
+    cross-tenant / admin-bypass / valid-transition for both endpoints.
+  - [ ] **F44.b** Frontend: new job detail page at `/jobs/:id` with
+    header (title, status badge, required skills, edit/delete) and
+    a candidate list body. Each row renders: name (link to source
+    resume via `/documents/:source_document_id` when present), match
+    score as a 0–100 bar with cat-semantic color, status badge, and
+    inline action buttons — `[Shortlist]` / `[Reject]` when status is
+    `new`; `✓ Shortlisted` / `✗ Rejected` + `[Undo]` for already-
+    triaged rows; read-only badge for `interviewed` / `hired` (F93
+    owns those transitions). Optimistic mutation via
+    `onMutate` + `onError` rollback. Filter toolbar: search by
+    name/email/skill, min-score slider, status multi-select.
+    Routing restructure: `/jobs/:id` is the new detail route;
+    `/jobs/:id/edit` stays for the edit form but is now reachable
+    via a button on the detail page, not as the primary jobs-grid
+    destination. `resume-viewer.tsx` deleted outright — the
+    `/documents/:id` page (F105.e) is the single viewer path now.
 
 ---
 

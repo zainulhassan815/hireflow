@@ -15,6 +15,7 @@ from app.models import (
     UserRole,
 )
 from app.repositories.candidate import ApplicationRepository, CandidateRepository
+from app.repositories.job import JobRepository
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,11 @@ class CandidateService:
         self,
         candidates: CandidateRepository,
         applications: ApplicationRepository,
+        jobs: JobRepository,
     ) -> None:
         self._candidates = candidates
         self._applications = applications
+        self._jobs = jobs
 
     async def create_from_document(
         self, document: Document, *, owner: User
@@ -98,6 +101,13 @@ class CandidateService:
         app = await self._applications.get(application_id)
         if app is None:
             raise NotFound("Application not found.")
+        # F44.a — caller must own the parent job (admins bypass). The
+        # Application model auto-loads ``job`` via ``lazy="selectin"``
+        # so this costs no extra round-trip. Matches the Forbidden-on-
+        # cross-tenant convention used by Document/Candidate/Job
+        # services; 403 keeps the failure mode consistent across the
+        # app rather than coining a bespoke 404-for-hiding semantic.
+        self._ensure_job_access(app.job, actor)
         app.status = status
         return await self._applications.save(app)
 
@@ -105,10 +115,17 @@ class CandidateService:
         self,
         job_id: UUID,
         *,
+        actor: User,
         status: ApplicationStatus | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Application]:
+        # F44.a — authorize by fetching the parent job first. Missing
+        # job ⇒ 404 (no applications to leak); wrong owner ⇒ 403.
+        job = await self._jobs.get(job_id)
+        if job is None:
+            raise NotFound("Job not found.")
+        self._ensure_job_access(job, actor)
         return await self._applications.list_by_job(
             job_id, status=status, limit=limit, offset=offset
         )
@@ -133,6 +150,20 @@ class CandidateService:
             return
         if candidate.owner_id != actor.id:
             raise Forbidden("You do not have access to this candidate.")
+
+    @staticmethod
+    def _ensure_job_access(job, actor: User) -> None:
+        """F44.a — applications inherit their parent job's ownership.
+
+        Kept local (not calling ``JobService._ensure_access``) to avoid
+        a service-to-service import; the policy is trivial and unlikely
+        to diverge. If it ever grows (e.g. team-shared jobs), move
+        both into ``app/services/authz.py`` as a shared helper.
+        """
+        if actor.role == UserRole.ADMIN:
+            return
+        if job.owner_id != actor.id:
+            raise Forbidden("You do not have access to this application.")
 
 
 def _first(lst: list | None) -> str | None:

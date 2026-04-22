@@ -375,8 +375,9 @@ def get_job_service(jobs: JobRepositoryDep) -> JobService:
 def get_candidate_service(
     candidates: CandidateRepositoryDep,
     applications: ApplicationRepositoryDep,
+    jobs: JobRepositoryDep,
 ) -> CandidateService:
-    return CandidateService(candidates, applications)
+    return CandidateService(candidates, applications, jobs)
 
 
 def get_matching_service(

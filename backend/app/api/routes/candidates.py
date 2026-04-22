@@ -106,8 +106,16 @@ async def apply_candidate_to_job(
     "/jobs/{job_id}/applications",
     response_model=list[ApplicationResponse],
     summary="List applications for a job",
-    description="Return all applications for a job, sorted by match score descending.",
-    responses={401: {"description": "Not authenticated"}},
+    description=(
+        "Return all applications for a job, sorted by match score "
+        "descending. Owner-scoped: HR users see only their own jobs' "
+        "applications; admins see across owners."
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not the job owner or an admin"},
+        404: {"description": "Job not found"},
+    },
 )
 async def list_job_applications(
     job_id: UUID,
@@ -118,7 +126,7 @@ async def list_job_applications(
     offset: int = Query(0, ge=0),
 ) -> list[ApplicationResponse]:
     apps = await candidates.list_applications_for_job(
-        job_id, status=status, limit=limit, offset=offset
+        job_id, actor=current_user, status=status, limit=limit, offset=offset
     )
     return [ApplicationResponse.model_validate(a) for a in apps]
 
@@ -127,9 +135,14 @@ async def list_job_applications(
     "/applications/{application_id}/status",
     response_model=ApplicationResponse,
     summary="Update application status",
-    description="Shortlist, reject, or advance an application.",
+    description=(
+        "Shortlist, reject, or advance an application. Owner-scoped by "
+        "the parent job: HR users can only change status on applications "
+        "for jobs they own; admins bypass."
+    ),
     responses={
         401: {"description": "Not authenticated"},
+        403: {"description": "Not the parent job's owner or an admin"},
         404: {"description": "Application not found"},
     },
 )
