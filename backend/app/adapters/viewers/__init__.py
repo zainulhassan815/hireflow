@@ -7,6 +7,7 @@ format = one provider file + one registry line. See
 ``docs/features.md`` → F105 and ``docs/dev/F105a-viewer-protocol/``.
 """
 
+from app.adapters.viewers.csv_tsv import CsvTsvProvider
 from app.adapters.viewers.fallback import FallbackProvider
 from app.adapters.viewers.office import (
     LibreOfficeError,
@@ -24,8 +25,10 @@ from app.adapters.viewers.protocol import (
     ViewerProvider,
 )
 from app.adapters.viewers.registry import ViewerRegistry, build_default_registry
+from app.adapters.viewers.spreadsheet import SpreadsheetProvider
 
 __all__ = [
+    "CsvTsvProvider",
     "FallbackProvider",
     "LibreOfficeError",
     "LibreOfficeUnavailable",
@@ -33,6 +36,7 @@ __all__ = [
     "PassthroughImageProvider",
     "PassthroughPdfProvider",
     "PreparationResult",
+    "SpreadsheetProvider",
     "ViewableKind",
     "ViewablePayload",
     "ViewerProvider",

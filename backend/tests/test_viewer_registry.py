@@ -14,11 +14,13 @@ from uuid import uuid4
 import pytest
 
 from app.adapters.viewers import (
+    CsvTsvProvider,
     FallbackProvider,
     OfficeToPdfProvider,
     PassthroughImageProvider,
     PassthroughPdfProvider,
     PreparationResult,
+    SpreadsheetProvider,
     ViewerRegistry,
     build_default_registry,
 )
@@ -84,14 +86,18 @@ def test_default_registry_dispatch() -> None:
         ),
         OfficeToPdfProvider,
     )
-    # Spreadsheet MIMEs are F105.c's territory — they fall through to
-    # the fallback in F105.b rather than getting converted-to-PDF.
+    # F105.c — spreadsheet MIMEs now hit the real spreadsheet provider,
+    # not fallback.
     assert isinstance(
         registry.for_mime(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ),
-        FallbackProvider,
+        SpreadsheetProvider,
     )
+    # CSV / TSV also F105.c — text/csv is NOT owned by the text provider
+    # (F105.d) because a table renderer is better UX than a raw text dump.
+    assert isinstance(registry.for_mime("text/csv"), CsvTsvProvider)
+    assert isinstance(registry.for_mime("text/tab-separated-values"), CsvTsvProvider)
     assert isinstance(registry.for_mime("application/zip"), FallbackProvider)
     # None slips through to fallback, not a crash.
     assert isinstance(registry.for_mime(None), FallbackProvider)

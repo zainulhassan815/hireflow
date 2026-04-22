@@ -3,6 +3,7 @@ import { DownloadIcon, FileTextIcon, Loader2Icon } from "lucide-react";
 
 import { getDocumentViewableOptions } from "@/api";
 import type { ViewablePayloadResponse } from "@/api";
+import { TableRenderer } from "@/components/documents/table-renderer";
 import { Typography } from "@/components/ui/typography";
 
 /**
@@ -61,8 +62,9 @@ function PayloadView({
     case "image":
       return <ImageView url={payload.url ?? ""} />;
     case "table":
+      return <TableRenderer data={payload.data} />;
     case "text":
-      // F105.c / F105.d ship real renderers for these. Until then,
+      // F105.d ships a real renderer for text. Until then,
       // the fallback view is honest about it — no fake "coming soon"
       // chrome, just the download affordance.
       return (

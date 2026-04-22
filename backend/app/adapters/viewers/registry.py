@@ -7,6 +7,7 @@ provider placed after it becomes unreachable.
 
 from __future__ import annotations
 
+from app.adapters.viewers.csv_tsv import CsvTsvProvider
 from app.adapters.viewers.fallback import FallbackProvider
 from app.adapters.viewers.office import OfficeToPdfProvider
 from app.adapters.viewers.passthrough import (
@@ -14,6 +15,7 @@ from app.adapters.viewers.passthrough import (
     PassthroughPdfProvider,
 )
 from app.adapters.viewers.protocol import ViewerProvider
+from app.adapters.viewers.spreadsheet import SpreadsheetProvider
 
 
 class ViewerRegistry:
@@ -44,6 +46,8 @@ def build_default_registry() -> ViewerRegistry:
         [
             PassthroughPdfProvider(),
             PassthroughImageProvider(),
+            SpreadsheetProvider(),
+            CsvTsvProvider(),
             OfficeToPdfProvider(),
             # Must stay last — accepts() is unconditional.
             FallbackProvider(),
