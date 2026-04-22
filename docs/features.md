@@ -315,9 +315,22 @@ Wire existing frontend pages to the real backend API. All pages must follow
     contribution, and a mini-bar per component. Same breakdown
     renders inline inside the drawer's match-score section (no
     hover needed there — the drawer has the space for it).
-  - [ ] **F44.d.7** Bulk-status endpoint: `PATCH /applications/
-    bulk-status` replacing the N-PATCH fan-out. Enables >50-row
-    selections, single DB transaction, cleaner rollback.
+  - [x] **F44.d.7** Bulk-status endpoint: `PATCH /candidates/
+    applications/bulk-status` accepts `{application_ids, status}` and
+    applies in a single transaction (min 1, max 200 ids;
+    `BulkUpdateApplicationStatusRequest`). All-or-nothing semantics —
+    if any id is missing or cross-tenant, the whole batch rejects
+    (404 / 403) and nothing is mutated. Request dedupes duplicate
+    ids; response preserves request order. Owner scope is enforced
+    per-application via `app.job.owner_id` before any write.
+    `CandidateService.bulk_update_application_status` +
+    `ApplicationRepository.list_by_ids` / `save_many` (single
+    commit). Frontend `BulkActionBar` now fires one call instead of
+    the previous `Promise.allSettled` fan-out — rollback is simpler
+    (either the whole request failed or it didn't). 7 new tests
+    covering unauth / empty list / missing id / owner happy path /
+    cross-tenant 403 / admin bypass / request dedup. Full suite 460
+    passing.
   - [ ] **F44.d.8** Saved filter views: "High-score shortlist",
     "Not yet triaged", "This week's decisions". Stored in
     localStorage; no backend change.

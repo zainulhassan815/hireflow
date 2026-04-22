@@ -316,3 +316,167 @@ async def test_list_applications_status_filter_is_still_honored(
     body = response.json()
     assert len(body) == 2
     assert all(row["status"] == "shortlisted" for row in body)
+
+
+# ---------- F44.d.7 — bulk status endpoint ----------
+
+
+async def _seed_three_apps(*, owner_id: UUID, job_id: UUID) -> list[Application]:
+    apps: list[Application] = []
+    async with SessionLocal() as session:
+        for _ in range(3):
+            candidate = Candidate(
+                owner_id=owner_id,
+                name=f"Cand-{uuid4()}",
+                email=f"c-{uuid4()}@x.com",
+            )
+            session.add(candidate)
+            await session.flush()
+            app = Application(
+                candidate_id=candidate.id,
+                job_id=job_id,
+                status=ApplicationStatus.NEW,
+                score=0.5,
+            )
+            session.add(app)
+            apps.append(app)
+        await session.commit()
+        for app in apps:
+            await session.refresh(app)
+    return apps
+
+
+async def test_bulk_update_unauthenticated(client) -> None:
+    response = await client.patch(
+        "/api/candidates/applications/bulk-status",
+        json={"application_ids": [str(uuid4())], "status": "shortlisted"},
+    )
+    assert response.status_code == 401
+
+
+async def test_bulk_update_empty_list_422(client, hr_token, auth_headers) -> None:
+    response = await client.patch(
+        "/api/candidates/applications/bulk-status",
+        json={"application_ids": [], "status": "shortlisted"},
+        headers=auth_headers(hr_token),
+    )
+    # min_length=1 on the schema — pydantic rejects at the edge.
+    assert response.status_code == 422
+
+
+async def test_bulk_update_missing_application_404(
+    client, hr_token, hr_user, auth_headers
+) -> None:
+    job = await _create_job(client, hr_token, auth_headers, "Job for bulk")
+    apps = await _seed_three_apps(owner_id=hr_user.id, job_id=UUID(job["id"]))
+    # Mix of real + bogus ids → whole batch rejects.
+    bogus = uuid4()
+
+    response = await client.patch(
+        "/api/candidates/applications/bulk-status",
+        json={
+            "application_ids": [str(apps[0].id), str(bogus)],
+            "status": "shortlisted",
+        },
+        headers=auth_headers(hr_token),
+    )
+    assert response.status_code == 404
+
+    # Nothing was flipped — atomicity guarantee.
+    async with SessionLocal() as session:
+        refreshed = await session.get(Application, apps[0].id)
+        assert refreshed.status is ApplicationStatus.NEW
+
+
+async def test_owner_can_bulk_shortlist(
+    client, hr_token, hr_user, auth_headers
+) -> None:
+    job = await _create_job(client, hr_token, auth_headers, "Bulk shortlist")
+    apps = await _seed_three_apps(owner_id=hr_user.id, job_id=UUID(job["id"]))
+
+    response = await client.patch(
+        "/api/candidates/applications/bulk-status",
+        json={
+            "application_ids": [str(a.id) for a in apps],
+            "status": "shortlisted",
+        },
+        headers=auth_headers(hr_token),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert len(body["updated"]) == 3
+    assert all(row["status"] == "shortlisted" for row in body["updated"])
+    # Order preserved from request.
+    assert [row["id"] for row in body["updated"]] == [str(a.id) for a in apps]
+
+    # DB reflects the change for every row.
+    async with SessionLocal() as session:
+        for app in apps:
+            refreshed = await session.get(Application, app.id)
+            assert refreshed.status is ApplicationStatus.SHORTLISTED
+
+
+async def test_other_hr_cannot_bulk_update(
+    client, hr_token, hr_user, auth_headers
+) -> None:
+    job = await _create_job(client, hr_token, auth_headers, "HR A's bulk job")
+    apps = await _seed_three_apps(owner_id=hr_user.id, job_id=UUID(job["id"]))
+
+    token_b = await _second_hr_token(client)
+
+    response = await client.patch(
+        "/api/candidates/applications/bulk-status",
+        json={
+            "application_ids": [str(a.id) for a in apps],
+            "status": "shortlisted",
+        },
+        headers=auth_headers(token_b),
+    )
+    assert response.status_code == 403
+
+    # No partial mutation.
+    async with SessionLocal() as session:
+        for app in apps:
+            refreshed = await session.get(Application, app.id)
+            assert refreshed.status is ApplicationStatus.NEW
+
+
+async def test_admin_can_bulk_update_any_job(
+    client, hr_token, hr_user, admin_token, auth_headers
+) -> None:
+    job = await _create_job(client, hr_token, auth_headers, "Admin bulk bypass")
+    apps = await _seed_three_apps(owner_id=hr_user.id, job_id=UUID(job["id"]))
+
+    response = await client.patch(
+        "/api/candidates/applications/bulk-status",
+        json={
+            "application_ids": [str(a.id) for a in apps],
+            "status": "rejected",
+        },
+        headers=auth_headers(admin_token),
+    )
+    assert response.status_code == 200
+    assert all(row["status"] == "rejected" for row in response.json()["updated"])
+
+
+async def test_bulk_update_dedupes_request(
+    client, hr_token, hr_user, auth_headers
+) -> None:
+    """Duplicate ids in the request collapse to one DB row. Response
+    keeps one entry per unique id in request order."""
+    job = await _create_job(client, hr_token, auth_headers, "Dedup bulk")
+    apps = await _seed_three_apps(owner_id=hr_user.id, job_id=UUID(job["id"]))
+    duplicated = [str(apps[0].id), str(apps[0].id), str(apps[1].id)]
+
+    response = await client.patch(
+        "/api/candidates/applications/bulk-status",
+        json={"application_ids": duplicated, "status": "shortlisted"},
+        headers=auth_headers(hr_token),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["updated"]) == 2
+    assert [row["id"] for row in body["updated"]] == [
+        str(apps[0].id),
+        str(apps[1].id),
+    ]

@@ -119,3 +119,33 @@ class UpdateApplicationStatusRequest(BaseModel):
     """Update an application's status."""
 
     status: ApplicationStatus = Field(..., description="New application status")
+
+
+class BulkUpdateApplicationStatusRequest(BaseModel):
+    """Apply the same status to a batch of applications (F44.d.7)."""
+
+    application_ids: list[UUID] = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description=(
+            "Applications to update. Duplicates are de-duplicated; order "
+            "is preserved in the response."
+        ),
+    )
+    status: ApplicationStatus = Field(
+        ..., description="New status to apply to every application in the batch."
+    )
+
+
+class BulkUpdateApplicationStatusResponse(BaseModel):
+    """Result of a bulk status change (F44.d.7)."""
+
+    updated: list[ApplicationResponse] = Field(
+        ...,
+        description=(
+            "Applications after the status change, in request order. "
+            "All-or-nothing: if any id is missing or cross-tenant, "
+            "nothing is mutated and the request returns 403 / 404."
+        ),
+    )

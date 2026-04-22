@@ -111,6 +111,41 @@ class CandidateService:
         app.status = status
         return await self._applications.save(app)
 
+    async def bulk_update_application_status(
+        self,
+        application_ids: list[UUID],
+        status: ApplicationStatus,
+        *,
+        actor: User,
+    ) -> list[Application]:
+        """F44.d.7 — apply ``status`` to a batch of applications atomically.
+
+        All-or-nothing: if any application is missing or owned by a
+        different user, the whole batch rejects (404 / 403). Frontend
+        only selects from rows the caller can already see, so a cross-
+        tenant id in the batch is an attack surface, not a valid UX
+        path — fail loud rather than silently skip.
+
+        Dedup is handled by passing ids through a set; the response
+        preserves the input order so the frontend can map back easily.
+        """
+        if not application_ids:
+            return []
+
+        unique_ids = list(dict.fromkeys(application_ids))
+        apps = await self._applications.list_by_ids(unique_ids)
+        if len(apps) != len(unique_ids):
+            raise NotFound("One or more applications not found.")
+
+        # Authorize every parent job. Checking here (before any write)
+        # means a 403 doesn't leave a partial mutation behind.
+        for app in apps:
+            self._ensure_job_access(app.job, actor)
+
+        for app in apps:
+            app.status = status
+        return await self._applications.save_many(apps)
+
     async def list_applications_for_job(
         self,
         job_id: UUID,

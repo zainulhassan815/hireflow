@@ -15,8 +15,8 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import {
+  bulkUpdateApplicationStatus,
   listJobApplicationsQueryKey,
-  updateApplicationStatus,
   updateApplicationStatusMutation,
   type ApplicationResponse,
   type ApplicationStatus,
@@ -779,6 +779,10 @@ function BulkActionBar({
       a.status === "rejected"
   );
 
+  // F44.d.7 — single round-trip via PATCH /applications/bulk-status.
+  // Replaces the earlier N-PATCH fan-out. Server-side transaction
+  // means "all changes apply or none do" without the frontend
+  // needing to reconcile partial success.
   const applyBulk = async (status: ApplicationStatus) => {
     if (actionable.length === 0) return;
     setPending(true);
@@ -791,23 +795,16 @@ function BulkActionBar({
       (old ?? []).map((a) => (targetIds.has(a.id) ? { ...a, status } : a))
     );
 
-    const results = await Promise.allSettled(
-      actionable.map((a) =>
-        updateApplicationStatus({
-          path: { application_id: a.id },
-          body: { status },
-        })
-      )
-    );
-    const failed = results.filter((r) => r.status === "rejected").length;
+    const { error } = await bulkUpdateApplicationStatus({
+      body: {
+        application_ids: actionable.map((a) => a.id),
+        status,
+      },
+    });
     setPending(false);
-    if (failed > 0) {
+    if (error) {
       if (previous) queryClient.setQueryData(queryKey, previous);
-      toast.error(
-        failed === actionable.length
-          ? "Bulk change failed; rolled back."
-          : `${failed} of ${actionable.length} changes failed; rolled back.`
-      );
+      toast.error("Bulk change failed; rolled back.");
       return;
     }
     toast.success(

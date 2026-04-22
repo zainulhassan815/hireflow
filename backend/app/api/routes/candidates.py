@@ -8,6 +8,8 @@ from app.api.deps import CandidateServiceDep, CurrentUser, DocumentServiceDep
 from app.models.candidate import ApplicationStatus
 from app.schemas.candidate import (
     ApplicationResponse,
+    BulkUpdateApplicationStatusRequest,
+    BulkUpdateApplicationStatusResponse,
     CandidateResponse,
     UpdateApplicationStatusRequest,
 )
@@ -156,3 +158,38 @@ async def update_application_status(
         application_id, request.status, actor=current_user
     )
     return ApplicationResponse.model_validate(app)
+
+
+@router.patch(
+    "/applications/bulk-status",
+    response_model=BulkUpdateApplicationStatusResponse,
+    summary="Bulk-update application status",
+    description=(
+        "Apply the same status to a batch of applications in a single "
+        "transaction. All-or-nothing: if any application is missing or "
+        "cross-tenant, nothing is mutated and the request returns 403 / "
+        "404. Response preserves request order (duplicates removed)."
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not the parent job's owner or an admin"},
+        404: {"description": "One or more applications not found"},
+    },
+)
+async def bulk_update_application_status(
+    request: BulkUpdateApplicationStatusRequest,
+    current_user: CurrentUser,
+    candidates: CandidateServiceDep,
+) -> BulkUpdateApplicationStatusResponse:
+    apps = await candidates.bulk_update_application_status(
+        request.application_ids, request.status, actor=current_user
+    )
+    # Preserve request order: the service returns apps in the
+    # dedup'd-input order, which matches the unique ids we asked for.
+    by_id = {app.id: app for app in apps}
+    ordered = [
+        ApplicationResponse.model_validate(by_id[aid])
+        for aid in dict.fromkeys(request.application_ids)
+        if aid in by_id
+    ]
+    return BulkUpdateApplicationStatusResponse(updated=ordered)
