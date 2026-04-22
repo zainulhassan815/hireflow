@@ -3,11 +3,13 @@ import { formatDistanceToNow } from "date-fns";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  BookmarkIcon,
   CheckIcon,
   ChevronRightIcon,
   FilterIcon,
   KeyboardIcon,
   SearchIcon,
+  Trash2Icon,
   UndoIcon,
   XIcon,
 } from "lucide-react";
@@ -68,6 +70,45 @@ type ScoreTier = "all" | "60" | "75" | "90";
 type SortKey = "score" | "name";
 type SortDir = "asc" | "desc";
 
+interface SavedView {
+  id: string;
+  name: string;
+  search: string;
+  scoreTier: ScoreTier;
+  statusSet: StatusFilter[];
+  sortKey: SortKey;
+  sortDir: SortDir;
+}
+
+// F44.d.8 — views are generic recipes (e.g. "High-score shortlist"),
+// not per-job, so keep a single global list. One-way migration if
+// they ever need per-user persistence: flip to a backend table,
+// seed from localStorage.
+const SAVED_VIEWS_KEY = "hireflow.candidate-saved-views";
+
+function loadSavedViews(): SavedView[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SAVED_VIEWS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as SavedView[];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedViews(views: SavedView[]) {
+  try {
+    window.localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(views));
+  } catch {
+    // localStorage can throw in Safari private mode or when quota
+    // is exhausted. Saving views is an optional affordance; swallow
+    // rather than blocking the user.
+  }
+}
+
 const SCORE_TIERS: { value: ScoreTier; label: string; threshold: number }[] = [
   { value: "all", label: "All", threshold: 0 },
   { value: "60", label: "≥ 60%", threshold: 60 },
@@ -113,6 +154,48 @@ export function JobCandidateList({
   const [focusedId, setFocusedId] = React.useState<string | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const rowRefs = React.useRef(new Map<string, HTMLTableRowElement>());
+  // F44.d.8 — saved views in localStorage; shared across jobs so
+  // recipes like "High-score shortlist" don't have to be recreated.
+  const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
+    loadSavedViews()
+  );
+
+  const applyView = React.useCallback((view: SavedView) => {
+    setSearch(view.search);
+    setScoreTier(view.scoreTier);
+    setStatusSet(new Set(view.statusSet));
+    setSortKey(view.sortKey);
+    setSortDir(view.sortDir);
+  }, []);
+
+  const saveCurrentView = React.useCallback(
+    (name: string) => {
+      const view: SavedView = {
+        id: crypto.randomUUID(),
+        name,
+        search,
+        scoreTier,
+        statusSet: Array.from(statusSet),
+        sortKey,
+        sortDir,
+      };
+      setSavedViews((prev) => {
+        const next = [...prev, view];
+        persistSavedViews(next);
+        return next;
+      });
+      toast.success(`Saved view "${name}"`);
+    },
+    [search, scoreTier, statusSet, sortKey, sortDir]
+  );
+
+  const deleteView = React.useCallback((id: string) => {
+    setSavedViews((prev) => {
+      const next = prev.filter((v) => v.id !== id);
+      persistSavedViews(next);
+      return next;
+    });
+  }, []);
 
   const scoreThreshold =
     SCORE_TIERS.find((t) => t.value === scoreTier)?.threshold ?? 0;
@@ -386,6 +469,10 @@ export function JobCandidateList({
         activeFilterCount={activeFilterCount}
         totalCount={applications.length}
         filteredCount={sorted.length}
+        savedViews={savedViews}
+        onApplyView={applyView}
+        onSaveView={saveCurrentView}
+        onDeleteView={deleteView}
       />
 
       {activeFilterCount > 0 && (
@@ -540,6 +627,10 @@ function FilterRow({
   activeFilterCount,
   totalCount,
   filteredCount,
+  savedViews,
+  onApplyView,
+  onSaveView,
+  onDeleteView,
 }: {
   search: string;
   onSearch: (v: string) => void;
@@ -551,6 +642,10 @@ function FilterRow({
   activeFilterCount: number;
   totalCount: number;
   filteredCount: number;
+  savedViews: SavedView[];
+  onApplyView: (view: SavedView) => void;
+  onSaveView: (name: string) => void;
+  onDeleteView: (id: string) => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -648,6 +743,14 @@ function FilterRow({
         </PopoverContent>
       </Popover>
 
+      <SavedViewsButton
+        views={savedViews}
+        onApply={onApplyView}
+        onSave={onSaveView}
+        onDelete={onDeleteView}
+        canSave={activeFilterCount > 0 || search.length > 0}
+      />
+
       <span className="text-muted-foreground ml-auto text-xs tabular-nums">
         {filteredCount === totalCount
           ? `${totalCount} candidate${totalCount === 1 ? "" : "s"}`
@@ -656,6 +759,130 @@ function FilterRow({
 
       <KeyboardHint />
     </div>
+  );
+}
+
+function SavedViewsButton({
+  views,
+  onApply,
+  onSave,
+  onDelete,
+  canSave,
+}: {
+  views: SavedView[];
+  onApply: (view: SavedView) => void;
+  onSave: (name: string) => void;
+  onDelete: (id: string) => void;
+  canSave: boolean;
+}) {
+  const [name, setName] = React.useState("");
+  const [open, setOpen] = React.useState(false);
+
+  const trySave = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onSave(trimmed);
+    setName("");
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <Button variant="outline" size="sm">
+            <BookmarkIcon className="size-4" data-icon="inline-start" />
+            Views
+            {views.length > 0 && (
+              <span className="bg-muted text-muted-foreground ml-1 rounded-full px-1.5 text-[10px] leading-4 font-semibold">
+                {views.length}
+              </span>
+            )}
+          </Button>
+        }
+      />
+      <PopoverContent align="end" className="w-80">
+        <div className="flex flex-col gap-3">
+          <Typography
+            variant="small"
+            className="text-muted-foreground text-xs font-medium tracking-wide uppercase"
+          >
+            Saved views
+          </Typography>
+
+          {views.length === 0 ? (
+            <Typography
+              variant="muted"
+              className="bg-muted/40 rounded-md p-3 text-center text-xs"
+            >
+              No saved views yet. Set some filters and save the current view
+              below.
+            </Typography>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {views.map((view) => (
+                <div
+                  key={view.id}
+                  className="hover:bg-muted/50 group flex items-center gap-2 rounded-md px-2 py-1.5"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onApply(view);
+                      setOpen(false);
+                    }}
+                    className="flex-1 truncate text-left text-sm"
+                  >
+                    {view.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(view.id)}
+                    aria-label={`Delete ${view.name}`}
+                    className="text-muted-foreground hover:text-destructive rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    <Trash2Icon className="size-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="border-t pt-3">
+            <Typography
+              variant="muted"
+              className="mb-1.5 block text-xs font-medium"
+            >
+              Save current view
+            </Typography>
+            <div className="flex gap-1">
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    trySave();
+                  }
+                }}
+                placeholder={
+                  canSave ? "e.g. High-score shortlist" : "Set filters first"
+                }
+                disabled={!canSave}
+                className="h-8 text-xs"
+              />
+              <Button
+                size="sm"
+                onClick={trySave}
+                disabled={!canSave || !name.trim()}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

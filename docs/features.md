@@ -331,9 +331,21 @@ Wire existing frontend pages to the real backend API. All pages must follow
     covering unauth / empty list / missing id / owner happy path /
     cross-tenant 403 / admin bypass / request dedup. Full suite 460
     passing.
-  - [ ] **F44.d.8** Saved filter views: "High-score shortlist",
-    "Not yet triaged", "This week's decisions". Stored in
-    localStorage; no backend change.
+  - [x] **F44.d.8** Saved filter views stored in
+    `hireflow.candidate-saved-views` localStorage — shared across
+    jobs because the recipes (≥75% score + status=new, etc.) are
+    job-agnostic. A new "Views" popover sits next to Filter and
+    lists saved views with click-to-apply + hover-delete. The
+    footer has a "Save current view" input that's disabled when
+    no filter is active (forces users to set criteria first).
+    Save / delete persist synchronously via
+    `window.localStorage.setItem`; quota / Safari-private throws
+    swallow silently so the UI stays functional. View shape
+    (`{id, name, search, scoreTier, statusSet, sortKey, sortDir}`)
+    versionless today; if the shape ever evolves, migrate by
+    skipping views that don't decode cleanly. Migration to
+    backend persistence is a flip-and-backfill — no per-user
+    complications yet.
   - [ ] **F44.d.9** Row virtualization (pairs with F95). Flat
     performance past 500 rows. Not needed today.
   - [ ] **F44.d.10** Activity trail per application: expandable
