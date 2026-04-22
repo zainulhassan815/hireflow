@@ -4,6 +4,7 @@ import { DownloadIcon, FileTextIcon, Loader2Icon } from "lucide-react";
 import { getDocumentViewableOptions } from "@/api";
 import type { ViewablePayloadResponse } from "@/api";
 import { TableRenderer } from "@/components/documents/table-renderer";
+import { TextRenderer } from "@/components/documents/text-renderer";
 import { Typography } from "@/components/ui/typography";
 
 /**
@@ -64,16 +65,7 @@ function PayloadView({
     case "table":
       return <TableRenderer data={payload.data} />;
     case "text":
-      // F105.d ships a real renderer for text. Until then,
-      // the fallback view is honest about it — no fake "coming soon"
-      // chrome, just the download affordance.
-      return (
-        <UnsupportedView
-          reason="no_viewer_for_mime"
-          meta={payload.meta}
-          downloadFallback={downloadFallback}
-        />
-      );
+      return <TextRenderer data={payload.data} />;
     case "unsupported":
     default:
       return (

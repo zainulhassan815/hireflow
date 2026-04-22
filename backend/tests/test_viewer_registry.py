@@ -21,6 +21,7 @@ from app.adapters.viewers import (
     PassthroughPdfProvider,
     PreparationResult,
     SpreadsheetProvider,
+    TextProvider,
     ViewerRegistry,
     build_default_registry,
 )
@@ -98,6 +99,10 @@ def test_default_registry_dispatch() -> None:
     # (F105.d) because a table renderer is better UX than a raw text dump.
     assert isinstance(registry.for_mime("text/csv"), CsvTsvProvider)
     assert isinstance(registry.for_mime("text/tab-separated-values"), CsvTsvProvider)
+    # F105.d — text/plain and text/markdown hit the text provider.
+    assert isinstance(registry.for_mime("text/plain"), TextProvider)
+    assert isinstance(registry.for_mime("text/markdown"), TextProvider)
+    assert isinstance(registry.for_mime("application/x-log"), TextProvider)
     assert isinstance(registry.for_mime("application/zip"), FallbackProvider)
     # None slips through to fallback, not a crash.
     assert isinstance(registry.for_mime(None), FallbackProvider)

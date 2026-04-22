@@ -26,6 +26,7 @@ from app.adapters.viewers.protocol import (
 )
 from app.adapters.viewers.registry import ViewerRegistry, build_default_registry
 from app.adapters.viewers.spreadsheet import SpreadsheetProvider
+from app.adapters.viewers.text import TextProvider
 
 __all__ = [
     "CsvTsvProvider",
@@ -37,6 +38,7 @@ __all__ = [
     "PassthroughPdfProvider",
     "PreparationResult",
     "SpreadsheetProvider",
+    "TextProvider",
     "ViewableKind",
     "ViewablePayload",
     "ViewerProvider",

@@ -16,6 +16,7 @@ from app.adapters.viewers.passthrough import (
 )
 from app.adapters.viewers.protocol import ViewerProvider
 from app.adapters.viewers.spreadsheet import SpreadsheetProvider
+from app.adapters.viewers.text import TextProvider
 
 
 class ViewerRegistry:
@@ -48,6 +49,7 @@ def build_default_registry() -> ViewerRegistry:
             PassthroughImageProvider(),
             SpreadsheetProvider(),
             CsvTsvProvider(),
+            TextProvider(),
             OfficeToPdfProvider(),
             # Must stay last — accepts() is unconditional.
             FallbackProvider(),
