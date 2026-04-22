@@ -178,7 +178,15 @@ export function DocumentDetailPage() {
         </Button>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      {/* grid-rows-[1fr] is load-bearing — without it the grid's
+          default `auto` rows stretch to the aside's intrinsic
+          content height (tall when the Similar accordion is
+          expanded), which overflows the flex-1 min-h-0 container
+          and makes <main> scroll the whole page. With 1fr the row
+          is clamped to the remaining flex height, so the aside's
+          overflow-y-auto scrolls internally and the viewer stays
+          pinned. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[1fr] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         {/* Main column: Document | Text tabs. keepMounted keeps the
             viewer iframe alive when the user peeks at Text, so
             returning to Document doesn't re-fetch the signed URL or
