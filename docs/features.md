@@ -289,10 +289,18 @@ Wire existing frontend pages to the real backend API. All pages must follow
     render, so bulk actions / refresh-scores / row-level flips
     stay in sync while the drawer is open. Keyboard row-to-row
     nav (`j/k`) is separate — that's F44.d.5.
-  - [ ] **F44.d.5** Keyboard shortcuts: `j/k` row nav, `s`
-    shortlist, `r` reject, `u` undo, `x` clear selection, `/`
-    focus search, `Enter` open drawer. Pairs with F102 command
-    palette; hint overlay via `?`.
+  - [x] **F44.d.5** Keyboard shortcuts: `j/k` (or `↓/↑`) navigate
+    rows; `Enter` opens drawer for the focused row; `Esc` closes
+    drawer or blurs search; `s/r/u` shortlist/reject/undo on the
+    focused or drawer-current row; `x` toggles selection; `/`
+    focuses the search input. Inside the drawer `j/k` advances to
+    the next/previous candidate without closing — drawer stays
+    open, body re-renders against the new row. Drawer state was
+    lifted into `JobCandidateList` so the keyboard handler and
+    drawer share the sorted/filtered view. A small `⌨` popover
+    in the filter bar surfaces the shortcut list (Kbd primitive).
+    Shortcuts no-op when any modifier is held or when an input is
+    focused, so native browser shortcuts and typing stay intact.
   - [ ] **F44.d.6** Match-score breakdown popover: hovering the
     bar pops `MatchBreakdown` (skills / experience / vector
     split + one-line rationale). Extend `ApplicationResponse`

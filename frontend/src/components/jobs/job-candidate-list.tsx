@@ -6,6 +6,7 @@ import {
   CheckIcon,
   ChevronRightIcon,
   FilterIcon,
+  KeyboardIcon,
   SearchIcon,
   UndoIcon,
   XIcon,
@@ -20,10 +21,12 @@ import {
   type ApplicationResponse,
   type ApplicationStatus,
 } from "@/api";
+import { CandidateDrawer } from "@/components/jobs/candidate-drawer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
 import {
   Popover,
   PopoverContent,
@@ -82,13 +85,11 @@ const STATUS_LIST: {
 interface JobCandidateListProps {
   applications: ApplicationResponse[];
   onStatusChanged: () => void;
-  onOpenCandidate: (app: ApplicationResponse) => void;
 }
 
 export function JobCandidateList({
   applications,
   onStatusChanged,
-  onOpenCandidate,
 }: JobCandidateListProps) {
   const [search, setSearch] = React.useState("");
   const [scoreTier, setScoreTier] = React.useState<ScoreTier>("all");
@@ -100,6 +101,13 @@ export function JobCandidateList({
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
     () => new Set()
   );
+  // F44.d.4 — drawer state lives here so F44.d.5's keyboard nav can
+  // advance to the next/previous candidate without losing the drawer.
+  const [drawerAppId, setDrawerAppId] = React.useState<string | null>(null);
+  // F44.d.5 — which row has keyboard focus (visual ring), not DOM focus.
+  const [focusedId, setFocusedId] = React.useState<string | null>(null);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const rowRefs = React.useRef(new Map<string, HTMLTableRowElement>());
 
   const scoreThreshold =
     SCORE_TIERS.find((t) => t.value === scoreTier)?.threshold ?? 0;
@@ -196,11 +204,176 @@ export function JobCandidateList({
     (scoreTier !== "all" ? 1 : 0) + (statusSet.size > 0 ? 1 : 0);
   const activeTierMeta = SCORE_TIERS.find((t) => t.value === scoreTier);
 
+  // F44.d.5 — keyboard navigation. Resolves against the current
+  // sorted+filtered list so j/k follows what the user sees.
+  const focusedIndex = React.useMemo(
+    () => (focusedId ? sorted.findIndex((a) => a.id === focusedId) : -1),
+    [focusedId, sorted]
+  );
+
+  const moveFocus = React.useCallback(
+    (delta: number) => {
+      if (sorted.length === 0) return null;
+      const current = focusedIndex >= 0 ? focusedIndex : -1;
+      const next = Math.max(0, Math.min(sorted.length - 1, current + delta));
+      const app = sorted[next];
+      setFocusedId(app.id);
+      // Scroll the focused row into view so long lists don't drop
+      // focus off-screen.
+      const el = rowRefs.current.get(app.id);
+      if (el) el.scrollIntoView({ block: "nearest" });
+      return app;
+    },
+    [focusedIndex, sorted]
+  );
+
+  const openDrawer = React.useCallback((app: ApplicationResponse) => {
+    setDrawerAppId(app.id);
+    setFocusedId(app.id);
+  }, []);
+
+  const drawerApp = React.useMemo(
+    () =>
+      drawerAppId
+        ? (applications.find((a) => a.id === drawerAppId) ?? null)
+        : null,
+    [applications, drawerAppId]
+  );
+
+  // Single status mutation used by the row and by keyboard shortcuts
+  // targeting the currently-focused row. Optimistic update mirrors
+  // the per-row mutation.
+  const queryKey =
+    applications.length > 0
+      ? listJobApplicationsQueryKey({
+          path: { job_id: applications[0].job_id },
+        })
+      : null;
+
+  const queryClient = useQueryClient();
+  const shortcutMut = useMutation({
+    ...updateApplicationStatusMutation(),
+    onMutate: async (variables) => {
+      if (!queryKey) return { previous: undefined };
+      await queryClient.cancelQueries({ queryKey });
+      const previous =
+        queryClient.getQueryData<ApplicationResponse[]>(queryKey);
+      const appId = variables.path?.application_id as string;
+      const nextStatus = variables.body?.status as ApplicationStatus;
+      queryClient.setQueryData<ApplicationResponse[]>(queryKey, (old) =>
+        (old ?? []).map((a) =>
+          a.id === appId ? { ...a, status: nextStatus } : a
+        )
+      );
+      return { previous };
+    },
+    onError: (_e, _v, ctx) => {
+      if (queryKey && ctx?.previous)
+        queryClient.setQueryData(queryKey, ctx.previous);
+      toast.error("Status change failed; rolled back.");
+    },
+    onSuccess: () => onStatusChanged(),
+  });
+
+  const setStatusFor = React.useCallback(
+    (appId: string, status: ApplicationStatus) => {
+      shortcutMut.mutate({
+        path: { application_id: appId },
+        body: { status },
+      });
+    },
+    [shortcutMut]
+  );
+
+  // Global keyboard listener, scoped to the list's lifetime. Ignores
+  // keys when an input/textarea is focused, when a modifier is held,
+  // or when a dialog is modal over the page. The drawer itself is
+  // Sheet-backed and also handles its own j/k via `drawerKeyDown`.
+  React.useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      const isTyping =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        (e.target as HTMLElement | null)?.isContentEditable;
+      // When the drawer is open, only j/k/s/r/u/Escape are meaningful;
+      // other shortcuts fall through to Sheet's own handlers.
+      const drawerOpen = drawerAppId != null;
+      if (isTyping) {
+        if (e.key === "Escape" && searchInputRef.current === e.target) {
+          setSearch("");
+          searchInputRef.current?.blur();
+        }
+        return;
+      }
+      const key = e.key;
+      if (key === "j" || key === "ArrowDown") {
+        e.preventDefault();
+        const next = moveFocus(1);
+        if (drawerOpen && next) setDrawerAppId(next.id);
+      } else if (key === "k" || key === "ArrowUp") {
+        e.preventDefault();
+        const next = moveFocus(-1);
+        if (drawerOpen && next) setDrawerAppId(next.id);
+      } else if (key === "Enter") {
+        if (drawerOpen) return;
+        const app = focusedId
+          ? sorted.find((a) => a.id === focusedId)
+          : sorted[0];
+        if (app) {
+          e.preventDefault();
+          openDrawer(app);
+        }
+      } else if (key === "Escape" && drawerOpen) {
+        // Sheet handles Escape too; belt-and-braces.
+        setDrawerAppId(null);
+      } else if (key === "s" || key === "r" || key === "u") {
+        const target = drawerOpen
+          ? drawerAppId
+          : focusedId || sorted[0]?.id || null;
+        if (!target) return;
+        const app = applications.find((a) => a.id === target);
+        if (!app) return;
+        if (app.status === "interviewed" || app.status === "hired") return;
+        const next: ApplicationStatus =
+          key === "s" ? "shortlisted" : key === "r" ? "rejected" : "new";
+        e.preventDefault();
+        setStatusFor(app.id, next);
+      } else if (key === "x" && !drawerOpen) {
+        const id = focusedId || sorted[0]?.id;
+        if (!id) return;
+        e.preventDefault();
+        setSelectedIds((prev) => {
+          const nextSet = new Set(prev);
+          if (nextSet.has(id)) nextSet.delete(id);
+          else nextSet.add(id);
+          return nextSet;
+        });
+      } else if (key === "/" && !drawerOpen) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    applications,
+    drawerAppId,
+    focusedId,
+    moveFocus,
+    openDrawer,
+    setStatusFor,
+    sorted,
+  ]);
+
   return (
     <div className="flex flex-col gap-3">
       <FilterRow
         search={search}
         onSearch={setSearch}
+        searchInputRef={searchInputRef}
         scoreTier={scoreTier}
         onScoreTier={setScoreTier}
         statusSet={statusSet}
@@ -299,9 +472,15 @@ export function JobCandidateList({
                 key={app.id}
                 app={app}
                 selected={selectedIds.has(app.id)}
+                focused={focusedId === app.id}
                 onToggleSelect={() => toggleRow(app.id)}
                 onStatusChanged={onStatusChanged}
-                onOpen={() => onOpenCandidate(app)}
+                onOpen={() => openDrawer(app)}
+                onHover={() => setFocusedId(app.id)}
+                registerRef={(el) => {
+                  if (el) rowRefs.current.set(app.id, el);
+                  else rowRefs.current.delete(app.id);
+                }}
               />
             ))}
             {sorted.length === 0 && (
@@ -331,6 +510,14 @@ export function JobCandidateList({
           </tbody>
         </table>
       </div>
+
+      <CandidateDrawer
+        app={drawerApp}
+        onOpenChange={(open) => {
+          if (!open) setDrawerAppId(null);
+        }}
+        onStatusChanged={onStatusChanged}
+      />
     </div>
   );
 }
@@ -340,6 +527,7 @@ export function JobCandidateList({
 function FilterRow({
   search,
   onSearch,
+  searchInputRef,
   scoreTier,
   onScoreTier,
   statusSet,
@@ -350,6 +538,7 @@ function FilterRow({
 }: {
   search: string;
   onSearch: (v: string) => void;
+  searchInputRef: React.RefObject<HTMLInputElement | null>;
   scoreTier: ScoreTier;
   onScoreTier: (v: ScoreTier) => void;
   statusSet: Set<StatusFilter>;
@@ -363,9 +552,10 @@ function FilterRow({
       <div className="relative min-w-[220px] flex-1">
         <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
         <Input
+          ref={searchInputRef}
           value={search}
           onChange={(e) => onSearch(e.target.value)}
-          placeholder="Search name, email, or skill"
+          placeholder="Search — press / to focus"
           className="pl-9"
         />
       </div>
@@ -458,6 +648,77 @@ function FilterRow({
           ? `${totalCount} candidate${totalCount === 1 ? "" : "s"}`
           : `${filteredCount} of ${totalCount}`}
       </span>
+
+      <KeyboardHint />
+    </div>
+  );
+}
+
+function KeyboardHint() {
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Keyboard shortcuts"
+            title="Keyboard shortcuts"
+          >
+            <KeyboardIcon className="size-4" />
+          </Button>
+        }
+      />
+      <PopoverContent align="end" className="w-72">
+        <div className="flex flex-col gap-2">
+          <Typography
+            variant="small"
+            className="text-muted-foreground mb-1 block text-xs font-medium tracking-wide uppercase"
+          >
+            Keyboard shortcuts
+          </Typography>
+          <ShortcutRow label="Next / previous candidate">
+            <Kbd>j</Kbd>
+            <Kbd>k</Kbd>
+          </ShortcutRow>
+          <ShortcutRow label="Open drawer">
+            <Kbd>Enter</Kbd>
+          </ShortcutRow>
+          <ShortcutRow label="Close drawer / blur search">
+            <Kbd>Esc</Kbd>
+          </ShortcutRow>
+          <ShortcutRow label="Shortlist">
+            <Kbd>s</Kbd>
+          </ShortcutRow>
+          <ShortcutRow label="Reject">
+            <Kbd>r</Kbd>
+          </ShortcutRow>
+          <ShortcutRow label="Undo (back to new)">
+            <Kbd>u</Kbd>
+          </ShortcutRow>
+          <ShortcutRow label="Toggle selection">
+            <Kbd>x</Kbd>
+          </ShortcutRow>
+          <ShortcutRow label="Focus search">
+            <Kbd>/</Kbd>
+          </ShortcutRow>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ShortcutRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <div className="flex gap-1">{children}</div>
     </div>
   );
 }
@@ -638,15 +899,21 @@ function SortableHeader({
 function CandidateRow({
   app,
   selected,
+  focused,
   onToggleSelect,
   onStatusChanged,
   onOpen,
+  onHover,
+  registerRef,
 }: {
   app: ApplicationResponse;
   selected: boolean;
+  focused: boolean;
   onToggleSelect: () => void;
   onStatusChanged: () => void;
   onOpen: () => void;
+  onHover: () => void;
+  registerRef: (el: HTMLTableRowElement | null) => void;
 }) {
   const queryClient = useQueryClient();
   const queryKey = listJobApplicationsQueryKey({
@@ -699,17 +966,29 @@ function CandidateRow({
 
   return (
     <tr
+      ref={registerRef}
       className={cn(
-        "group relative cursor-pointer border-b last:border-0",
-        selected ? "bg-primary/5" : "hover:bg-muted/30"
+        "group relative cursor-pointer border-b transition-colors last:border-0",
+        // Three states with distinct visuals so hover, keyboard-focus,
+        // and selection never feel alike:
+        //   selected  → primary-tinted bg + 3px left strip
+        //   focused   → muted bg + full inset primary ring
+        //   hover     → just the muted bg
+        selected && "bg-primary/10",
+        focused &&
+          !selected &&
+          "bg-muted shadow-[inset_0_0_0_2px_var(--color-primary)]",
+        !selected && !focused && "hover:bg-muted/40"
       )}
       onClick={openDrawerFromRowClick}
+      onMouseEnter={onHover}
     >
       <td
         className="relative px-3 py-3 align-middle"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Selection marker — Notion-style 3px accent strip */}
+        {/* Selection left-strip. (Focused state uses the inset box
+            shadow above so it doesn't compete with the strip.) */}
         {selected && (
           <span
             aria-hidden
