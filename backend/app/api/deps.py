@@ -38,6 +38,7 @@ from app.adapters.protocols import (
 )
 from app.adapters.reset_token_store import RedisResetTokenStore
 from app.adapters.revocation_store import RedisRevocationStore
+from app.adapters.viewers import ViewerRegistry, build_default_registry
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.redis import get_redis
@@ -67,6 +68,7 @@ from app.services.rag_service import RagService
 from app.services.search_service import SearchService
 from app.services.session_service import SessionService
 from app.services.user_service import UserService
+from app.services.viewer_service import ViewerService
 
 _logger = logging.getLogger(__name__)
 
@@ -319,6 +321,21 @@ def get_document_service(
     )
 
 
+_viewer_registry: ViewerRegistry = build_default_registry()
+
+
+def get_viewer_registry() -> ViewerRegistry:
+    return _viewer_registry
+
+
+def get_viewer_service(
+    documents: Annotated[DocumentService, Depends(get_document_service)],
+    storage: Annotated[BlobStorage, Depends(get_blob_storage)],
+    registry: Annotated[ViewerRegistry, Depends(get_viewer_registry)],
+) -> ViewerService:
+    return ViewerService(documents=documents, storage=storage, registry=registry)
+
+
 def get_search_service(documents: DocumentRepositoryDep) -> SearchService:
     return SearchService(
         documents,
@@ -410,6 +427,7 @@ CandidateServiceDep = Annotated[CandidateService, Depends(get_candidate_service)
 MatchingServiceDep = Annotated[MatchingService, Depends(get_matching_service)]
 ActivityServiceDep = Annotated[ActivityService, Depends(get_activity_service)]
 GmailServiceDep = Annotated[GmailService, Depends(get_gmail_service)]
+ViewerServiceDep = Annotated[ViewerService, Depends(get_viewer_service)]
 
 
 # ---------- Auth context ----------

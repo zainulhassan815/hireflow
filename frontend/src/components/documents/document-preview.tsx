@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Typography } from "@/components/ui/typography";
+import { DocumentViewer } from "@/components/documents/document-viewer";
 import { SimilarDocuments } from "@/components/documents/similar-documents";
 import { formatDateTime, formatFileSize } from "@/lib/utils";
 import { toast } from "sonner";
@@ -178,6 +179,18 @@ export function DocumentPreview({
                 </div>
               )}
             </div>
+          </div>
+
+          <Separator className="my-4" />
+
+          <div className="mb-4">
+            <Typography variant="h6" className="mb-3">
+              Preview
+            </Typography>
+            <DocumentViewer
+              documentId={activeDoc.id}
+              downloadFallback={handleDownload}
+            />
           </div>
 
           <Separator className="my-4" />

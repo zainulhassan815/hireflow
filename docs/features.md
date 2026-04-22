@@ -191,6 +191,25 @@ Wire existing frontend pages to the real backend API. All pages must follow
   - `GET /jobs/{id}/candidates/export` → CSV (stdlib, no deps)
   - Frontend export buttons on candidates + search pages
 
+- [ ] **F44 · Candidate shortlisting (minimal)** — F42 marked "Shortlist /
+  reject actions" done, but it was only half-built: the `Application`
+  model + `PATCH /applications/{id}/status` endpoint exist, and the
+  orphan `resume-viewer.tsx` component has `onShortlist` / `onReject`
+  props — but nothing on any page imports it, and HR users have no way
+  to move a candidate from `new` → `shortlisted` in the UI. There's
+  also an authorization hole: `update_application_status` doesn't
+  check that the caller owns the parent job. F93 Kanban is the richer
+  long-term shape; F44 is the MVP that closes the gap today.
+  - [ ] **F44.a** Backend: authorize `PATCH /applications/{id}/status`
+    so the caller must own the application's parent job (mirrors the
+    `DocumentService._ensure_access` pattern). Add tests — currently
+    zero coverage on the endpoint.
+  - [ ] **F44.b** Frontend: job detail page (or the existing
+    candidates list) surfaces each matched candidate with status badge
+    + Shortlist / Reject buttons wired to the existing
+    `updateApplicationStatus` mutation. Either wire the orphan
+    `resume-viewer.tsx` or delete it.
+
 ---
 
 ## Phase 5 — Gmail Integration (FR17, FR18, UC-08, UC-09)
@@ -782,6 +801,59 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - Dependencies: pdf2image needs `poppler-utils` system binary;
     PyMuPDF (`pymupdf`) is pure Python wheel. Prefer PyMuPDF for the
     thinner install.
+
+- [~] **F105 · Hybrid document viewer (factory pattern)** (F105.a landed; F105.b–e open) — today a
+  document preview shows metadata + similar docs (F89.c.1) but no
+  actual content. We want one entry point (`<DocumentViewer>`) that
+  renders anything the corpus holds — PDFs, images, office files,
+  spreadsheets, text — without a god-component. Factory pattern
+  mirrors the existing `LlmProvider` / `EmbeddingProvider` /
+  `DocumentClassifier` shape.
+
+  **Canonical kinds** (exactly five; frontend dispatches on `kind`):
+  `pdf` (iframe), `image` (`<img>`), `table` (`{sheets: [{name,
+  headers, rows}]}` → TanStack Table), `text` (plain or markdown),
+  `unsupported` (download fallback).
+
+  **Backend:** `ViewerProvider` Protocol in
+  `app/adapters/viewers/` with a registry; each provider declares
+  `accepts(mime) -> bool` + `render(doc, blob) -> ViewablePayload`.
+  `GET /documents/{id}/viewable` picks the right provider and
+  returns the payload. Lazy (on-demand) for F105.a passthrough
+  providers — no blob rewrite — eager (ingest-time) once
+  conversion providers land in F105.c.
+
+  **Frontend:** `<DocumentViewer payload={...}>` component with a
+  one-to-one renderer map; adding a new kind is one file. Wires
+  into the existing preview dialog.
+
+  - [x] **F105.a** Foundation: `ViewerProvider` Protocol + registry +
+    `PassthroughPdfProvider` (`application/pdf` → `pdf`),
+    `PassthroughImageProvider` (`image/*` → `image`),
+    `FallbackProvider` (anything else → `unsupported`). New endpoint
+    `GET /documents/{id}/viewable` returning `ViewablePayload` (with
+    signed MinIO URL for passthrough kinds). Frontend
+    `<DocumentViewer>` component dispatching on `kind`; wired into
+    the preview dialog. No schema change (no conversion yet, so no
+    second blob to persist). Ships PDFs + images end-to-end.
+  - [ ] **F105.b** `OfficeToPdfProvider`: docx, pptx, odt, odp, rtf,
+    doc, ppt → `pdf` via LibreOffice headless. Adds LibreOffice to
+    the worker Dockerfile and a conversion step to
+    `extract_document_text`. Persists converted asset in MinIO under
+    `viewable/<doc_id>.pdf`; new `documents.viewable_key` +
+    `viewable_kind` columns (Alembic). Frontend renderer unchanged —
+    office files just become `kind: "pdf"`.
+  - [ ] **F105.c** `SpreadsheetProvider` (xlsx, xls, ods via
+    `openpyxl`) + `CsvTsvProvider` (stdlib `csv`) → `table`.
+    Frontend `TableRenderer` using TanStack Table (already in repo)
+    with sheet-tab switcher for multi-sheet workbooks. Virtualized
+    rows for big sheets.
+  - [ ] **F105.d** `TextProvider` (txt, md, log) → `text`; markdown
+    rendered via the existing `react-markdown` setup (from F81.g).
+  - [ ] **F105.e** Dedicated `/documents/:id` page as an alternative
+    to the dialog, for focused reading. Same `<DocumentViewer>`
+    component, fuller chrome (back button, metadata sidebar,
+    similar-docs rail).
 
 ---
 

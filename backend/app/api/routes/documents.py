@@ -10,6 +10,7 @@ from app.api.deps import (
     CurrentUser,
     DocumentServiceDep,
     SearchServiceDep,
+    ViewerServiceDep,
 )
 from app.schemas.document import (
     DocumentMetadataResponse,
@@ -18,6 +19,7 @@ from app.schemas.document import (
     SimilarDocumentsRequest,
     SimilarDocumentsResponse,
 )
+from app.schemas.viewer import ViewablePayloadResponse
 from app.worker.tasks import extract_document_text
 
 router = APIRouter()
@@ -134,6 +136,40 @@ async def download_document(
         content=data,
         media_type=doc.mime_type,
         headers={"Content-Disposition": f'attachment; filename="{doc.filename}"'},
+    )
+
+
+@router.get(
+    "/{document_id}/viewable",
+    response_model=ViewablePayloadResponse,
+    summary="Get a renderable payload for this document",
+    description=(
+        "Returns one of five canonical payload kinds — ``pdf`` / ``image`` "
+        "(signed URL the browser GETs directly), ``table`` / ``text`` "
+        "(inline JSON), or ``unsupported`` (no inline renderer available "
+        "for this MIME — the frontend should fall back to a download "
+        "affordance). F105.a ships ``pdf`` / ``image`` passthroughs + "
+        "the unsupported fallback; ``table`` / ``text`` arrive in "
+        "F105.c / F105.d. A document still processing returns "
+        '``unsupported`` with ``meta.reason = "not_ready"``.'
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not the document owner or an admin"},
+        404: {"description": "Document not found"},
+    },
+)
+async def get_document_viewable(
+    document_id: UUID,
+    current_user: CurrentUser,
+    viewer: ViewerServiceDep,
+) -> ViewablePayloadResponse:
+    payload = await viewer.render(document_id, actor=current_user)
+    return ViewablePayloadResponse(
+        kind=payload.kind,
+        url=payload.url,
+        data=payload.data,
+        meta=payload.meta,
     )
 
 
