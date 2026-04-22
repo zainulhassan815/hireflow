@@ -301,12 +301,20 @@ Wire existing frontend pages to the real backend API. All pages must follow
     in the filter bar surfaces the shortcut list (Kbd primitive).
     Shortcuts no-op when any modifier is held or when an input is
     focused, so native browser shortcuts and typing stay intact.
-  - [ ] **F44.d.6** Match-score breakdown popover: hovering the
-    bar pops `MatchBreakdown` (skills / experience / vector
-    split + one-line rationale). Extend `ApplicationResponse`
-    with a `breakdown` field — backend already computes it in
-    `MatchingService`, just needs to persist or recompute on the
-    list path.
+  - [x] **F44.d.6** Match-score breakdown popover. Persisted the
+    per-signal split (`skill_match` / `experience_fit` /
+    `vector_similarity`) alongside the score on the `applications`
+    table as a new `match_breakdown` JSONB column (migration
+    `e6c82d9a1f44`). `MatchingService` now writes it on every
+    create/update — idempotent with the rest of the scoring loop.
+    `ApplicationResponse` exposes it as an optional `breakdown`
+    field via `validation_alias="match_breakdown"` (null for
+    pre-F44.d.6 rows until the job is re-matched). Frontend:
+    hovering the list's match bar opens a `HoverCard` with a
+    per-signal breakdown — label, percentage, weighted
+    contribution, and a mini-bar per component. Same breakdown
+    renders inline inside the drawer's match-score section (no
+    hover needed there — the drawer has the space for it).
   - [ ] **F44.d.7** Bulk-status endpoint: `PATCH /applications/
     bulk-status` replacing the N-PATCH fan-out. Enables >50-row
     selections, single DB transaction, cleaner rollback.

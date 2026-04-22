@@ -25,6 +25,11 @@ import { CandidateDrawer } from "@/components/jobs/candidate-drawer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import {
@@ -1060,7 +1065,7 @@ function CandidateRow({
         </div>
       </td>
       <td className="px-4 py-3 align-middle">
-        <MatchScoreBar score={score100} />
+        <MatchScoreBar score={score100} breakdown={app.breakdown} />
       </td>
       <td className="px-4 py-3 align-middle">
         <StatusLabel status={app.status} />
@@ -1079,15 +1084,21 @@ function CandidateRow({
   );
 }
 
-function MatchScoreBar({ score }: { score: number }) {
+function MatchScoreBar({
+  score,
+  breakdown,
+}: {
+  score: number;
+  breakdown?: ApplicationResponse["breakdown"];
+}) {
   const color =
     score >= 80
       ? "bg-success"
       : score >= 60
         ? "bg-warning"
         : "bg-muted-foreground";
-  return (
-    <div className="flex items-center gap-2">
+  const bar = (
+    <div className="flex cursor-default items-center gap-2">
       <div className="bg-muted h-1.5 w-24 overflow-hidden rounded-full">
         <div
           className={cn("h-full rounded-full transition-[width]", color)}
@@ -1097,6 +1108,83 @@ function MatchScoreBar({ score }: { score: number }) {
       <span className="text-muted-foreground w-8 shrink-0 text-xs tabular-nums">
         {score}%
       </span>
+    </div>
+  );
+
+  // F44.d.6 — hover the bar to see the per-signal breakdown. No
+  // breakdown means a pre-F44.d.6 application that hasn't been
+  // re-matched; render the bar plain so hover doesn't mislead.
+  if (!breakdown) return bar;
+
+  return (
+    <HoverCard>
+      <HoverCardTrigger
+        render={<div onClick={(e) => e.stopPropagation()}>{bar}</div>}
+      />
+      <HoverCardContent
+        className="w-72"
+        align="start"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex flex-col gap-3">
+          <div>
+            <Typography
+              variant="small"
+              className="text-muted-foreground text-xs font-medium tracking-wide uppercase"
+            >
+              Match breakdown
+            </Typography>
+            <Typography variant="muted" className="mt-0.5 text-xs">
+              Weighted: skills 45% · experience 20% · similarity 35%
+            </Typography>
+          </div>
+          <BreakdownRow
+            label="Skill overlap"
+            value={breakdown.skill_match}
+            weight={0.45}
+          />
+          <BreakdownRow
+            label="Experience fit"
+            value={breakdown.experience_fit}
+            weight={0.2}
+          />
+          <BreakdownRow
+            label="Vector similarity"
+            value={breakdown.vector_similarity}
+            weight={0.35}
+          />
+        </div>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+function BreakdownRow({
+  label,
+  value,
+  weight,
+}: {
+  label: string;
+  value: number;
+  weight: number;
+}) {
+  const pct = Math.round(value * 100);
+  const contribution = Math.round(value * weight * 100);
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <span className="text-foreground font-medium">{label}</span>
+        <span className="text-muted-foreground tabular-nums">
+          {pct}%{" "}
+          <span className="text-muted-foreground/70">(+{contribution})</span>
+        </span>
+      </div>
+      <div className="bg-muted h-1 w-full overflow-hidden rounded-full">
+        <div
+          className="bg-primary h-full rounded-full"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   );
 }

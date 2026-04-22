@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy import Float, ForeignKey, Index, Integer, String, text
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString
@@ -102,6 +102,13 @@ class Application(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # F44.d.6 — persist the breakdown components `MatchingService`
+    # computed (skill overlap, experience fit, vector similarity) so
+    # the candidate list can render a hover popover explaining the
+    # score without recomputing. Shape matches `MatchBreakdown` in
+    # app/schemas/candidate.py; JSONB for flexibility if the weighting
+    # model gains more signals via F45.
+    match_breakdown: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     candidate: Mapped[Candidate] = relationship(
         back_populates="applications", lazy="selectin"

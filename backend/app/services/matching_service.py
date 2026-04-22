@@ -57,6 +57,12 @@ class MatchingService:
         results = []
         for candidate in candidates:
             score = self._compute_score(job, candidate, vector_scores)
+            # F44.d.6 — persist the breakdown alongside the score so
+            # the list hover popover can render it without recomputing.
+            # ``_breakdown`` already returns a dict in the shape
+            # ``MatchBreakdown`` expects; the list endpoint consumes
+            # it straight via Pydantic model_validate.
+            breakdown = self._breakdown(job, candidate, vector_scores)
 
             app = await self._applications.get_for_job_and_candidate(
                 job_id, candidate.id
@@ -66,9 +72,11 @@ class MatchingService:
                     candidate_id=candidate.id,
                     job_id=job_id,
                     score=score,
+                    match_breakdown=breakdown,
                 )
             else:
                 app.score = score
+                app.match_breakdown = breakdown
                 app = await self._applications.save(app)
 
             results.append(
@@ -76,7 +84,7 @@ class MatchingService:
                     "candidate": candidate,
                     "application": app,
                     "score": score,
-                    "breakdown": self._breakdown(job, candidate, vector_scores),
+                    "breakdown": breakdown,
                 }
             )
 

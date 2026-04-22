@@ -170,7 +170,7 @@ function Body({
           </div>
         </div>
 
-        {/* Match score */}
+        {/* Match score + breakdown */}
         <div className="mb-4">
           <Typography
             variant="small"
@@ -196,6 +196,25 @@ function Body({
               {score100}%
             </span>
           </div>
+          {app.breakdown && (
+            <div className="mt-3 grid grid-cols-3 gap-3">
+              <Signal
+                label="Skills"
+                value={app.breakdown.skill_match}
+                weight={0.45}
+              />
+              <Signal
+                label="Experience"
+                value={app.breakdown.experience_fit}
+                weight={0.2}
+              />
+              <Signal
+                label="Similarity"
+                value={app.breakdown.vector_similarity}
+                weight={0.35}
+              />
+            </div>
+          )}
         </div>
 
         {/* Skills */}
@@ -245,6 +264,41 @@ function Body({
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function Signal({
+  label,
+  value,
+  weight,
+}: {
+  label: string;
+  value: number;
+  weight: number;
+}) {
+  const pct = Math.round(value * 100);
+  const contribution = Math.round(value * weight * 100);
+  return (
+    <div className="bg-muted/30 rounded-md border p-2">
+      <Typography
+        variant="muted"
+        className="block text-[10px] font-medium tracking-wide uppercase"
+      >
+        {label}
+      </Typography>
+      <div className="mt-0.5 flex items-baseline gap-1.5">
+        <span className="text-sm font-semibold tabular-nums">{pct}%</span>
+        <span className="text-muted-foreground text-[10px] tabular-nums">
+          +{contribution}
+        </span>
+      </div>
+      <div className="bg-muted mt-1 h-1 w-full overflow-hidden rounded-full">
+        <div
+          className="bg-primary h-full rounded-full"
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );

@@ -30,6 +30,20 @@ class CandidateResponse(BaseModel):
     updated_at: datetime = Field(..., description="Last update timestamp (UTC)")
 
 
+class MatchBreakdown(BaseModel):
+    """Breakdown of how the match score was computed."""
+
+    skill_match: float = Field(
+        ..., ge=0, le=1, description="Required + preferred skill overlap"
+    )
+    experience_fit: float = Field(
+        ..., ge=0, le=1, description="Experience years vs job range"
+    )
+    vector_similarity: float = Field(
+        ..., ge=0, le=1, description="Semantic similarity from embeddings"
+    )
+
+
 class ApplicationResponse(BaseModel):
     """A candidate's application to a job.
 
@@ -37,6 +51,10 @@ class ApplicationResponse(BaseModel):
     in one round-trip (no N+1 ``getCandidate`` per row). The Application
     model auto-loads ``candidate`` via ``lazy="selectin"`` so the embed
     is free server-side.
+
+    F44.d.6 — includes ``breakdown`` (the skill/experience/vector split
+    ``MatchingService`` already persists) so the list-side hover popover
+    can render "why this score" without a second endpoint.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -57,6 +75,16 @@ class ApplicationResponse(BaseModel):
         description="Application status (new, shortlisted, rejected, interviewed, hired)",
     )
     score: float | None = Field(None, description="Match score (0–1, higher is better)")
+    breakdown: MatchBreakdown | None = Field(
+        None,
+        validation_alias="match_breakdown",
+        description=(
+            "Per-signal split that produced the score (skill overlap, "
+            "experience fit, vector similarity). Null for applications "
+            "that predate F44.d.6; re-running the job's match populates "
+            "it."
+        ),
+    )
     created_at: datetime = Field(..., description="Application timestamp (UTC)")
     updated_at: datetime = Field(..., description="Last update timestamp (UTC)")
 
@@ -67,20 +95,6 @@ class CandidateWithScoreResponse(CandidateResponse):
     score: float | None = Field(None, description="Match score against the job")
     application_status: ApplicationStatus | None = Field(
         None, description="Application status for this job"
-    )
-
-
-class MatchBreakdown(BaseModel):
-    """Breakdown of how the match score was computed."""
-
-    skill_match: float = Field(
-        ..., ge=0, le=1, description="Required + preferred skill overlap"
-    )
-    experience_fit: float = Field(
-        ..., ge=0, le=1, description="Experience years vs job range"
-    )
-    vector_similarity: float = Field(
-        ..., ge=0, le=1, description="Semantic similarity from embeddings"
     )
 
 
