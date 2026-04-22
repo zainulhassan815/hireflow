@@ -855,6 +855,30 @@ Production-grade interface with attention to detail, accessibility, and delight.
     component, fuller chrome (back button, metadata sidebar,
     similar-docs rail).
 
+- [x] **F106 · Logo, branding & PWA** — brand mark + installable app
+  - [x] **F106.a** Logo: ascending 4-bar ranking chart (amber → pink
+    → violet → blue, tallest bar tilted) as `logo.svg` / `favicon.svg`
+    and reusable `<Logo />` component. Wired into sidebar header and
+    auth layout (desktop + mobile). Old `vite.svg` / `react.svg`
+    template assets removed.
+  - [x] **F106.b** Per-page document titles via `useDocumentTitle`
+    hook + `useRouteTitle` reader. Protected routes declare
+    `handle: { title: ... }` in `router.tsx`; `AppLayout` sets
+    `"<Page> · Hireflow"` on navigation. `AuthLayout` syncs its
+    `title` prop to `document.title` for auth pages.
+  - [x] **F106.c** PWA: `vite-plugin-pwa` + `@vite-pwa/assets-generator`;
+    `pwa-assets.config.ts` sources all icon sizes from `logo.svg`
+    (`npm run generate-pwa-assets`). Manifest (`name`, `theme_color`
+    `#1d4ed8`, `background_color` `#fafafa`, `display: standalone`)
+    and workbox SW auto-registered. `index.html` gets description,
+    theme-color, Apple PWA meta, full favicon hierarchy.
+  - [x] **F106.d** In-app install button: `usePwaInstall` hook
+    captures `beforeinstallprompt`; `<InstallAppButton />` in the
+    sidebar footer surfaces Chrome's install UI (which otherwise
+    hides in the URL bar). SW enabled in `vite dev` via
+    `devOptions: { enabled: true }` so install criteria are met on
+    localhost without a prod build.
+
 ---
 
 ## Out of scope for v1

@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { useRouteTitle } from "@/hooks/use-document-title";
 import { AppSidebar } from "./app-sidebar";
 import { CommandPalette } from "./command-palette";
 
 export function AppLayout() {
+  useRouteTitle();
   const [commandOpen, setCommandOpen] = useState(false);
 
   useEffect(() => {

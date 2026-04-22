@@ -37,6 +37,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Logo } from "@/components/ui/logo";
+import { InstallAppButton } from "@/components/layout/install-app-button";
 import { useAuth } from "@/providers/use-auth";
 import { cn } from "@/lib/utils";
 
@@ -181,11 +183,7 @@ export function AppSidebar() {
       <SidebarHeader className="p-4 group-data-[collapsible=icon]:p-2">
         <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
           <NavLink to="/" className="flex items-center gap-3">
-            <div className="bg-foreground flex size-9 shrink-0 items-center justify-center">
-              <span className="text-background font-display text-base font-semibold">
-                H
-              </span>
-            </div>
+            <Logo className="size-8 shrink-0" />
             <span className="font-display text-lg font-semibold tracking-[-0.01em] group-data-[collapsible=icon]:hidden">
               Hireflow
             </span>
@@ -217,6 +215,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="p-2 group-data-[collapsible=icon]:p-1">
+        <InstallAppButton collapsed={isCollapsed} />
         <DropdownMenu>
           <DropdownMenuTrigger
             render={

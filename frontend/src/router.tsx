@@ -62,38 +62,47 @@ export const router = createBrowserRouter([
       {
         index: true,
         element: <DashboardPage />,
+        handle: { title: "Dashboard" },
       },
       {
         path: "jobs",
         element: <JobsPage />,
+        handle: { title: "Jobs" },
       },
       {
         path: "jobs/create",
         element: <CreateJobPage />,
+        handle: { title: "New job" },
       },
       {
         path: "jobs/:id/edit",
         element: <EditJobPage />,
+        handle: { title: "Edit job" },
       },
       {
         path: "candidates",
         element: <CandidatesPage />,
+        handle: { title: "Candidates" },
       },
       {
         path: "documents",
         element: <DocumentsPage />,
+        handle: { title: "Documents" },
       },
       {
         path: "search",
         element: <SearchPage />,
+        handle: { title: "Search" },
       },
       {
         path: "logs",
         element: <LogsPage />,
+        handle: { title: "Logs" },
       },
       {
         path: "settings",
         element: <SettingsPage />,
+        handle: { title: "Settings" },
       },
     ],
   },

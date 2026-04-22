@@ -1,5 +1,8 @@
 import { NavLink } from "react-router-dom";
 
+import { Logo } from "@/components/ui/logo";
+import { useDocumentTitle } from "@/hooks/use-document-title";
+
 interface AuthLayoutProps {
   children: React.ReactNode;
   title: string;
@@ -7,15 +10,14 @@ interface AuthLayoutProps {
 }
 
 export function AuthLayout({ children, title, description }: AuthLayoutProps) {
+  useDocumentTitle(title);
   return (
     <div className="flex min-h-screen">
       {/* Left side - Branding */}
       <div className="bg-primary hidden w-1/2 flex-col justify-between p-12 lg:flex">
         <NavLink to="/" className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center bg-white">
-            <span className="font-display text-primary text-base font-semibold">
-              H
-            </span>
+          <div className="flex size-10 items-center justify-center rounded-md bg-white p-1.5">
+            <Logo className="size-full" />
           </div>
           <span className="font-display text-lg font-semibold tracking-[-0.01em] text-white">
             Hireflow
@@ -43,11 +45,7 @@ export function AuthLayout({ children, title, description }: AuthLayoutProps) {
           {/* Mobile logo */}
           <div className="flex justify-center lg:hidden">
             <NavLink to="/" className="flex items-center gap-3">
-              <div className="bg-foreground flex size-10 items-center justify-center">
-                <span className="text-background font-display text-base font-semibold">
-                  H
-                </span>
-              </div>
+              <Logo className="size-10 shrink-0" />
               <span className="font-display text-lg font-semibold tracking-[-0.01em]">
                 Hireflow
               </span>
