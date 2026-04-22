@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Typography } from "@/components/ui/typography";
 import { extractApiError } from "@/lib/api-errors";
-import { cn } from "@/lib/utils";
+import { cn, skillHueClass } from "@/lib/utils";
 import { toast } from "sonner";
 
 // F90.f — confidence badge: rename for Priya (brief §8 rule on
@@ -491,8 +491,11 @@ export function SearchPage() {
                                       .map((skill: string) => (
                                         <Badge
                                           key={skill}
-                                          variant="secondary"
-                                          className="text-xs"
+                                          variant="outline"
+                                          className={cn(
+                                            "text-xs",
+                                            skillHueClass(skill)
+                                          )}
                                         >
                                           {skill}
                                         </Badge>
@@ -567,7 +570,9 @@ export function SearchPage() {
               <div className="space-y-4">
                 {chatMessages.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <MessageCircleIcon className="text-muted-foreground size-12 opacity-50" />
+                    <div className="bg-primary/10 flex size-16 items-center justify-center rounded">
+                      <MessageCircleIcon className="text-primary size-8" />
+                    </div>
                     <Typography variant="h5" className="mt-4">
                       Ask anything about your documents
                     </Typography>

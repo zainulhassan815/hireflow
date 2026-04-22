@@ -20,7 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { Typography } from "@/components/ui/typography";
 import { DocumentViewer } from "@/components/documents/document-viewer";
 import { SimilarDocuments } from "@/components/documents/similar-documents";
-import { formatDateTime, formatFileSize } from "@/lib/utils";
+import { cn, formatDateTime, formatFileSize, skillHueClass } from "@/lib/utils";
 import { toast } from "sonner";
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -171,7 +171,11 @@ export function DocumentPreview({
                   </Typography>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {skills.map((s) => (
-                      <Badge key={s} variant="secondary" className="text-xs">
+                      <Badge
+                        key={s}
+                        variant="outline"
+                        className={cn("text-xs", skillHueClass(s))}
+                      >
                         {s}
                       </Badge>
                     ))}

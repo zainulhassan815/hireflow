@@ -892,6 +892,44 @@ Production-grade interface with attention to detail, accessibility, and delight.
     `devOptions: { enabled: true }` so install criteria are met on
     localhost without a prod build.
 
+- [x] **F107 · Color & theme pass** — the F90 palette existed but
+  lived almost exclusively on small outline badges; the rest of the
+  chrome was gray. F107 pushes hue into the content (hero, icons,
+  metrics, empty states, skill chips) and ships the missing
+  light/dark switcher so users can pick.
+  - [x] **F107.a** Color enrichment: sidebar active state → full
+    primary (icon + label + `bg-primary/8` row tint, not just the
+    3px rail); dashboard hero gets a `border-primary` left rule +
+    primary numeral + three-hue metric strip (cat-5/cat-4/cat-2);
+    filetype glyphs tint by document_type (`bg-cat-X/10 text-cat-X`)
+    in documents table + grid and dashboard recent-docs; 5 empty
+    states get a drop-cap tinted-square hero icon (primary /
+    cat-2 / cat-4 / info); jobs page aligns status badge with the
+    F90.d semantic map (bg-success on open) and gains a leading
+    status dot on each card. Skill tags become pastel chips with
+    a stable `skillHueClass()` hash so "Python" reads the same hue
+    across candidates table, jobs cards, search-result metadata,
+    candidate detail modal, and document preview. Five new
+    `--cat-X-ink` tokens in `index.css` paired with `bg-cat-X/15`
+    give GitHub-label-style chips: low-alpha tint, high-chroma
+    same-hue text. All five ink tokens clear WCAG AA contrast in
+    light and dark modes (including chartreuse, where
+    full-saturation `text-cat-4` previously failed).
+  - [x] **F107.b** Theme switcher: `next-themes` was already a dep
+    via `sonner` but no `<ThemeProvider>` wrapped the app. Wired
+    it at `main.tsx` with `attribute="class"`, `defaultTheme="system"`,
+    `enableSystem`, `disableTransitionOnChange`. Three surfaces
+    expose the toggle: a Theme submenu in the sidebar user
+    dropdown (Light/Dark/System radio with Sun/Moon/Laptop icons),
+    an Appearance card on `/settings` (segmented buttons,
+    SSR-safe `mounted` flag to avoid first-paint flicker), and
+    three command-palette entries under an Appearance group with
+    `keywords={["theme", "light"|"dark"|"system", "appearance"]}`
+    so Cmd/Ctrl+K → "dark" → Enter works. No dedicated global
+    shortcut: the safe combos all collide with browser/OS
+    bindings and theme is a set-once preference; the palette
+    path costs three keystrokes and zero collisions.
+
 ---
 
 ## Out of scope for v1

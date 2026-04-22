@@ -52,6 +52,19 @@
   --cat-4: oklch(0.82 0.16 98); /* chartreuse */
   --cat-5: oklch(0.65 0.12 170); /* teal */
 
+  /* Contrasting foreground "ink" for pastel chips. Paired with a
+   * low-alpha bg (cat-X/15) so the TEXT carries the saturation,
+   * not the surface. Chroma pushed near the OKLCH gamut edge at
+   * these darker lightnesses for visible hue punch; L tuned per
+   * hue so each sits at ~5:1 contrast on a near-white pastel bg.
+   * cat-4 keeps a slightly higher L because yellow-green can't
+   * sustain high chroma at very low L. */
+  --cat-1-ink: oklch(0.35 0.22 242);
+  --cat-2-ink: oklch(0.33 0.25 314);
+  --cat-3-ink: oklch(0.4 0.22 26);
+  --cat-4-ink: oklch(0.45 0.18 98);
+  --cat-5-ink: oklch(0.38 0.17 170);
+
   --radius: 0;
   --sidebar: oklch(0.985 0.002 247.839);
   --sidebar-foreground: oklch(0.13 0.028 261.692);
@@ -100,6 +113,16 @@
   --cat-4: oklch(0.85 0.17 98);
   --cat-5: oklch(0.72 0.13 170);
 
+  /* Inverted ink for dark: light surface tint (cat-X/15) on low-L
+   * bg produces a dusky film; ink stays high-L and keeps chroma
+   * pushed to the gamut edge so the hue punches despite lower
+   * alpha on the surface. */
+  --cat-1-ink: oklch(0.88 0.16 242);
+  --cat-2-ink: oklch(0.85 0.2 314);
+  --cat-3-ink: oklch(0.88 0.18 26);
+  --cat-4-ink: oklch(0.95 0.18 98);
+  --cat-5-ink: oklch(0.88 0.14 170);
+
   --sidebar: oklch(0.21 0.034 264.665);
   --sidebar-foreground: oklch(0.985 0.002 247.839);
   --sidebar-primary: oklch(0.75 0.14 233);
@@ -139,6 +162,11 @@
   --color-cat-3: var(--cat-3);
   --color-cat-4: var(--cat-4);
   --color-cat-5: var(--cat-5);
+  --color-cat-1-ink: var(--cat-1-ink);
+  --color-cat-2-ink: var(--cat-2-ink);
+  --color-cat-3-ink: var(--cat-3-ink);
+  --color-cat-4-ink: var(--cat-4-ink);
+  --color-cat-5-ink: var(--cat-5-ink);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);

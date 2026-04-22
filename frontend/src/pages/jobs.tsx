@@ -32,17 +32,36 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Typography } from "@/components/ui/typography";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate, skillHueClass } from "@/lib/utils";
 import { toast } from "sonner";
 
+// F90.d pattern: semantic status color carried on the badge surface
+// itself (matches documents/dashboard). open → success (actively
+// accepting), archived → destructive (dead), others fall back to
+// the variant.
 const statusVariant: Record<
   string,
   "default" | "secondary" | "outline" | "destructive"
 > = {
-  open: "default",
+  open: "secondary",
   draft: "outline",
   closed: "secondary",
   archived: "destructive",
+};
+
+const statusBadgeClass: Record<string, string> = {
+  open: "bg-success text-success-foreground border-transparent",
+};
+
+// Fast-glance indicator beside the job title. Mirrors the badge's
+// semantic read so the status is scannable without reading labels.
+// draft → warning (in-progress), closed → muted (dead), archived →
+// destructive (removed from circulation).
+const statusDotClass: Record<string, string> = {
+  open: "bg-success",
+  draft: "bg-warning",
+  closed: "bg-muted-foreground",
+  archived: "bg-destructive",
 };
 
 export function JobsPage() {
@@ -120,7 +139,9 @@ export function JobsPage() {
 
       {jobs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <BriefcaseIcon className="text-muted-foreground size-12" />
+          <div className="bg-cat-4/10 flex size-16 items-center justify-center rounded">
+            <BriefcaseIcon className="text-cat-4 size-8" />
+          </div>
           <Typography variant="h4" className="mt-4 max-w-[28ch]">
             No openings on the board.
           </Typography>
@@ -140,7 +161,16 @@ export function JobsPage() {
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
-                    <Typography variant="h6">{job.title}</Typography>
+                    <div className="flex items-center gap-2">
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "inline-block size-2 shrink-0 rounded-full",
+                          statusDotClass[job.status] ?? "bg-muted-foreground"
+                        )}
+                      />
+                      <Typography variant="h6">{job.title}</Typography>
+                    </div>
                     <Typography variant="muted">
                       {job.location || "No location"} · Min {job.experience_min}
                       yr
@@ -176,7 +206,11 @@ export function JobsPage() {
               <CardContent>
                 <div className="flex flex-wrap gap-1">
                   {job.required_skills.slice(0, 4).map((skill) => (
-                    <Badge key={skill} variant="secondary" className="text-xs">
+                    <Badge
+                      key={skill}
+                      variant="outline"
+                      className={cn("text-xs", skillHueClass(skill))}
+                    >
                       {skill}
                     </Badge>
                   ))}
@@ -189,7 +223,7 @@ export function JobsPage() {
                 <div className="mt-3 flex items-center justify-between">
                   <Badge
                     variant={statusVariant[job.status] ?? "outline"}
-                    className="capitalize"
+                    className={cn("capitalize", statusBadgeClass[job.status])}
                   >
                     {job.status}
                   </Badge>

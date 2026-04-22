@@ -6,6 +6,7 @@ import { listCandidatesOptions } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn, skillHueClass } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -78,7 +79,9 @@ export function CandidatesPage() {
 
       {candidates.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <UsersIcon className="text-muted-foreground size-12" />
+          <div className="bg-cat-2/10 flex size-16 items-center justify-center rounded">
+            <UsersIcon className="text-cat-2 size-8" />
+          </div>
           <Typography variant="h4" className="mt-4 max-w-[28ch]">
             No candidates yet.
           </Typography>
@@ -113,7 +116,11 @@ export function CandidatesPage() {
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {c.skills.slice(0, 5).map((s) => (
-                        <Badge key={s} variant="secondary" className="text-xs">
+                        <Badge
+                          key={s}
+                          variant="outline"
+                          className={cn("text-xs", skillHueClass(s))}
+                        >
                           {s}
                         </Badge>
                       ))}

@@ -143,7 +143,8 @@ export function AppSidebar() {
                   // Transparent left border reserves the 3px slot so
                   // the item doesn't shift when activated.
                   "border-l-[3px] border-transparent transition-colors",
-                  isActive && "border-primary bg-muted/40 font-medium",
+                  isActive &&
+                    "border-primary bg-primary/8 text-primary font-medium",
                   dim && !isActive && "text-muted-foreground"
                 )}
                 render={
@@ -154,7 +155,7 @@ export function AppSidebar() {
                     <Icon
                       className={cn(
                         "size-5 shrink-0",
-                        isActive ? "text-foreground" : "text-muted-foreground"
+                        isActive ? "text-primary" : "text-muted-foreground"
                       )}
                     />
                     <span className="truncate">{item.title}</span>

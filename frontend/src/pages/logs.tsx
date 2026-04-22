@@ -93,7 +93,9 @@ export function LogsPage() {
 
       {logs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <ClipboardListIcon className="text-muted-foreground size-12" />
+          <div className="bg-info/10 flex size-16 items-center justify-center rounded">
+            <ClipboardListIcon className="text-info size-8" />
+          </div>
           <Typography variant="h4" className="mt-4">
             No activity yet
           </Typography>

@@ -94,6 +94,16 @@ const typeBadgeClass: Record<string, string> = {
   letter: "border-cat-4 text-cat-4",
 };
 
+// Tinted icon container mirroring the badge taxonomy. 10%-alpha
+// background pairs with solid-hue glyph so the eye lands on a
+// colored surface first, not on gray.
+const typeIconClass: Record<string, string> = {
+  resume: "bg-cat-1/10 text-cat-1",
+  report: "bg-cat-2/10 text-cat-2",
+  contract: "bg-cat-5/10 text-cat-5",
+  letter: "bg-cat-4/10 text-cat-4",
+};
+
 export function DocumentsPage() {
   const queryClient = useQueryClient();
   const [view, setView] = React.useState<"list" | "grid">("list");
@@ -402,7 +412,9 @@ export function DocumentsPage() {
 
       {documents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <FileTextIcon className="text-muted-foreground size-12" />
+          <div className="bg-primary/10 flex size-16 items-center justify-center rounded">
+            <FileTextIcon className="text-primary size-8" />
+          </div>
           <Typography variant="h4" className="mt-4 max-w-[28ch]">
             Nothing here yet.
           </Typography>
@@ -481,8 +493,14 @@ export function DocumentsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="bg-muted flex size-8 items-center justify-center rounded">
-                            <TypeIcon className="text-muted-foreground size-4" />
+                          <div
+                            className={cn(
+                              "flex size-8 items-center justify-center rounded",
+                              typeIconClass[doc.document_type ?? ""] ??
+                                "bg-muted text-muted-foreground"
+                            )}
+                          >
+                            <TypeIcon className="size-4" />
                           </div>
                           <Typography variant="small" className="font-medium">
                             {doc.filename}
@@ -576,8 +594,14 @@ export function DocumentsPage() {
                 onClick={() => setPreviewDoc(doc)}
               >
                 <CardContent className="p-4">
-                  <div className="bg-muted flex size-12 items-center justify-center rounded">
-                    <TypeIcon className="text-muted-foreground size-6" />
+                  <div
+                    className={cn(
+                      "flex size-12 items-center justify-center rounded",
+                      typeIconClass[doc.document_type ?? ""] ??
+                        "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    <TypeIcon className="size-6" />
                   </div>
                   <div className="mt-4">
                     <Typography

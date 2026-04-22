@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Typography } from "@/components/ui/typography";
+import { cn, skillHueClass } from "@/lib/utils";
 
 interface Candidate {
   id: string;
@@ -148,14 +149,28 @@ export function ResumeViewer({
             </Typography>
             <div className="flex flex-wrap gap-2">
               {candidate.skills.map((skill) => (
-                <Badge key={skill} variant="secondary">
+                <Badge
+                  key={skill}
+                  variant="outline"
+                  className={cn(skillHueClass(skill))}
+                >
                   {skill}
                 </Badge>
               ))}
               {candidate.skills.length < 5 && (
                 <>
-                  <Badge variant="secondary">Communication</Badge>
-                  <Badge variant="secondary">Problem Solving</Badge>
+                  <Badge
+                    variant="outline"
+                    className={cn(skillHueClass("Communication"))}
+                  >
+                    Communication
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={cn(skillHueClass("Problem Solving"))}
+                  >
+                    Problem Solving
+                  </Badge>
                 </>
               )}
             </div>

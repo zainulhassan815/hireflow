@@ -41,6 +41,13 @@ const typeBadgeClass: Record<string, string> = {
   letter: "border-cat-4 text-cat-4",
 };
 
+const typeIconClass: Record<string, string> = {
+  resume: "bg-cat-1/10 text-cat-1",
+  report: "bg-cat-2/10 text-cat-2",
+  contract: "bg-cat-5/10 text-cat-5",
+  letter: "bg-cat-4/10 text-cat-4",
+};
+
 export function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -162,7 +169,7 @@ export function DashboardPage() {
     return {
       headline: (
         <>
-          <span className="tabular-nums">{stats.processed}</span>{" "}
+          <span className="text-primary tabular-nums">{stats.processed}</span>{" "}
           {stats.processed === 1 ? "document is" : "documents are"} ready to
           screen.
         </>
@@ -202,9 +209,10 @@ export function DashboardPage() {
 
       {/* F90.d+ — prose hero. State-derived sentence with one primary
           CTA. Replaces the ratio + right-rail split that was reading
-          as a chart rather than a briefing. */}
+          as a chart rather than a briefing. The left-edge primary
+          rule anchors the headline tonally without gradient or glow. */}
       <div className="flex flex-col gap-4">
-        <p className="font-display max-w-[32ch] text-3xl leading-[1.2] font-semibold tracking-[-0.015em] sm:text-4xl">
+        <p className="font-display border-primary max-w-[32ch] border-l-[3px] pl-4 text-3xl leading-[1.2] font-semibold tracking-[-0.015em] sm:text-4xl">
           {hero.headline}
         </p>
         {hero.sub && <div className="text-base">{hero.sub}</div>}
@@ -218,17 +226,18 @@ export function DashboardPage() {
 
         {/* Unified stat strip — four entities in one horizontal row,
             divided by middots. Secondary information; the hero above
-            carries the primary read. */}
+            carries the primary read. Each category gets its own cat
+            hue on the numeral so the strip becomes a scannable
+            legend: teal/chartreuse/magenta for docs/jobs/candidates
+            (primary blue is reserved for the hero anchor). */}
         <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 border-t pt-4 text-sm">
           <span className="tabular-nums">
-            <span className="text-foreground font-medium">
-              {stats.documents}
-            </span>{" "}
+            <span className="text-cat-5 font-medium">{stats.documents}</span>{" "}
             {stats.documents === 1 ? "document" : "documents"}
           </span>
           <span aria-hidden>·</span>
           <span className="tabular-nums">
-            <span className="text-foreground font-medium">{stats.jobs}</span>{" "}
+            <span className="text-cat-4 font-medium">{stats.jobs}</span>{" "}
             {stats.jobs === 1 ? "job" : "jobs"}
             {stats.jobs > 0 && (
               <span className="text-muted-foreground">
@@ -239,9 +248,7 @@ export function DashboardPage() {
           </span>
           <span aria-hidden>·</span>
           <span className="tabular-nums">
-            <span className="text-foreground font-medium">
-              {stats.candidates}
-            </span>{" "}
+            <span className="text-cat-2 font-medium">{stats.candidates}</span>{" "}
             {stats.candidates === 1 ? "candidate" : "candidates"}
           </span>
         </div>
@@ -284,8 +291,14 @@ export function DashboardPage() {
                   >
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="bg-muted flex size-8 items-center justify-center rounded">
-                          <FileTextIcon className="text-muted-foreground size-4" />
+                        <div
+                          className={cn(
+                            "flex size-8 items-center justify-center rounded",
+                            typeIconClass[doc.document_type ?? ""] ??
+                              "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          <FileTextIcon className="size-4" />
                         </div>
                         <Typography variant="small" className="font-medium">
                           {doc.filename}
