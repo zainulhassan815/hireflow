@@ -241,31 +241,63 @@ Wire existing frontend pages to the real backend API. All pages must follow
     Relative-time column uses `date-fns` `formatDistanceToNow`
     (already in deps) rather than a hand-rolled helper.
 
-- [ ] **F44.d · Candidate triage UX polish** — things F44 surfaced
-  that aren't blocking but would make the list feel first-class.
-  Each item is independent; pick by impact-per-effort.
-  - [ ] **F44.d.1** Slide-over resume preview: drawer from the right
-    embeds `/documents/:source_document_id` without navigating away.
-    Triage without losing scroll position in the list.
-  - [ ] **F44.d.2** Keyboard shortcuts: `j/k` row nav, `s` shortlist,
-    `r` reject, `u` undo, `x` clear selection, `/` focus search.
-    Same shape as F102 command palette — pairs with it.
-  - [ ] **F44.d.3** Match-score breakdown popover: hovering the bar
-    pops `MatchBreakdown` (skills / experience / vector split). Backend
-    already returns the data via `POST /jobs/:id/match`; the list
-    response currently drops it — extend `ApplicationResponse` with a
-    `breakdown` field or call out to the match endpoint on hover.
-  - [ ] **F44.d.4** Bulk-status endpoint: `PATCH /applications/bulk-
-    status` replacing the fan-out N-PATCH pattern. Enables >50-row
-    selections, cleaner rollback, single DB transaction.
-  - [ ] **F44.d.5** Saved filter views: "High-score shortlist", "Not
-    yet triaged", "This week's decisions". Stored in localStorage;
-    no backend change. Quick return-user velocity win.
-  - [ ] **F44.d.6** Row virtualization (pairs with F95). Flat
-    performance past 500 rows. Irrelevant today; revisit when any
-    job hits that scale.
-  - [ ] **F44.d.7** Activity trail per application: expandable inline
-    "shortlisted by X · 2 days ago" history. Needs either an
+- [~] **F44.d · Candidate triage UX rework** — F44.c shipped working
+  but cluttered. The detail page has three control shapes fighting
+  in the filter bar (input + native range slider + 6 pills + count),
+  tall rows, and a three-button header. Rewriting against
+  established ATS / issue-tracker patterns (Linear, Lever,
+  Greenhouse, Notion) to get a clean triage surface that doesn't
+  overwhelm. Reordered items below match the intended ship sequence
+  — (1) kills the loudest visual noise, (6) unlocks daily velocity.
+  - [ ] **F44.d.1** Filter rework. Replace native range slider with
+    four tier buttons (`All / ≥60% / ≥75% / ≥90%`) — matches the way
+    HR actually thinks about match quality and the color bands
+    already used on the score bar. Status pills collapse into a
+    single multi-select popover (checkboxes) so combinations like
+    "shortlisted + interviewed" are possible. Active filters render
+    as removable chips below the search bar (Linear / GitHub
+    pattern). Single compact row: `[search] [filter popover]
+    [view toggle]`.
+  - [ ] **F44.d.2** Row density + always-visible actions. Compact
+    rows: name primary, email muted inline (not below), 3 skill
+    chips + overflow count, smaller match bar (96px), status
+    shown via dot + label. Shortlist/Reject/Undo buttons stay
+    visible at rest — hover-reveal was too disorienting for
+    first-time users and doesn't exist on touch. Drop the
+    "Updated" column; move relative time to a hover tooltip on
+    the name. Zero-score bar reads as 0% (drop the 2% floor).
+  - [ ] **F44.d.3** Header overflow menu + view toggle.
+    Refresh scores stays primary. Edit + Delete collapse into a
+    `···` overflow dropdown. Segmented `[List | Kanban]` control
+    top-right — Kanban disabled with "Coming in F93" tooltip.
+    Lays the track for the kanban swap so F93 is a new renderer,
+    not a new page.
+  - [ ] **F44.d.4** Quick-peek slide-over drawer. Click a row →
+    right-side drawer embeds the resume viewer (`/documents/:id`
+    inline), match-score summary, status history. Escape closes;
+    `j/k` move between rows in the list. Biggest daily-velocity
+    unlock — HR stops losing place in the list every time they
+    need to look at a résumé.
+  - [ ] **F44.d.5** Keyboard shortcuts: `j/k` row nav, `s`
+    shortlist, `r` reject, `u` undo, `x` clear selection, `/`
+    focus search, `Enter` open drawer. Pairs with F102 command
+    palette; hint overlay via `?`.
+  - [ ] **F44.d.6** Match-score breakdown popover: hovering the
+    bar pops `MatchBreakdown` (skills / experience / vector
+    split + one-line rationale). Extend `ApplicationResponse`
+    with a `breakdown` field — backend already computes it in
+    `MatchingService`, just needs to persist or recompute on the
+    list path.
+  - [ ] **F44.d.7** Bulk-status endpoint: `PATCH /applications/
+    bulk-status` replacing the N-PATCH fan-out. Enables >50-row
+    selections, single DB transaction, cleaner rollback.
+  - [ ] **F44.d.8** Saved filter views: "High-score shortlist",
+    "Not yet triaged", "This week's decisions". Stored in
+    localStorage; no backend change.
+  - [ ] **F44.d.9** Row virtualization (pairs with F95). Flat
+    performance past 500 rows. Not needed today.
+  - [ ] **F44.d.10** Activity trail per application: expandable
+    inline "shortlisted by X · 2 days ago" history. Needs an
     application-scoped activity-log query or a dedicated
     `application_events` table.
 

@@ -2,13 +2,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeftIcon,
   BriefcaseIcon,
+  LayoutGridIcon,
+  ListIcon,
   Loader2Icon,
+  MoreHorizontalIcon,
   PencilIcon,
   SparklesIcon,
   TrashIcon,
 } from "lucide-react";
 import * as React from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
@@ -32,6 +35,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Typography } from "@/components/ui/typography";
 import { cn, skillHueClass } from "@/lib/utils";
 
@@ -140,12 +156,12 @@ export function JobDetailPage() {
         <Typography variant="muted">
           It may have been deleted, or you don&apos;t have access.
         </Typography>
-        <Button asChild variant="outline">
-          <Link to="/jobs">
+        <Link to="/jobs">
+          <Button variant="outline">
             <ArrowLeftIcon className="size-4" data-icon="inline-start" />
             Back to jobs
-          </Link>
-        </Button>
+          </Button>
+        </Link>
       </div>
     );
   }
@@ -196,7 +212,7 @@ export function JobDetailPage() {
             </div>
           )}
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Button
             variant="outline"
             onClick={runMatch}
@@ -208,23 +224,67 @@ export function JobDetailPage() {
             />
             {matchMut.isPending ? "Scoring…" : "Refresh scores"}
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => navigate(`/jobs/${job.id}/edit`)}
-          >
-            <PencilIcon className="size-4" data-icon="inline-start" />
-            Edit
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => setConfirmDelete(true)}
-            className="text-destructive"
-          >
-            <TrashIcon className="size-4" data-icon="inline-start" />
-            Delete
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="ghost" size="icon" aria-label="More actions">
+                  <MoreHorizontalIcon className="size-4" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => navigate(`/jobs/${job.id}/edit`)}
+              >
+                <PencilIcon className="mr-2 size-4" />
+                Edit job
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <TrashIcon className="mr-2 size-4" />
+                Delete job
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      {/* View toggle — F44.d.3. Kanban disabled until F93 ships. */}
+      {applications.length > 0 && (
+        <div className="flex justify-end">
+          <ToggleGroup
+            variant="outline"
+            value={["list"]}
+            aria-label="View mode"
+          >
+            <ToggleGroupItem value="list" aria-label="List view">
+              <ListIcon className="size-4" data-icon="inline-start" />
+              List
+            </ToggleGroupItem>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <ToggleGroupItem
+                    value="kanban"
+                    aria-label="Kanban view"
+                    disabled
+                  >
+                    <LayoutGridIcon
+                      className="size-4"
+                      data-icon="inline-start"
+                    />
+                    Kanban
+                  </ToggleGroupItem>
+                }
+              />
+              <TooltipContent>Coming in F93</TooltipContent>
+            </Tooltip>
+          </ToggleGroup>
+        </div>
+      )}
 
       {/* Candidate list */}
       {appsLoading ? (

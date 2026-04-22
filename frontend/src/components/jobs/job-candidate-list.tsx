@@ -5,6 +5,7 @@ import {
   ArrowUpIcon,
   CheckIcon,
   ChevronRightIcon,
+  FilterIcon,
   SearchIcon,
   UndoIcon,
   XIcon,
@@ -24,48 +25,59 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Typography } from "@/components/ui/typography";
-import { cn } from "@/lib/utils";
+import { cn, skillHueClass } from "@/lib/utils";
 
 /**
- * F44.b/c — the triage surface.
+ * F44.b/c/d — candidate triage surface.
  *
- * One row per application. Each row:
- * - Checkbox for bulk selection (F44.c).
- * - Name (links to `/documents/:source_document_id` if a resume exists).
- * - Match score 0-100 bar, cat-semantic color.
- * - Current status badge (distinct visual from action affordance).
- * - Inline actions whose shape depends on status:
- *   - `new` → [Shortlist] + [Reject]
- *   - `shortlisted` / `rejected` → [Undo]
- *   - `interviewed` / `hired` → read-only; F93 Kanban owns those.
+ * F44.d reworked the visual density against established ATS / issue-
+ * tracker patterns (Linear issues, Lever pipeline, Notion database):
+ * one quiet filter row, compact rows, always-visible action buttons,
+ * active-filter chips, score-tier buttons instead of a range slider.
  *
- * Optimistic mutation: click → row flips immediately via onMutate;
- * rolls back on error.
+ * Row actions (status change) use optimistic mutation: click → row
+ * flips immediately via onMutate; rolls back on error.
  *
- * Filter toolbar (F44.b): free-text (name/email/skill), min-score
- * slider, status pills. Client-side — full set ships in one response.
+ * Sortable columns: click Candidate / Score header to toggle.
  *
- * Sortable columns (F44.c): click a header to sort by Score / Name /
- * Updated. Score descending is the default (triage rank order).
- *
- * Bulk actions (F44.c): selecting rows surfaces a sticky toolbar with
- * [Shortlist all] / [Reject all]. Backend has no bulk endpoint today
- * so the frontend fans out N PATCHes with optimistic updates; acceptable
- * for N ≤ 50 (the list size cap) and avoids a server-side API addition.
+ * Bulk select: checkbox column feeds a sticky toolbar. No bulk
+ * backend endpoint today — frontend fans out N PATCHes with
+ * optimistic cache patch; rolls the whole batch back on any failure.
  */
 
-type StatusFilter = "all" | ApplicationStatus;
-type SortKey = "score" | "name" | "updated";
+type StatusFilter = ApplicationStatus;
+type ScoreTier = "all" | "60" | "75" | "90";
+type SortKey = "score" | "name";
 type SortDir = "asc" | "desc";
 
-const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "new", label: "New" },
-  { value: "shortlisted", label: "Shortlisted" },
-  { value: "rejected", label: "Rejected" },
-  { value: "interviewed", label: "Interviewed" },
-  { value: "hired", label: "Hired" },
+const SCORE_TIERS: { value: ScoreTier; label: string; threshold: number }[] = [
+  { value: "all", label: "All", threshold: 0 },
+  { value: "60", label: "≥ 60%", threshold: 60 },
+  { value: "75", label: "≥ 75%", threshold: 75 },
+  { value: "90", label: "≥ 90%", threshold: 90 },
+];
+
+const STATUS_LIST: {
+  value: StatusFilter;
+  label: string;
+  dotClass: string;
+}[] = [
+  { value: "new", label: "New", dotClass: "bg-muted-foreground" },
+  { value: "shortlisted", label: "Shortlisted", dotClass: "bg-success" },
+  { value: "rejected", label: "Rejected", dotClass: "bg-destructive" },
+  { value: "interviewed", label: "Interviewed", dotClass: "bg-cat-3" },
+  { value: "hired", label: "Hired", dotClass: "bg-cat-1" },
 ];
 
 interface JobCandidateListProps {
@@ -78,20 +90,25 @@ export function JobCandidateList({
   onStatusChanged,
 }: JobCandidateListProps) {
   const [search, setSearch] = React.useState("");
-  const [minScore, setMinScore] = React.useState(0);
-  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
+  const [scoreTier, setScoreTier] = React.useState<ScoreTier>("all");
+  const [statusSet, setStatusSet] = React.useState<Set<StatusFilter>>(
+    () => new Set()
+  );
   const [sortKey, setSortKey] = React.useState<SortKey>("score");
   const [sortDir, setSortDir] = React.useState<SortDir>("desc");
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
     () => new Set()
   );
 
+  const scoreThreshold =
+    SCORE_TIERS.find((t) => t.value === scoreTier)?.threshold ?? 0;
+
   const filtered = React.useMemo(() => {
     const needle = search.trim().toLowerCase();
     return applications.filter((app) => {
-      if (statusFilter !== "all" && app.status !== statusFilter) return false;
+      if (statusSet.size > 0 && !statusSet.has(app.status)) return false;
       const score100 = Math.round((app.score ?? 0) * 100);
-      if (score100 < minScore) return false;
+      if (score100 < scoreThreshold) return false;
       if (!needle) return true;
       const c = app.candidate;
       const haystacks = [c.name ?? "", c.email ?? "", ...(c.skills ?? [])].map(
@@ -99,7 +116,7 @@ export function JobCandidateList({
       );
       return haystacks.some((h) => h.includes(needle));
     });
-  }, [applications, search, minScore, statusFilter]);
+  }, [applications, search, scoreThreshold, statusSet]);
 
   const sorted = React.useMemo(() => {
     const copy = [...filtered];
@@ -110,16 +127,6 @@ export function JobCandidateList({
         const bn = (b.candidate.name ?? b.candidate.email ?? "").toLowerCase();
         return an.localeCompare(bn) * dir;
       }
-      if (sortKey === "updated") {
-        return (
-          (new Date(a.updated_at).getTime() -
-            new Date(b.updated_at).getTime()) *
-          dir
-        );
-      }
-      // score — nulls fall to the bottom regardless of direction, which
-      // matches "haven't been scored" being least actionable in both
-      // directions.
       const as = a.score ?? -Infinity;
       const bs = b.score ?? -Infinity;
       return (as - bs) * dir;
@@ -127,9 +134,6 @@ export function JobCandidateList({
     return copy;
   }, [filtered, sortKey, sortDir]);
 
-  // Keep selection coherent with the current filtered view — if the
-  // filter excludes a selected row, it's no longer actionable from the
-  // bulk toolbar, so drop it.
   React.useEffect(() => {
     setSelectedIds((prev) => {
       const visible = new Set(sorted.map((a) => a.id));
@@ -179,24 +183,69 @@ export function JobCandidateList({
         setSortDir((d) => (d === "asc" ? "desc" : "asc"));
         return prevKey;
       }
-      // Score defaults to desc (top matches first); name asc; updated desc.
       setSortDir(key === "name" ? "asc" : "desc");
       return key;
     });
   };
 
+  const activeFilterCount =
+    (scoreTier !== "all" ? 1 : 0) + (statusSet.size > 0 ? 1 : 0);
+  const activeTierMeta = SCORE_TIERS.find((t) => t.value === scoreTier);
+
   return (
     <div className="flex flex-col gap-3">
-      <Toolbar
+      <FilterRow
         search={search}
         onSearch={setSearch}
-        minScore={minScore}
-        onMinScoreChange={setMinScore}
-        statusFilter={statusFilter}
-        onStatusFilter={setStatusFilter}
+        scoreTier={scoreTier}
+        onScoreTier={setScoreTier}
+        statusSet={statusSet}
+        onStatusSet={setStatusSet}
+        activeFilterCount={activeFilterCount}
         totalCount={applications.length}
         filteredCount={sorted.length}
       />
+
+      {activeFilterCount > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {scoreTier !== "all" && activeTierMeta && (
+            <FilterChip
+              label={`Score ${activeTierMeta.label}`}
+              onRemove={() => setScoreTier("all")}
+            />
+          )}
+          {Array.from(statusSet).map((s) => {
+            const meta = STATUS_LIST.find((m) => m.value === s);
+            if (!meta) return null;
+            return (
+              <FilterChip
+                key={s}
+                label={meta.label}
+                dotClass={meta.dotClass}
+                onRemove={() => {
+                  setStatusSet((prev) => {
+                    const next = new Set(prev);
+                    next.delete(s);
+                    return next;
+                  });
+                }}
+              />
+            );
+          })}
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground ml-1 text-xs"
+              onClick={() => {
+                setScoreTier("all");
+                setStatusSet(new Set());
+              }}
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+      )}
 
       {selectedIds.size > 0 && (
         <BulkActionBar
@@ -211,17 +260,12 @@ export function JobCandidateList({
 
       <div className="overflow-hidden rounded-lg border">
         <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-muted-foreground text-xs tracking-wide uppercase">
+          <thead className="bg-muted/20 text-muted-foreground">
             <tr>
-              <th className="w-10 px-3 py-2">
+              <th className="w-10 px-3 py-2.5">
                 <Checkbox
-                  checked={
-                    allVisibleSelected
-                      ? true
-                      : someVisibleSelected
-                        ? "indeterminate"
-                        : false
-                  }
+                  checked={allVisibleSelected}
+                  indeterminate={someVisibleSelected}
                   onCheckedChange={toggleAllVisible}
                   aria-label="Select all visible candidates"
                 />
@@ -233,21 +277,16 @@ export function JobCandidateList({
                 onClick={() => requestSort("name")}
               />
               <SortableHeader
-                label="Match score"
+                label="Match"
                 active={sortKey === "score"}
                 dir={sortDir}
                 onClick={() => requestSort("score")}
-                className="w-56"
+                className="w-40"
               />
-              <SortableHeader
-                label="Updated"
-                active={sortKey === "updated"}
-                dir={sortDir}
-                onClick={() => requestSort("updated")}
-                className="w-32"
-              />
-              <th className="w-32 px-4 py-2 text-left font-medium">Status</th>
-              <th className="w-56 px-4 py-2 text-right font-medium">Actions</th>
+              <th className="w-32 px-4 py-2.5 text-left text-xs font-medium">
+                Status
+              </th>
+              <th className="w-48 px-4 py-2.5 text-right"></th>
             </tr>
           </thead>
           <tbody>
@@ -263,10 +302,24 @@ export function JobCandidateList({
             {sorted.length === 0 && (
               <tr>
                 <td
-                  colSpan={6}
-                  className="text-muted-foreground px-4 py-8 text-center"
+                  colSpan={5}
+                  className="text-muted-foreground px-4 py-12 text-center"
                 >
-                  No candidates match your filters.
+                  <div className="flex flex-col items-center gap-2">
+                    <span>No candidates match your filters.</span>
+                    {activeFilterCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setScoreTier("all");
+                          setStatusSet(new Set());
+                        }}
+                        className="text-primary text-xs font-medium hover:underline"
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             )}
@@ -277,63 +330,32 @@ export function JobCandidateList({
   );
 }
 
-function SortableHeader({
-  label,
-  active,
-  dir,
-  onClick,
-  className,
-}: {
-  label: string;
-  active: boolean;
-  dir: SortDir;
-  onClick: () => void;
-  className?: string;
-}) {
-  return (
-    <th className={cn("px-4 py-2 text-left font-medium", className)}>
-      <button
-        type="button"
-        onClick={onClick}
-        className={cn(
-          "inline-flex items-center gap-1 rounded transition-colors",
-          active ? "text-foreground" : "hover:text-foreground"
-        )}
-      >
-        {label}
-        {active &&
-          (dir === "asc" ? (
-            <ArrowUpIcon className="size-3" />
-          ) : (
-            <ArrowDownIcon className="size-3" />
-          ))}
-      </button>
-    </th>
-  );
-}
+/* -------------------------------- Filter row ------------------------------ */
 
-function Toolbar({
+function FilterRow({
   search,
   onSearch,
-  minScore,
-  onMinScoreChange,
-  statusFilter,
-  onStatusFilter,
+  scoreTier,
+  onScoreTier,
+  statusSet,
+  onStatusSet,
+  activeFilterCount,
   totalCount,
   filteredCount,
 }: {
   search: string;
   onSearch: (v: string) => void;
-  minScore: number;
-  onMinScoreChange: (v: number) => void;
-  statusFilter: StatusFilter;
-  onStatusFilter: (v: StatusFilter) => void;
+  scoreTier: ScoreTier;
+  onScoreTier: (v: ScoreTier) => void;
+  statusSet: Set<StatusFilter>;
+  onStatusSet: (v: Set<StatusFilter>) => void;
+  activeFilterCount: number;
   totalCount: number;
   filteredCount: number;
 }) {
   return (
-    <div className="bg-card flex flex-wrap items-center gap-2 rounded-lg border p-3">
-      <div className="relative min-w-[200px] flex-1">
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="relative min-w-[220px] flex-1">
         <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
         <Input
           value={search}
@@ -343,51 +365,129 @@ function Toolbar({
         />
       </div>
 
-      <div className="flex items-center gap-2">
-        <Typography variant="muted" className="shrink-0 text-xs">
-          Min score
-        </Typography>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={5}
-          value={minScore}
-          onChange={(e) => onMinScoreChange(Number(e.target.value))}
-          className="accent-primary h-1 w-32 cursor-pointer"
-          aria-label="Minimum match score"
+      <Popover>
+        <PopoverTrigger
+          render={
+            <Button variant="outline">
+              <FilterIcon className="size-4" data-icon="inline-start" />
+              Filter
+              {activeFilterCount > 0 && (
+                <span className="bg-primary text-primary-foreground ml-1 rounded-full px-1.5 text-[10px] leading-4 font-semibold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+          }
         />
-        <span className="text-muted-foreground w-10 text-sm tabular-nums">
-          {minScore}%
-        </span>
-      </div>
+        <PopoverContent align="end" className="w-80">
+          <div className="flex flex-col gap-4">
+            <div>
+              <Typography
+                variant="small"
+                className="text-muted-foreground mb-2 block text-xs font-medium tracking-wide uppercase"
+              >
+                Match score
+              </Typography>
+              <div className="grid grid-cols-4 gap-1">
+                {SCORE_TIERS.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => onScoreTier(t.value)}
+                    className={cn(
+                      "rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
+                      scoreTier === t.value
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "hover:bg-muted"
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-      <div className="flex items-center gap-1">
-        {STATUS_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => onStatusFilter(opt.value)}
-            className={cn(
-              "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-              statusFilter === opt.value
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted"
-            )}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+            <div>
+              <Typography
+                variant="small"
+                className="text-muted-foreground mb-2 block text-xs font-medium tracking-wide uppercase"
+              >
+                Status
+              </Typography>
+              <div className="flex flex-col gap-1">
+                {STATUS_LIST.map((s) => {
+                  const checked = statusSet.has(s.value);
+                  return (
+                    <label
+                      key={s.value}
+                      className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(v) => {
+                          const next = new Set(statusSet);
+                          if (v) next.add(s.value);
+                          else next.delete(s.value);
+                          onStatusSet(next);
+                        }}
+                      />
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "inline-block size-2 rounded-full",
+                          s.dotClass
+                        )}
+                      />
+                      {s.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
 
-      <div className="text-muted-foreground ml-auto text-xs">
+      <span className="text-muted-foreground ml-auto text-xs tabular-nums">
         {filteredCount === totalCount
           ? `${totalCount} candidate${totalCount === 1 ? "" : "s"}`
           : `${filteredCount} of ${totalCount}`}
-      </div>
+      </span>
     </div>
   );
 }
+
+function FilterChip({
+  label,
+  dotClass,
+  onRemove,
+}: {
+  label: string;
+  dotClass?: string;
+  onRemove: () => void;
+}) {
+  return (
+    <span className="bg-muted text-foreground inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium">
+      {dotClass && (
+        <span
+          aria-hidden
+          className={cn("inline-block size-1.5 rounded-full", dotClass)}
+        />
+      )}
+      {label}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${label} filter`}
+        className="hover:bg-foreground/10 -mr-1 rounded-full p-0.5"
+      >
+        <XIcon className="size-3" />
+      </button>
+    </span>
+  );
+}
+
+/* -------------------------------- Bulk bar -------------------------------- */
 
 function BulkActionBar({
   selected,
@@ -401,9 +501,6 @@ function BulkActionBar({
   const [pending, setPending] = React.useState(false);
   const queryClient = useQueryClient();
 
-  // "Actionable" triagable rows — already-decided status rows are
-  // skipped silently (F93 owns interviewed/hired transitions). The
-  // counter reflects how many will actually change.
   const actionable = selected.filter(
     (a) =>
       a.status === "new" ||
@@ -414,16 +511,8 @@ function BulkActionBar({
   const applyBulk = async (status: ApplicationStatus) => {
     if (actionable.length === 0) return;
     setPending(true);
-
-    // Fan-out N PATCHes. Backend has no bulk endpoint today; list
-    // ceilings at 50 so worst case is 50 parallel requests. Each one
-    // uses the real mutation so all server-side invariants hold.
-    // Optimistic update patches the cache immediately so the UI
-    // doesn't flicker.
     const jobId = actionable[0].job_id;
-    const queryKey = listJobApplicationsQueryKey({
-      path: { job_id: jobId },
-    });
+    const queryKey = listJobApplicationsQueryKey({ path: { job_id: jobId } });
     await queryClient.cancelQueries({ queryKey });
     const previous = queryClient.getQueryData<ApplicationResponse[]>(queryKey);
     const targetIds = new Set(actionable.map((a) => a.id));
@@ -441,12 +530,7 @@ function BulkActionBar({
     );
     const failed = results.filter((r) => r.status === "rejected").length;
     setPending(false);
-
     if (failed > 0) {
-      // Roll back on ANY failure — partial success is worse UX than
-      // "redo the whole selection" because HR can't tell which rows
-      // succeeded without scanning the table. For F44.c scope that
-      // trade is right; revisit if bulk sizes grow.
       if (previous) queryClient.setQueryData(queryKey, previous);
       toast.error(
         failed === actionable.length
@@ -509,6 +593,43 @@ function BulkActionBar({
   );
 }
 
+/* --------------------------------- Rows ----------------------------------- */
+
+function SortableHeader({
+  label,
+  active,
+  dir,
+  onClick,
+  className,
+}: {
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <th className={cn("px-4 py-2.5 text-left text-xs font-medium", className)}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "inline-flex items-center gap-1 rounded transition-colors",
+          active ? "text-foreground" : "hover:text-foreground"
+        )}
+      >
+        {label}
+        {active &&
+          (dir === "asc" ? (
+            <ArrowUpIcon className="size-3" />
+          ) : (
+            <ArrowDownIcon className="size-3" />
+          ))}
+      </button>
+    </th>
+  );
+}
+
 function CandidateRow({
   app,
   selected,
@@ -527,7 +648,6 @@ function CandidateRow({
 
   const mut = useMutation({
     ...updateApplicationStatusMutation(),
-    // F44.b — optimistic update. HR clicks should feel instant.
     onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey });
       const previous =
@@ -552,10 +672,7 @@ function CandidateRow({
   });
 
   const setStatus = (status: ApplicationStatus) => {
-    mut.mutate({
-      path: { application_id: app.id },
-      body: { status },
-    });
+    mut.mutate({ path: { application_id: app.id }, body: { status } });
   };
 
   const c = app.candidate;
@@ -566,59 +683,96 @@ function CandidateRow({
   return (
     <tr
       className={cn(
-        "border-b last:border-0",
+        "group relative border-b last:border-0",
         selected ? "bg-primary/5" : "hover:bg-muted/30"
       )}
     >
-      <td className="px-3 py-3">
+      <td className="relative px-3 py-3 align-middle">
+        {/* Selection marker — Notion-style 2px accent strip */}
+        {selected && (
+          <span
+            aria-hidden
+            className="bg-primary absolute top-0 bottom-0 left-0 w-[3px]"
+          />
+        )}
         <Checkbox
           checked={selected}
           onCheckedChange={onToggleSelect}
           aria-label={`Select ${displayName}`}
         />
       </td>
-      <td className="px-4 py-3">
-        <div className="flex flex-col">
-          {c.source_document_id ? (
-            <Link
-              to={`/documents/${c.source_document_id}`}
-              className="inline-flex items-center gap-1 font-medium hover:underline"
-            >
-              {displayName}
-              <ChevronRightIcon className="size-3 opacity-50" />
-            </Link>
-          ) : (
-            <span className="font-medium">{displayName}</span>
-          )}
-          {c.email && (
-            <span className="text-muted-foreground text-xs">{c.email}</span>
-          )}
-          {c.skills && c.skills.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {c.skills.slice(0, 4).map((skill) => (
-                <Badge key={skill} variant="outline" className="text-xs">
-                  {skill}
-                </Badge>
-              ))}
-              {c.skills.length > 4 && (
-                <Badge variant="outline" className="text-xs">
-                  +{c.skills.length - 4}
-                </Badge>
+      <td className="px-4 py-3 align-middle">
+        <div className="flex items-start gap-3">
+          <Avatar name={c.name} email={c.email} />
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              {c.source_document_id ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Link
+                        to={`/documents/${c.source_document_id}`}
+                        className="inline-flex items-center gap-1 font-medium hover:underline"
+                      >
+                        {displayName}
+                        <ChevronRightIcon className="size-3 opacity-40" />
+                      </Link>
+                    }
+                  />
+                  <TooltipContent>
+                    Updated {formatDistanceToNow(updated, { addSuffix: true })}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={<span className="font-medium">{displayName}</span>}
+                  />
+                  <TooltipContent>
+                    Updated {formatDistanceToNow(updated, { addSuffix: true })}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {c.email && (
+                <span className="text-muted-foreground truncate text-xs">
+                  {c.email}
+                </span>
               )}
             </div>
-          )}
+            {c.skills && c.skills.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {c.skills.slice(0, 3).map((skill) => (
+                  <Badge
+                    key={skill}
+                    variant="outline"
+                    className={cn(
+                      "h-5 px-1.5 text-[11px] font-normal",
+                      skillHueClass(skill)
+                    )}
+                  >
+                    {skill}
+                  </Badge>
+                ))}
+                {c.skills.length > 3 && (
+                  <Badge
+                    variant="outline"
+                    className="h-5 px-1.5 text-[11px] font-normal"
+                  >
+                    +{c.skills.length - 3}
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-3 align-middle">
         <MatchScoreBar score={score100} />
       </td>
-      <td className="text-muted-foreground px-4 py-3 text-xs">
-        {formatDistanceToNow(updated, { addSuffix: true })}
+      <td className="px-4 py-3 align-middle">
+        <StatusLabel status={app.status} />
       </td>
-      <td className="px-4 py-3">
-        <StatusBadge status={app.status} />
-      </td>
-      <td className="px-4 py-3 text-right">
+      <td className="px-4 py-3 text-right align-middle">
         <ActionButtons
           status={app.status}
           onSetStatus={setStatus}
@@ -638,42 +792,58 @@ function MatchScoreBar({ score }: { score: number }) {
         : "bg-muted-foreground";
   return (
     <div className="flex items-center gap-2">
-      <div className="bg-muted h-2 flex-1 overflow-hidden rounded">
+      <div className="bg-muted h-1.5 w-24 overflow-hidden rounded-full">
         <div
-          className={cn("h-full rounded transition-[width]", color)}
-          style={{ width: `${Math.max(score, 2)}%` }}
+          className={cn("h-full rounded-full transition-[width]", color)}
+          style={{ width: `${score}%` }}
         />
       </div>
-      <span className="text-muted-foreground w-10 shrink-0 text-xs tabular-nums">
+      <span className="text-muted-foreground w-8 shrink-0 text-xs tabular-nums">
         {score}%
       </span>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: ApplicationStatus }) {
-  const styles: Record<ApplicationStatus, string> = {
-    new: "bg-muted text-muted-foreground",
-    shortlisted: "bg-success text-success-foreground",
-    rejected: "bg-destructive/15 text-destructive",
-    interviewed: "bg-cat-3/15 text-cat-3",
-    hired: "bg-cat-1/15 text-cat-1",
+function StatusLabel({ status }: { status: ApplicationStatus }) {
+  const meta: Record<
+    ApplicationStatus,
+    { label: string; dot: string; text: string }
+  > = {
+    new: {
+      label: "New",
+      dot: "bg-muted-foreground",
+      text: "text-muted-foreground",
+    },
+    shortlisted: {
+      label: "Shortlisted",
+      dot: "bg-success",
+      text: "text-success",
+    },
+    rejected: {
+      label: "Rejected",
+      dot: "bg-destructive",
+      text: "text-destructive",
+    },
+    interviewed: {
+      label: "Interviewed",
+      dot: "bg-cat-3",
+      text: "text-cat-3",
+    },
+    hired: {
+      label: "Hired",
+      dot: "bg-cat-1",
+      text: "text-cat-1",
+    },
   };
-  const labels: Record<ApplicationStatus, string> = {
-    new: "New",
-    shortlisted: "✓ Shortlisted",
-    rejected: "✗ Rejected",
-    interviewed: "Interviewed",
-    hired: "Hired",
-  };
+  const m = meta[status];
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-        styles[status]
-      )}
-    >
-      {labels[status]}
+    <span className={cn("inline-flex items-center gap-1.5 text-sm", m.text)}>
+      <span
+        aria-hidden
+        className={cn("inline-block size-1.5 rounded-full", m.dot)}
+      />
+      {m.label}
     </span>
   );
 }
@@ -688,7 +858,6 @@ function ActionButtons({
   pending: boolean;
 }) {
   if (status === "interviewed" || status === "hired") {
-    // F93 Kanban owns these transitions; no inline affordance here.
     return (
       <Typography variant="muted" className="text-xs italic">
         Managed on Kanban
@@ -721,17 +890,54 @@ function ActionButtons({
     );
   }
 
-  // shortlisted or rejected → Undo returns to `new`.
   return (
-    <Button
-      size="sm"
-      variant="ghost"
-      onClick={() => onSetStatus("new")}
-      disabled={pending}
-    >
-      <UndoIcon className="size-4" data-icon="inline-start" />
-      Undo
-    </Button>
+    <div className="flex justify-end">
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => onSetStatus("new")}
+        disabled={pending}
+      >
+        <UndoIcon className="size-4" data-icon="inline-start" />
+        Undo
+      </Button>
+    </div>
   );
 }
 
+function candidateInitials(
+  name: string | null | undefined,
+  email: string | null | undefined
+): string {
+  const source = (name ?? email ?? "?").trim();
+  if (!source || source === "?") return "?";
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return source.slice(0, 2).toUpperCase();
+}
+
+function Avatar({
+  name,
+  email,
+}: {
+  name: string | null | undefined;
+  email: string | null | undefined;
+}) {
+  // Pseudo-random hue per candidate — same `skillHueClass` hash used
+  // elsewhere, so a given person keeps the same color across pages.
+  // Driven by display name; falls back to email for anonymous resumes.
+  const key = name || email || "?";
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+        skillHueClass(key)
+      )}
+    >
+      {candidateInitials(name, email)}
+    </span>
+  );
+}
