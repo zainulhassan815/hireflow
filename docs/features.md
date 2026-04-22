@@ -802,7 +802,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     PyMuPDF (`pymupdf`) is pure Python wheel. Prefer PyMuPDF for the
     thinner install.
 
-- [~] **F105 · Hybrid document viewer (factory pattern)** (F105.a+b landed; F105.c–e open) — today a
+- [x] **F105 · Hybrid document viewer (factory pattern)** (a–e all shipped) — today a
   document preview shows metadata + similar docs (F89.c.1) but no
   actual content. We want one entry point (`<DocumentViewer>`) that
   renders anything the corpus holds — PDFs, images, office files,
@@ -856,17 +856,32 @@ Production-grade interface with attention to detail, accessibility, and delight.
     `scripts/prepare_viewables.py` (`--dry-run` / `--force` /
     `--limit N`) — calls `ViewerPreparationService.prepare` directly,
     ~60× cheaper than re-running extraction.
-  - [ ] **F105.c** `SpreadsheetProvider` (xlsx, xls, ods via
-    `openpyxl`) + `CsvTsvProvider` (stdlib `csv`) → `table`.
-    Frontend `TableRenderer` using TanStack Table (already in repo)
-    with sheet-tab switcher for multi-sheet workbooks. Virtualized
-    rows for big sheets.
-  - [ ] **F105.d** `TextProvider` (txt, md, log) → `text`; markdown
-    rendered via the existing `react-markdown` setup (from F81.g).
-  - [ ] **F105.e** Dedicated `/documents/:id` page as an alternative
-    to the dialog, for focused reading. Same `<DocumentViewer>`
-    component, fuller chrome (back button, metadata sidebar,
-    similar-docs rail).
+  - [x] **F105.c** `SpreadsheetProvider` (xlsx via `openpyxl`) +
+    `CsvTsvProvider` (stdlib `csv`) → `kind=table`. Parses each
+    sheet into `{name, headers, rows, truncated, total_rows,
+    total_cols}`, stores the JSON at `viewable/<doc_id>.json` in
+    MinIO, inlines on render. Row/col caps 10k × 100 protect the
+    payload size. Frontend `<TableRenderer>` ships a sheet-tab
+    strip (multi-sheet xlsx), sticky header + first column, and a
+    "showing first N of M" notice when truncated. Legacy xls + ods
+    out of scope; add only if asked. 19 new tests.
+  - [x] **F105.d** `TextProvider` (txt, md, application/x-log) →
+    `kind=text`. Source bytes decode as UTF-8 with
+    `errors="replace"` so rogue bytes don't crash the response.
+    5 MB inline cap — oversized text falls through to
+    `unsupported` + `reason="too_large_to_inline"`. Frontend
+    `<TextRenderer>` uses the existing `react-markdown` + GFM
+    toolchain from F81.g for markdown, `<pre whitespace-pre-wrap>`
+    for plain. text/csv deliberately NOT owned here (F105.c's
+    table UX beats a raw dump). 14 new tests.
+  - [x] **F105.e** `/documents/:id` page. Reuses the same
+    `<DocumentViewer>` from the dialog with fuller chrome: back
+    button, filename header with download button, two-column
+    layout with details + similar-docs sidebar. Clicking a
+    neighbour in the sidebar navigates in-place rather than
+    reopening a dialog. Documents-page dropdown menu gains an
+    "Open" item alongside "Preview" (dialog stays for quick
+    peeks; the page is for focused reading).
 
 - [x] **F106 · Logo, branding & PWA** — brand mark + installable app
   - [x] **F106.a** Logo: ascending 4-bar ranking chart (amber → pink
@@ -929,6 +944,39 @@ Production-grade interface with attention to detail, accessibility, and delight.
     shortcut: the safe combos all collide with browser/OS
     bindings and theme is a set-once preference; the palette
     path costs three keystrokes and zero collisions.
+
+- [ ] **F108 · Document preview redesign** — today's preview is a
+  `max-w-2xl` Dialog where the viewer is the *last* thing below
+  the fold; users scroll past Document Info + a `<pre>` of raw
+  extracted text to reach the thing they opened the dialog for.
+  The dialog's width chokes multi-page PDFs, its outer scroll
+  container fights the viewer's inner scroll, and Similar
+  Documents is invisible unless you scroll to the bottom. F108
+  replaces it with a full-height Sheet: viewer gets the primary
+  real estate, metadata moves to a right-rail with tabs, one
+  scroll container total. Pairs with the F105 viewer factory
+  (F105.a/b landed) — no changes to the render protocol.
+  - [~] **F108.a** Sheet shell + tabs: Dialog → Sheet (right
+    side, full height). Left 70%: `<DocumentViewer />` fills the
+    pane. Right 30%: tabs — **Details** (type, status, skills,
+    size, uploaded), **Text** (extracted content), **Similar**
+    (neighbours panel). One scroll container per tab; no nested
+    scroll. Tinted header glyph via the F107.a `typeIconClass`
+    so the chrome matches the list row.
+  - [ ] **F108.b** Keyboard navigation: `←` / `→` prev/next
+    inside the current filtered list, `d` download, `⌫` delete
+    (with confirm), `Esc` close. Position indicator in the
+    header (`3 of 47`). Requires passing the ordered list to
+    the preview; today it only gets the one doc. Swap-in-place
+    using the existing `setOverrideDoc` path.
+  - [ ] **F108.c** State + action polish: replace the "Document
+    is being processed..." block with an inline chip next to the
+    status badge (+ subtle polling progress). Demote Close
+    button (Esc + `×` is enough), promote Delete into the action
+    bar. Download stays as a secondary action, not primary — the
+    primary action is *reading the doc* which is already
+    happening. Optional: zoom controls for PDFs if iframe chrome
+    is unreliable on some browsers.
 
 ---
 

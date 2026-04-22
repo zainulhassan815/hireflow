@@ -9,6 +9,7 @@ import { CreateJobPage } from "@/pages/jobs/create";
 import { EditJobPage } from "@/pages/jobs/edit";
 import { CandidatesPage } from "@/pages/candidates";
 import { DocumentsPage } from "@/pages/documents";
+import { DocumentDetailPage } from "@/pages/documents/detail";
 import { SearchPage } from "@/pages/search";
 import { LogsPage } from "@/pages/logs";
 import { SettingsPage } from "@/pages/settings";
@@ -88,6 +89,11 @@ export const router = createBrowserRouter([
         path: "documents",
         element: <DocumentsPage />,
         handle: { title: "Documents" },
+      },
+      {
+        path: "documents/:id",
+        element: <DocumentDetailPage />,
+        handle: { title: "Document" },
       },
       {
         path: "search",

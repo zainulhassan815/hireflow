@@ -31,7 +31,7 @@ export function DocumentViewer({
 
   if (isLoading) {
     return (
-      <div className="bg-muted/50 flex h-64 items-center justify-center rounded-lg">
+      <div className="bg-muted/50 flex min-h-[400px] flex-1 items-center justify-center rounded-lg">
         <Loader2Icon className="text-muted-foreground size-5 animate-spin" />
       </div>
     );
@@ -39,7 +39,7 @@ export function DocumentViewer({
 
   if (isError || !data) {
     return (
-      <div className="bg-muted/50 rounded-lg p-6 text-center">
+      <div className="bg-muted/50 flex min-h-[400px] flex-1 items-center justify-center rounded-lg p-6 text-center">
         <Typography variant="muted">
           Couldn&apos;t load the viewer. Try downloading the file instead.
         </Typography>
@@ -83,18 +83,18 @@ function PdfView({ url }: { url: string }) {
     <iframe
       src={url}
       title="Document preview"
-      className="h-[600px] w-full rounded-lg border bg-white"
+      className="min-h-[400px] w-full flex-1 rounded-lg border bg-white"
     />
   );
 }
 
 function ImageView({ url }: { url: string }) {
   return (
-    <div className="bg-muted/30 flex max-h-[600px] items-center justify-center overflow-auto rounded-lg border">
+    <div className="bg-muted/30 flex min-h-[400px] flex-1 items-center justify-center overflow-auto rounded-lg border">
       <img
         src={url}
         alt="Document preview"
-        className="max-h-[600px] max-w-full object-contain"
+        className="max-h-full max-w-full object-contain"
       />
     </div>
   );

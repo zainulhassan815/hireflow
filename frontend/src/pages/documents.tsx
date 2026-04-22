@@ -1,8 +1,10 @@
 import * as React from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
   CloudUploadIcon,
   DownloadIcon,
+  ExternalLinkIcon,
   EyeIcon,
   FileIcon,
   FileTextIcon,
@@ -57,7 +59,13 @@ import { Typography } from "@/components/ui/typography";
 import { UploadDialog } from "@/components/documents/upload-dialog";
 import { DocumentPreview } from "@/components/documents/document-preview";
 import { uploadFiles } from "@/lib/upload-documents";
-import { cn, formatDate, formatFileSize } from "@/lib/utils";
+import {
+  cn,
+  formatDate,
+  formatFileSize,
+  typeBadgeClass,
+  typeIconClass,
+} from "@/lib/utils";
 import { toast } from "sonner";
 
 const typeIcons: Record<string, React.ElementType> = {
@@ -85,27 +93,9 @@ const statusVariants: Record<
   failed: "destructive",
 };
 
-// F90.d — categorical doc-type color. cat-3 deliberately skipped to
-// avoid destructive-red collision on rows with a failed status.
-const typeBadgeClass: Record<string, string> = {
-  resume: "border-cat-1 text-cat-1",
-  report: "border-cat-2 text-cat-2",
-  contract: "border-cat-5 text-cat-5",
-  letter: "border-cat-4 text-cat-4",
-};
-
-// Tinted icon container mirroring the badge taxonomy. 10%-alpha
-// background pairs with solid-hue glyph so the eye lands on a
-// colored surface first, not on gray.
-const typeIconClass: Record<string, string> = {
-  resume: "bg-cat-1/10 text-cat-1",
-  report: "bg-cat-2/10 text-cat-2",
-  contract: "bg-cat-5/10 text-cat-5",
-  letter: "bg-cat-4/10 text-cat-4",
-};
-
 export function DocumentsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [view, setView] = React.useState<"list" | "grid">("list");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [uploadOpen, setUploadOpen] = React.useState(false);
@@ -557,6 +547,12 @@ export function DocumentsPage() {
                             >
                               <EyeIcon className="mr-2 size-4" />
                               Preview
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/documents/${doc.id}`)}
+                            >
+                              <ExternalLinkIcon className="mr-2 size-4" />
+                              Open
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => handleDownload(doc)}
