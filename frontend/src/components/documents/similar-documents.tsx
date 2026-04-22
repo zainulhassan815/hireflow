@@ -47,13 +47,19 @@ interface SimilarDocumentsProps {
   document: DocumentResponse;
   enabled: boolean;
   onSelect: (documentId: string) => void;
+  /**
+   * Skip the internal "Similar documents" heading. Used when the
+   * component is embedded under an existing header (e.g. an
+   * accordion trigger already labels the section).
+   */
+  hideHeading?: boolean;
 }
 
 /**
- * Renders the "Similar documents" section of the preview dialog.
+ * Renders the "Similar documents" section of the detail page.
  *
- * Lazy-fires on dialog open via ``enabled``; caches per source-doc id so
- * swaps between neighbours are instant on return. Error copy switches on
+ * Lazy-fires via ``enabled``; caches per source-doc id so swaps
+ * between neighbours are instant on return. Error copy switches on
  * the backend error ``code`` (not ``message``) so backend rewording
  * doesn't break the UI contract.
  */
@@ -61,6 +67,7 @@ export function SimilarDocuments({
   document: doc,
   enabled,
   onSelect,
+  hideHeading = false,
 }: SimilarDocumentsProps) {
   const query = useQuery({
     ...similarDocumentsQueryOptions(doc.id, DEFAULT_LIMIT),
@@ -68,13 +75,18 @@ export function SimilarDocuments({
   });
 
   return (
-    <section aria-labelledby="similar-docs-heading">
-      <div className="mb-3 flex items-center gap-2">
-        <LayersIcon className="text-muted-foreground size-4" />
-        <Typography variant="h6" id="similar-docs-heading">
-          Similar documents
-        </Typography>
-      </div>
+    <section
+      aria-labelledby={hideHeading ? undefined : "similar-docs-heading"}
+      aria-label={hideHeading ? "Similar documents" : undefined}
+    >
+      {!hideHeading && (
+        <div className="mb-3 flex items-center gap-2">
+          <LayersIcon className="text-muted-foreground size-4" />
+          <Typography variant="h6" id="similar-docs-heading">
+            Similar documents
+          </Typography>
+        </div>
+      )}
       <SimilarDocumentsBody query={query} doc={doc} onSelect={onSelect} />
     </section>
   );

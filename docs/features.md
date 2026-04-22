@@ -981,6 +981,29 @@ Production-grade interface with attention to detail, accessibility, and delight.
     tab renders extracted content without a `<pre>` (selection
     works without the old shenanigans); Similar tab hosts the
     existing neighbours panel.
+  - [x] **F108.b** Layout v2 (tabs on viewer, accordion on
+    sidebar). F108.a's right-rail tabs caused a visible shift
+    on every tab change — the panel's content width flexed as
+    the scrollbar appeared/disappeared, and three candidates
+    (Details / Text / Similar) were fighting for a narrow rail.
+    F108.b reshuffles: main area tabs are **Document** and
+    **Text** (so Text competes for viewer-scale real estate,
+    not rail-scale); right rail becomes a static Details block
+    + a collapsible **Similar documents** accordion (default
+    closed). `keepMounted` on the main-area tab panels keeps
+    the viewer iframe alive (signed URL, scroll, zoom
+    preserved across tab swaps); inactive panels use
+    `data-hidden:hidden` (base-ui's `data-hidden` attribute)
+    so Tailwind's `display: flex` doesn't shadow the browser's
+    built-in `[hidden]` rule. `[scrollbar-gutter:stable]` on
+    both scroll containers reserves the scrollbar gutter so
+    the layout doesn't jog when content crosses the scroll
+    threshold. Viewer wrapper's `p-3` + border + `bg-muted/20`
+    dropped: the inner iframe's own border frames the document
+    directly, no double-border. `SimilarDocuments` gained a
+    `hideHeading?: boolean` prop so the accordion trigger
+    isn't duplicated by the component's internal heading.
+    Rail trimmed `22rem` → `20rem`.
 
 ---
 

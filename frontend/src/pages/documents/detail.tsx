@@ -3,6 +3,7 @@ import {
   ArrowLeftIcon,
   DownloadIcon,
   FileTextIcon,
+  LayersIcon,
   Loader2Icon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +14,12 @@ import {
   getDocumentMetadataOptions,
   getDocumentOptions,
 } from "@/api";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,11 +38,13 @@ import {
 /**
  * F105.e — focused document page at `/documents/:id`.
  *
- * Full-viewport reading surface: header bar on top (back, tinted
- * glyph, title, download), viewer fills the main column, metadata
- * + text + similar documents live in a tabbed right rail. Replaces
- * the old preview Dialog entirely — list row-click and grid card-
- * click both navigate here.
+ * Option 3 layout (F108.b): main-area tabs (Document | Text) let the
+ * viewer and extracted text compete for the wide column fairly.
+ * Right rail holds static Details + a collapsible Similar documents
+ * accordion. `keepMounted` on the tab panels preserves viewer state
+ * (signed URL, scroll, zoom) across tab switches, and
+ * scrollbar-gutter: stable on the scroll containers kills the
+ * layout shift when scrollbar visibility changes.
  */
 export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -122,10 +131,9 @@ export function DocumentDetailPage() {
         : undefined;
 
   return (
-    // h-full fills <main>'s content area (app-layout.tsx gives <main>
-    // flex-1 inside SidebarInset). flex-col + flex-1 on the body
-    // lets the viewer + rail grow to the viewport without the outer
-    // main scrolling.
+    // h-full fills <main>'s content area. flex-col + flex-1 on the
+    // body grid lets the viewer + rail grow to the viewport without
+    // the outer main scrolling.
     <div className="flex h-full flex-col gap-4">
       <div className="flex items-center gap-3 border-b pb-4">
         <Button
@@ -170,28 +178,64 @@ export function DocumentDetailPage() {
         </Button>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="bg-muted/20 flex min-h-0 flex-col rounded-lg border p-3">
-          <DocumentViewer
-            documentId={doc.id}
-            downloadFallback={() => downloadMutation.mutate()}
-          />
-        </div>
-
-        <Tabs
-          defaultValue="details"
-          className="flex min-h-0 flex-col gap-0 rounded-lg border"
-        >
-          <TabsList className="bg-background shrink-0 justify-start rounded-none rounded-t-lg border-b px-3">
-            <TabsTrigger value="details">Details</TabsTrigger>
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        {/* Main column: Document | Text tabs. keepMounted keeps the
+            viewer iframe alive when the user peeks at Text, so
+            returning to Document doesn't re-fetch the signed URL or
+            lose scroll/zoom state. */}
+        <Tabs defaultValue="document" className="flex min-h-0 flex-col gap-3">
+          <TabsList variant="line" className="self-start">
+            <TabsTrigger value="document">Document</TabsTrigger>
             <TabsTrigger value="text">Text</TabsTrigger>
-            <TabsTrigger value="similar">Similar</TabsTrigger>
           </TabsList>
 
           <TabsContent
-            value="details"
-            className="min-h-0 flex-1 overflow-auto px-4 py-4"
+            value="document"
+            keepMounted
+            className="flex min-h-0 flex-1 flex-col data-hidden:hidden"
           >
+            <DocumentViewer
+              documentId={doc.id}
+              downloadFallback={() => downloadMutation.mutate()}
+            />
+          </TabsContent>
+
+          <TabsContent
+            value="text"
+            keepMounted
+            className="min-h-0 flex-1 overflow-y-auto rounded-lg border p-4 [scrollbar-gutter:stable] data-hidden:hidden"
+          >
+            {metadata?.extracted_text ? (
+              <div className="text-foreground/90 font-mono text-xs leading-relaxed whitespace-pre-wrap">
+                {metadata.extracted_text}
+              </div>
+            ) : doc.status === "processing" || doc.status === "pending" ? (
+              <div className="bg-muted/40 flex h-full min-h-[8rem] items-center justify-center rounded-lg p-6 text-center">
+                <Typography variant="muted">
+                  Document is still being processed.
+                </Typography>
+              </div>
+            ) : (
+              <div className="bg-muted/40 flex h-full min-h-[8rem] items-center justify-center rounded-lg p-6 text-center">
+                <Typography variant="muted">
+                  No extracted text available.
+                </Typography>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {/* Sidebar: always-visible Details + collapsible Similar
+            accordion. One scroll container for the whole rail. */}
+        <aside className="flex min-h-0 flex-col gap-6 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
+          <section aria-labelledby="details-heading">
+            <Typography
+              variant="muted"
+              id="details-heading"
+              className="mb-3 text-xs font-medium tracking-wide uppercase"
+            >
+              Details
+            </Typography>
             <dl className="flex flex-col gap-4 text-sm">
               <div>
                 <dt className="text-muted-foreground mb-1 text-xs tracking-wide uppercase">
@@ -254,42 +298,29 @@ export function DocumentDetailPage() {
                 </div>
               )}
             </dl>
-          </TabsContent>
+          </section>
 
-          <TabsContent
-            value="text"
-            className="min-h-0 flex-1 overflow-auto px-4 py-4"
-          >
-            {metadata?.extracted_text ? (
-              <div className="text-foreground/90 font-mono text-xs leading-relaxed whitespace-pre-wrap">
-                {metadata.extracted_text}
-              </div>
-            ) : doc.status === "processing" || doc.status === "pending" ? (
-              <div className="bg-muted/40 flex h-full min-h-[8rem] items-center justify-center rounded-lg p-6 text-center">
-                <Typography variant="muted">
-                  Document is still being processed.
-                </Typography>
-              </div>
-            ) : (
-              <div className="bg-muted/40 flex h-full min-h-[8rem] items-center justify-center rounded-lg p-6 text-center">
-                <Typography variant="muted">
-                  No extracted text available.
-                </Typography>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent
-            value="similar"
-            className="min-h-0 flex-1 overflow-auto px-4 py-4"
-          >
-            <SimilarDocuments
-              document={doc}
-              enabled
-              onSelect={(neighbourId) => navigate(`/documents/${neighbourId}`)}
-            />
-          </TabsContent>
-        </Tabs>
+          <Accordion>
+            <AccordionItem value="similar">
+              <AccordionTrigger>
+                <span className="inline-flex items-center gap-2">
+                  <LayersIcon className="text-muted-foreground size-4" />
+                  Similar documents
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <SimilarDocuments
+                  document={doc}
+                  enabled
+                  hideHeading
+                  onSelect={(neighbourId) =>
+                    navigate(`/documents/${neighbourId}`)
+                  }
+                />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </aside>
       </div>
     </div>
   );
