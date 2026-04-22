@@ -6,6 +6,7 @@ import { PublicOnlyRoute } from "@/components/auth/public-only-route";
 import { DashboardPage } from "@/pages/dashboard";
 import { JobsPage } from "@/pages/jobs";
 import { CreateJobPage } from "@/pages/jobs/create";
+import { JobDetailPage } from "@/pages/jobs/detail";
 import { EditJobPage } from "@/pages/jobs/edit";
 import { CandidatesPage } from "@/pages/candidates";
 import { DocumentsPage } from "@/pages/documents";
@@ -74,6 +75,11 @@ export const router = createBrowserRouter([
         path: "jobs/create",
         element: <CreateJobPage />,
         handle: { title: "New job" },
+      },
+      {
+        path: "jobs/:id",
+        element: <JobDetailPage />,
+        handle: { title: "Job" },
       },
       {
         path: "jobs/:id/edit",

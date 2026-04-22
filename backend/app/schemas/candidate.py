@@ -31,13 +31,27 @@ class CandidateResponse(BaseModel):
 
 
 class ApplicationResponse(BaseModel):
-    """A candidate's application to a job."""
+    """A candidate's application to a job.
+
+    F44.b — embeds the candidate so the job detail page renders each row
+    in one round-trip (no N+1 ``getCandidate`` per row). The Application
+    model auto-loads ``candidate`` via ``lazy="selectin"`` so the embed
+    is free server-side.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID = Field(..., description="Application ID")
     candidate_id: UUID = Field(..., description="Candidate ID")
     job_id: UUID = Field(..., description="Job ID")
+    candidate: CandidateResponse = Field(
+        ...,
+        description=(
+            "The full candidate record, embedded so the frontend can "
+            "render a row (name, skills, resume link) without a second "
+            "request per application."
+        ),
+    )
     status: ApplicationStatus = Field(
         ...,
         description="Application status (new, shortlisted, rejected, interviewed, hired)",

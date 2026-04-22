@@ -191,7 +191,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
   - `GET /jobs/{id}/candidates/export` → CSV (stdlib, no deps)
   - Frontend export buttons on candidates + search pages
 
-- [ ] **F44 · Candidate shortlisting (minimal)** — F42 marked "Shortlist /
+- [x] **F44 · Candidate shortlisting (minimal)** — F42 marked "Shortlist /
   reject actions" done, but it was only half-built: the `Application`
   model + `PATCH /applications/{id}/status` endpoint exist, and the
   orphan `resume-viewer.tsx` component has `onShortlist` / `onReject`
@@ -201,7 +201,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
   /applications/{id}/status` AND `GET /candidates/jobs/{id}/applications`
   both skip the owner check. F93 Kanban is the richer long-term shape;
   F44 is the MVP that closes the gap today.
-  - [ ] **F44.a** Backend: authorize `PATCH /applications/{id}/status`
+  - [x] **F44.a** Backend: authorize `PATCH /applications/{id}/status`
     **and** `GET /candidates/jobs/{id}/applications` so the caller
     must own the application's parent job (mirrors
     `DocumentService._ensure_access`). 404 on miss or cross-tenant
@@ -209,7 +209,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
     `get_with_job(application_id)` that eager-loads the job for the
     auth check — one round-trip. Tests cover unauth / missing /
     cross-tenant / admin-bypass / valid-transition for both endpoints.
-  - [ ] **F44.b** Frontend: new job detail page at `/jobs/:id` with
+  - [x] **F44.b** Frontend: new job detail page at `/jobs/:id` with
     header (title, status badge, required skills, edit/delete) and
     a candidate list body. Each row renders: name (link to source
     resume via `/documents/:source_document_id` when present), match
