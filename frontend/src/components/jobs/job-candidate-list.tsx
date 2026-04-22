@@ -1,5 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { formatDistanceToNow } from "date-fns";
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
   CheckIcon,
   ChevronRightIcon,
   SearchIcon,
@@ -12,41 +15,49 @@ import { toast } from "sonner";
 
 import {
   listJobApplicationsQueryKey,
+  updateApplicationStatus,
   updateApplicationStatusMutation,
   type ApplicationResponse,
   type ApplicationStatus,
 } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Typography } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 /**
- * F44.b — the triage surface.
+ * F44.b/c — the triage surface.
  *
  * One row per application. Each row:
- * - Name (links to `/documents/:source_document_id` if a resume exists)
- * - Match score 0-100 bar, cat-semantic color
- * - Current status badge (distinct visual from action affordance)
+ * - Checkbox for bulk selection (F44.c).
+ * - Name (links to `/documents/:source_document_id` if a resume exists).
+ * - Match score 0-100 bar, cat-semantic color.
+ * - Current status badge (distinct visual from action affordance).
  * - Inline actions whose shape depends on status:
  *   - `new` → [Shortlist] + [Reject]
  *   - `shortlisted` / `rejected` → [Undo]
- *   - `interviewed` / `hired` → read-only badge, no actions
- *     (F93 Kanban owns those transitions; exposing them here would
- *     encourage accidental demotions from the "already decided" band)
+ *   - `interviewed` / `hired` → read-only; F93 Kanban owns those.
  *
  * Optimistic mutation: click → row flips immediately via onMutate;
- * rolls back on error. HR triages quickly, the network shouldn't be
- * the bottleneck.
+ * rolls back on error.
  *
- * Filter toolbar: free-text (name/email/skill), min-score slider,
- * status multi-select. Filtering is client-side; the full set ships
- * in one response so paginate later only if a job ever has >200
- * applications.
+ * Filter toolbar (F44.b): free-text (name/email/skill), min-score
+ * slider, status pills. Client-side — full set ships in one response.
+ *
+ * Sortable columns (F44.c): click a header to sort by Score / Name /
+ * Updated. Score descending is the default (triage rank order).
+ *
+ * Bulk actions (F44.c): selecting rows surfaces a sticky toolbar with
+ * [Shortlist all] / [Reject all]. Backend has no bulk endpoint today
+ * so the frontend fans out N PATCHes with optimistic updates; acceptable
+ * for N ≤ 50 (the list size cap) and avoids a server-side API addition.
  */
 
 type StatusFilter = "all" | ApplicationStatus;
+type SortKey = "score" | "name" | "updated";
+type SortDir = "asc" | "desc";
 
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -69,6 +80,11 @@ export function JobCandidateList({
   const [search, setSearch] = React.useState("");
   const [minScore, setMinScore] = React.useState(0);
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
+  const [sortKey, setSortKey] = React.useState<SortKey>("score");
+  const [sortDir, setSortDir] = React.useState<SortDir>("desc");
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
+    () => new Set()
+  );
 
   const filtered = React.useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -85,6 +101,90 @@ export function JobCandidateList({
     });
   }, [applications, search, minScore, statusFilter]);
 
+  const sorted = React.useMemo(() => {
+    const copy = [...filtered];
+    copy.sort((a, b) => {
+      const dir = sortDir === "asc" ? 1 : -1;
+      if (sortKey === "name") {
+        const an = (a.candidate.name ?? a.candidate.email ?? "").toLowerCase();
+        const bn = (b.candidate.name ?? b.candidate.email ?? "").toLowerCase();
+        return an.localeCompare(bn) * dir;
+      }
+      if (sortKey === "updated") {
+        return (
+          (new Date(a.updated_at).getTime() -
+            new Date(b.updated_at).getTime()) *
+          dir
+        );
+      }
+      // score — nulls fall to the bottom regardless of direction, which
+      // matches "haven't been scored" being least actionable in both
+      // directions.
+      const as = a.score ?? -Infinity;
+      const bs = b.score ?? -Infinity;
+      return (as - bs) * dir;
+    });
+    return copy;
+  }, [filtered, sortKey, sortDir]);
+
+  // Keep selection coherent with the current filtered view — if the
+  // filter excludes a selected row, it's no longer actionable from the
+  // bulk toolbar, so drop it.
+  React.useEffect(() => {
+    setSelectedIds((prev) => {
+      const visible = new Set(sorted.map((a) => a.id));
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (visible.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [sorted]);
+
+  const allVisibleSelected =
+    sorted.length > 0 && sorted.every((a) => selectedIds.has(a.id));
+  const someVisibleSelected =
+    !allVisibleSelected && sorted.some((a) => selectedIds.has(a.id));
+
+  const toggleAllVisible = () => {
+    setSelectedIds((prev) => {
+      if (allVisibleSelected) return new Set();
+      const next = new Set(prev);
+      sorted.forEach((a) => next.add(a.id));
+      return next;
+    });
+  };
+
+  const toggleRow = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const selectedApps = React.useMemo(
+    () => applications.filter((a) => selectedIds.has(a.id)),
+    [applications, selectedIds]
+  );
+
+  const requestSort = (key: SortKey) => {
+    setSortKey((prevKey) => {
+      if (prevKey === key) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return prevKey;
+      }
+      // Score defaults to desc (top matches first); name asc; updated desc.
+      setSortDir(key === "name" ? "asc" : "desc");
+      return key;
+    });
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <Toolbar
@@ -95,33 +195,75 @@ export function JobCandidateList({
         statusFilter={statusFilter}
         onStatusFilter={setStatusFilter}
         totalCount={applications.length}
-        filteredCount={filtered.length}
+        filteredCount={sorted.length}
       />
+
+      {selectedIds.size > 0 && (
+        <BulkActionBar
+          selected={selectedApps}
+          onApplied={() => {
+            clearSelection();
+            onStatusChanged();
+          }}
+          onCancel={clearSelection}
+        />
+      )}
 
       <div className="overflow-hidden rounded-lg border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-muted-foreground text-xs tracking-wide uppercase">
             <tr>
-              <th className="px-4 py-2 text-left font-medium">Candidate</th>
-              <th className="w-56 px-4 py-2 text-left font-medium">
-                Match score
+              <th className="w-10 px-3 py-2">
+                <Checkbox
+                  checked={
+                    allVisibleSelected
+                      ? true
+                      : someVisibleSelected
+                        ? "indeterminate"
+                        : false
+                  }
+                  onCheckedChange={toggleAllVisible}
+                  aria-label="Select all visible candidates"
+                />
               </th>
+              <SortableHeader
+                label="Candidate"
+                active={sortKey === "name"}
+                dir={sortDir}
+                onClick={() => requestSort("name")}
+              />
+              <SortableHeader
+                label="Match score"
+                active={sortKey === "score"}
+                dir={sortDir}
+                onClick={() => requestSort("score")}
+                className="w-56"
+              />
+              <SortableHeader
+                label="Updated"
+                active={sortKey === "updated"}
+                dir={sortDir}
+                onClick={() => requestSort("updated")}
+                className="w-32"
+              />
               <th className="w-32 px-4 py-2 text-left font-medium">Status</th>
               <th className="w-56 px-4 py-2 text-right font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((app) => (
+            {sorted.map((app) => (
               <CandidateRow
                 key={app.id}
                 app={app}
+                selected={selectedIds.has(app.id)}
+                onToggleSelect={() => toggleRow(app.id)}
                 onStatusChanged={onStatusChanged}
               />
             ))}
-            {filtered.length === 0 && (
+            {sorted.length === 0 && (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={6}
                   className="text-muted-foreground px-4 py-8 text-center"
                 >
                   No candidates match your filters.
@@ -132,6 +274,41 @@ export function JobCandidateList({
         </table>
       </div>
     </div>
+  );
+}
+
+function SortableHeader({
+  label,
+  active,
+  dir,
+  onClick,
+  className,
+}: {
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <th className={cn("px-4 py-2 text-left font-medium", className)}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "inline-flex items-center gap-1 rounded transition-colors",
+          active ? "text-foreground" : "hover:text-foreground"
+        )}
+      >
+        {label}
+        {active &&
+          (dir === "asc" ? (
+            <ArrowUpIcon className="size-3" />
+          ) : (
+            <ArrowDownIcon className="size-3" />
+          ))}
+      </button>
+    </th>
   );
 }
 
@@ -212,11 +389,135 @@ function Toolbar({
   );
 }
 
+function BulkActionBar({
+  selected,
+  onApplied,
+  onCancel,
+}: {
+  selected: ApplicationResponse[];
+  onApplied: () => void;
+  onCancel: () => void;
+}) {
+  const [pending, setPending] = React.useState(false);
+  const queryClient = useQueryClient();
+
+  // "Actionable" triagable rows — already-decided status rows are
+  // skipped silently (F93 owns interviewed/hired transitions). The
+  // counter reflects how many will actually change.
+  const actionable = selected.filter(
+    (a) =>
+      a.status === "new" ||
+      a.status === "shortlisted" ||
+      a.status === "rejected"
+  );
+
+  const applyBulk = async (status: ApplicationStatus) => {
+    if (actionable.length === 0) return;
+    setPending(true);
+
+    // Fan-out N PATCHes. Backend has no bulk endpoint today; list
+    // ceilings at 50 so worst case is 50 parallel requests. Each one
+    // uses the real mutation so all server-side invariants hold.
+    // Optimistic update patches the cache immediately so the UI
+    // doesn't flicker.
+    const jobId = actionable[0].job_id;
+    const queryKey = listJobApplicationsQueryKey({
+      path: { job_id: jobId },
+    });
+    await queryClient.cancelQueries({ queryKey });
+    const previous = queryClient.getQueryData<ApplicationResponse[]>(queryKey);
+    const targetIds = new Set(actionable.map((a) => a.id));
+    queryClient.setQueryData<ApplicationResponse[]>(queryKey, (old) =>
+      (old ?? []).map((a) => (targetIds.has(a.id) ? { ...a, status } : a))
+    );
+
+    const results = await Promise.allSettled(
+      actionable.map((a) =>
+        updateApplicationStatus({
+          path: { application_id: a.id },
+          body: { status },
+        })
+      )
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    setPending(false);
+
+    if (failed > 0) {
+      // Roll back on ANY failure — partial success is worse UX than
+      // "redo the whole selection" because HR can't tell which rows
+      // succeeded without scanning the table. For F44.c scope that
+      // trade is right; revisit if bulk sizes grow.
+      if (previous) queryClient.setQueryData(queryKey, previous);
+      toast.error(
+        failed === actionable.length
+          ? "Bulk change failed; rolled back."
+          : `${failed} of ${actionable.length} changes failed; rolled back.`
+      );
+      return;
+    }
+    toast.success(
+      `${actionable.length} candidate${actionable.length === 1 ? "" : "s"} ${
+        status === "shortlisted" ? "shortlisted" : "rejected"
+      }.`
+    );
+    onApplied();
+  };
+
+  const skipped = selected.length - actionable.length;
+
+  return (
+    <div className="bg-primary text-primary-foreground sticky top-2 z-10 flex flex-wrap items-center gap-3 rounded-lg px-4 py-2 text-sm shadow">
+      <span className="font-medium">
+        {selected.length} selected
+        {skipped > 0 && (
+          <span className="text-primary-foreground/70 ml-1 text-xs">
+            ({skipped} already interviewed/hired — skipped)
+          </span>
+        )}
+      </span>
+      <div className="ml-auto flex gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => applyBulk("shortlisted")}
+          disabled={pending || actionable.length === 0}
+        >
+          <CheckIcon className="size-4" data-icon="inline-start" />
+          Shortlist {actionable.length}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => applyBulk("rejected")}
+          disabled={pending || actionable.length === 0}
+          className="text-destructive"
+        >
+          <XIcon className="size-4" data-icon="inline-start" />
+          Reject {actionable.length}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onCancel}
+          disabled={pending}
+          className="text-primary-foreground hover:bg-primary-foreground/10"
+        >
+          Clear
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function CandidateRow({
   app,
+  selected,
+  onToggleSelect,
   onStatusChanged,
 }: {
   app: ApplicationResponse;
+  selected: boolean;
+  onToggleSelect: () => void;
   onStatusChanged: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -260,9 +561,22 @@ function CandidateRow({
   const c = app.candidate;
   const displayName = c.name || c.email || "Unnamed candidate";
   const score100 = Math.round((app.score ?? 0) * 100);
+  const updated = new Date(app.updated_at);
 
   return (
-    <tr className="hover:bg-muted/30 border-b last:border-0">
+    <tr
+      className={cn(
+        "border-b last:border-0",
+        selected ? "bg-primary/5" : "hover:bg-muted/30"
+      )}
+    >
+      <td className="px-3 py-3">
+        <Checkbox
+          checked={selected}
+          onCheckedChange={onToggleSelect}
+          aria-label={`Select ${displayName}`}
+        />
+      </td>
       <td className="px-4 py-3">
         <div className="flex flex-col">
           {c.source_document_id ? (
@@ -297,6 +611,9 @@ function CandidateRow({
       </td>
       <td className="px-4 py-3">
         <MatchScoreBar score={score100} />
+      </td>
+      <td className="text-muted-foreground px-4 py-3 text-xs">
+        {formatDistanceToNow(updated, { addSuffix: true })}
       </td>
       <td className="px-4 py-3">
         <StatusBadge status={app.status} />
@@ -417,3 +734,4 @@ function ActionButtons({
     </Button>
   );
 }
+

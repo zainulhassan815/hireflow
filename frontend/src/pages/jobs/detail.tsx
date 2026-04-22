@@ -4,10 +4,11 @@ import {
   BriefcaseIcon,
   Loader2Icon,
   PencilIcon,
+  SparklesIcon,
   TrashIcon,
 } from "lucide-react";
 import * as React from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
@@ -15,6 +16,7 @@ import {
   getJobOptions,
   listJobApplicationsOptions,
   listJobApplicationsQueryKey,
+  matchCandidatesMutation,
   type ApplicationResponse,
 } from "@/api";
 import { JobCandidateList } from "@/components/jobs/job-candidate-list";
@@ -80,6 +82,33 @@ export function JobDetailPage() {
       toast.error("Couldn't delete the job");
     },
   });
+
+  // F44.c — re-score every candidate in the pool against this job.
+  // Idempotent per candidate: existing applications update in place,
+  // missing ones get created. Invalidates the list so fresh scores
+  // repopulate the table.
+  const matchMut = useMutation({
+    ...matchCandidatesMutation(),
+    onSuccess: (data) => {
+      const count = data?.total ?? 0;
+      toast.success(
+        count === 0
+          ? "No candidates to match yet. Upload resumes first."
+          : `Scored ${count} candidate${count === 1 ? "" : "s"}.`
+      );
+      queryClient.invalidateQueries({
+        queryKey: listJobApplicationsQueryKey({ path: { job_id: id ?? "" } }),
+      });
+    },
+    onError: () => {
+      toast.error("Match run failed.");
+    },
+  });
+
+  const runMatch = React.useCallback(() => {
+    if (!id) return;
+    matchMut.mutate({ path: { job_id: id } });
+  }, [id, matchMut]);
 
   const onStatusChanged = React.useCallback(() => {
     // Keep the list cache fresh after a row-level status change. We
@@ -170,6 +199,17 @@ export function JobDetailPage() {
         <div className="flex shrink-0 gap-2">
           <Button
             variant="outline"
+            onClick={runMatch}
+            disabled={matchMut.isPending}
+          >
+            <SparklesIcon
+              className={`size-4 ${matchMut.isPending ? "animate-pulse" : ""}`}
+              data-icon="inline-start"
+            />
+            {matchMut.isPending ? "Scoring…" : "Refresh scores"}
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => navigate(`/jobs/${job.id}/edit`)}
           >
             <PencilIcon className="size-4" data-icon="inline-start" />
@@ -192,7 +232,7 @@ export function JobDetailPage() {
           <Loader2Icon className="text-muted-foreground size-5 animate-spin" />
         </div>
       ) : applications.length === 0 ? (
-        <EmptyCandidates jobId={job.id} />
+        <EmptyCandidates onRunMatch={runMatch} pending={matchMut.isPending} />
       ) : (
         <JobCandidateList
           applications={applications}
@@ -226,7 +266,13 @@ export function JobDetailPage() {
   );
 }
 
-function EmptyCandidates({ jobId }: { jobId: string }) {
+function EmptyCandidates({
+  onRunMatch,
+  pending,
+}: {
+  onRunMatch: () => void;
+  pending: boolean;
+}) {
   return (
     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
       <div className="bg-cat-4/10 flex size-16 items-center justify-center rounded">
@@ -237,11 +283,15 @@ function EmptyCandidates({ jobId }: { jobId: string }) {
       </Typography>
       <Typography variant="muted" className="mt-1 max-w-[48ch]">
         Run a match to score your candidate pool against this job&rsquo;s
-        requirements. Matching creates applications you can then shortlist or
-        reject here.
+        requirements. Matching creates applications you can shortlist or reject
+        here.
       </Typography>
-      <Button className="mt-4" asChild>
-        <Link to={`/candidates?job=${jobId}`}>Go to candidates</Link>
+      <Button className="mt-4" onClick={onRunMatch} disabled={pending}>
+        <SparklesIcon
+          className={`size-4 ${pending ? "animate-pulse" : ""}`}
+          data-icon="inline-start"
+        />
+        {pending ? "Scoring candidates…" : "Run match"}
       </Button>
     </div>
   );

@@ -225,6 +225,93 @@ Wire existing frontend pages to the real backend API. All pages must follow
     via a button on the detail page, not as the primary jobs-grid
     destination. `resume-viewer.tsx` deleted outright — the
     `/documents/:id` page (F105.e) is the single viewer path now.
+  - [x] **F44.c** Polish follow-ups: (1) "Run match" button on the
+    empty-state + persistent "Refresh scores" button in the header,
+    both wired to `POST /jobs/:id/match` with list invalidation on
+    success — a zero-candidate job is now one click away from a
+    populated table. (2) Sortable columns (Candidate / Match score /
+    Updated); click to toggle direction, score-desc is the default
+    triage order. (3) Row checkboxes + header select-all with
+    indeterminate state; selecting rows reveals a sticky bulk toolbar
+    with Shortlist-all / Reject-all. No bulk backend endpoint — the
+    frontend fans out N PATCHes with optimistic cache updates and
+    rolls the whole batch back on ANY failure (partial success is
+    worse UX than "redo it"). Interviewed/hired rows inside a
+    selection are skipped with a count; F93 Kanban owns those.
+    Relative-time column uses `date-fns` `formatDistanceToNow`
+    (already in deps) rather than a hand-rolled helper.
+
+- [ ] **F44.d · Candidate triage UX polish** — things F44 surfaced
+  that aren't blocking but would make the list feel first-class.
+  Each item is independent; pick by impact-per-effort.
+  - [ ] **F44.d.1** Slide-over resume preview: drawer from the right
+    embeds `/documents/:source_document_id` without navigating away.
+    Triage without losing scroll position in the list.
+  - [ ] **F44.d.2** Keyboard shortcuts: `j/k` row nav, `s` shortlist,
+    `r` reject, `u` undo, `x` clear selection, `/` focus search.
+    Same shape as F102 command palette — pairs with it.
+  - [ ] **F44.d.3** Match-score breakdown popover: hovering the bar
+    pops `MatchBreakdown` (skills / experience / vector split). Backend
+    already returns the data via `POST /jobs/:id/match`; the list
+    response currently drops it — extend `ApplicationResponse` with a
+    `breakdown` field or call out to the match endpoint on hover.
+  - [ ] **F44.d.4** Bulk-status endpoint: `PATCH /applications/bulk-
+    status` replacing the fan-out N-PATCH pattern. Enables >50-row
+    selections, cleaner rollback, single DB transaction.
+  - [ ] **F44.d.5** Saved filter views: "High-score shortlist", "Not
+    yet triaged", "This week's decisions". Stored in localStorage;
+    no backend change. Quick return-user velocity win.
+  - [ ] **F44.d.6** Row virtualization (pairs with F95). Flat
+    performance past 500 rows. Irrelevant today; revisit when any
+    job hits that scale.
+  - [ ] **F44.d.7** Activity trail per application: expandable inline
+    "shortlisted by X · 2 days ago" history. Needs either an
+    application-scoped activity-log query or a dedicated
+    `application_events` table.
+
+- [ ] **F45 · Shortlisting algorithm review + improvements** —
+  `MatchingService._compute_score` is currently a fixed 45/20/35
+  weighted sum (skills / experience / vector) with no tuning
+  evidence behind the weights and no explainability. F44 just
+  exposed those scores in HR's triage flow, so the quality of the
+  algorithm is now directly user-visible. Compose with F83 which
+  already tracks execution items (skill normalization, required-vs-
+  preferred weighting, education hierarchy, etc.); F45 is the
+  **review pass** that produces a concrete priority list and a
+  regression baseline.
+  - [ ] **F45.a** Eval harness: build `make eval-matching` analogous
+    to the RAG eval — seed a fixture corpus of (job, candidate,
+    expected-rank) triples, run matching, emit ranked agreement
+    metrics (Spearman, top-K agreement). Blocks tuning work so we
+    can measure improvements.
+  - [ ] **F45.b** Audit the current weights: 45/20/35 is a guess.
+    With a live eval harness, search the 3-simplex (maybe 7 grid
+    points) for the weight set that maximizes agreement with the
+    fixture. Expected lift unknown; worth measuring.
+  - [ ] **F45.c** Signal review: which components are pulling weight?
+    Instrument `_compute_score` to log per-candidate component
+    breakdowns over 100+ real queries; surface which signals
+    correlate with shortlist decisions HR actually made (status
+    transitions from `new` → `shortlisted`). Feeds back into weights.
+  - [ ] **F45.d** Required-skill floor: current code gives partial
+    credit for missing required skills (overlap fraction). Revisit
+    whether a required-skill miss should zero the skill component
+    or halve it — HR should decide policy; surface as a toggle.
+    Pairs with F83 "required > preferred" item.
+  - [ ] **F45.e** Explainability API: extend `MatchBreakdown` with a
+    human-readable sentence field generated at score time ("matched
+    because Stripe appears in 3 projects, 4 years in range 3–7,
+    vector sim 0.82"). Backend-side explanation generation keeps
+    the frontend renderer dumb. Unblocks F44.d.3.
+  - [ ] **F45.f** Cold-start: candidates without extracted skills
+    (resume in a weird format, extraction failed) currently score
+    0 on the skill component. Surface them separately as
+    "unscored" rather than burying them at the bottom of the list.
+  - [ ] **F45.g** Per-job weight overrides (optional): some roles
+    are seniority-driven, others skill-driven. Evaluate whether a
+    per-Job `matching_weights` JSONB column pays for its complexity.
+    Park until F45.b shows a single global weight set isn't good
+    enough.
 
 ---
 
