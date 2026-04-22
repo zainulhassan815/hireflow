@@ -3,7 +3,6 @@ import {
   ArrowLeftIcon,
   DownloadIcon,
   FileTextIcon,
-  LayersIcon,
   Loader2Icon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -14,12 +13,6 @@ import {
   getDocumentMetadataOptions,
   getDocumentOptions,
 } from "@/api";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,13 +31,19 @@ import {
 /**
  * F105.e — focused document page at `/documents/:id`.
  *
- * Option 3 layout (F108.b): main-area tabs (Document | Text) let the
- * viewer and extracted text compete for the wide column fairly.
- * Right rail holds static Details + a collapsible Similar documents
- * accordion. `keepMounted` on the tab panels preserves viewer state
- * (signed URL, scroll, zoom) across tab switches, and
- * scrollbar-gutter: stable on the scroll containers kills the
- * layout shift when scrollbar visibility changes.
+ * Layout strategy: the page root uses an explicit viewport-sized
+ * height via inline style (`calc(100svh - 3rem)` — subtracting
+ * `<main>`'s `p-6` padding) rather than `h-full`. Every downstream
+ * `h-full`/`flex-1` needs a definite parent height, and
+ * `SidebarProvider` uses `min-h-svh` which leaves `<main>`
+ * indefinite. Inline style bypasses Tailwind's arbitrary-value
+ * calc parsing (which omits required whitespace and produces
+ * invalid CSS); one explicit height at the top fixes the whole
+ * chain in a local, scoped way.
+ *
+ * Three main-area tabs — Document / Text / Similar — each own their
+ * own scroll where relevant. The sidebar holds static Details only;
+ * it has no overflow or internal scroll logic.
  */
 export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -93,7 +92,10 @@ export function DocumentDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div
+        className="flex items-center justify-center"
+        style={{ height: "calc(100svh - 3rem)" }}
+      >
         <Loader2Icon className="text-muted-foreground size-6 animate-spin" />
       </div>
     );
@@ -101,7 +103,10 @@ export function DocumentDetailPage() {
 
   if (isError || !doc) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+      <div
+        className="flex flex-col items-center justify-center gap-3 text-center"
+        style={{ height: "calc(100svh - 3rem)" }}
+      >
         <Typography variant="h4">Document not found</Typography>
         <Typography variant="muted">
           It may have been deleted, or you don&apos;t have access.
@@ -131,11 +136,12 @@ export function DocumentDetailPage() {
         : undefined;
 
   return (
-    // h-full fills <main>'s content area. flex-col + flex-1 on the
-    // body grid lets the viewer + rail grow to the viewport without
-    // the outer main scrolling.
-    <div className="flex h-full flex-col gap-4">
-      <div className="flex items-center gap-3 border-b pb-4">
+    <div
+      className="flex flex-col gap-4"
+      style={{ height: "calc(100svh - 3rem)" }}
+    >
+      {/* Header */}
+      <header className="flex shrink-0 items-center gap-3 border-b pb-4">
         <Button
           variant="ghost"
           size="icon"
@@ -176,25 +182,19 @@ export function DocumentDetailPage() {
           <DownloadIcon className="size-4" data-icon="inline-start" />
           Download
         </Button>
-      </div>
+      </header>
 
-      {/* grid-rows-[minmax(0,1fr)] is load-bearing. Plain `1fr`
-          expands to `minmax(auto, 1fr)` in CSS Grid — the `auto`
-          minimum means the track grows to fit its content-height,
-          which defeats the point when the aside's Similar
-          accordion is expanded. Explicit `minmax(0, 1fr)` clamps
-          the track to the grid's definite height, so the aside's
-          overflow-y-auto scrolls internally and the viewer stays
-          pinned. Same trick as the col track's `minmax(0,1fr)`. */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        {/* Main column: Document | Text tabs. keepMounted keeps the
-            viewer iframe alive when the user peeks at Text, so
-            returning to Document doesn't re-fetch the signed URL or
-            lose scroll/zoom state. */}
-        <Tabs defaultValue="document" className="flex min-h-0 flex-col gap-3">
-          <TabsList variant="line" className="self-start">
+      {/* Body: flex row. Main column flex-1, aside fixed width. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
+        {/* Main: Document / Text tabs */}
+        <Tabs
+          defaultValue="document"
+          className="flex min-h-0 min-w-0 flex-1 flex-col gap-3"
+        >
+          <TabsList variant="line" className="shrink-0 self-start">
             <TabsTrigger value="document">Document</TabsTrigger>
             <TabsTrigger value="text">Text</TabsTrigger>
+            <TabsTrigger value="similar">Similar</TabsTrigger>
           </TabsList>
 
           <TabsContent
@@ -231,11 +231,26 @@ export function DocumentDetailPage() {
               </div>
             )}
           </TabsContent>
+
+          <TabsContent
+            value="similar"
+            keepMounted
+            className="min-h-0 flex-1 overflow-y-auto rounded-lg border p-4 [scrollbar-gutter:stable] data-hidden:hidden"
+          >
+            <SimilarDocuments
+              document={doc}
+              enabled
+              hideHeading
+              onSelect={(neighbourId) => navigate(`/documents/${neighbourId}`)}
+            />
+          </TabsContent>
         </Tabs>
 
-        {/* Sidebar: always-visible Details + collapsible Similar
-            accordion. One scroll container for the whole rail. */}
-        <aside className="flex min-h-0 flex-col gap-6 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
+        {/* Sidebar: just Details now. Similar moved to the third
+            main-area tab (gets viewer-scale width for the neighbour
+            cards); the accordion + flex-1 wrapper + all associated
+            scroll gymnastics are gone. */}
+        <aside className="shrink-0 lg:w-80">
           <section aria-labelledby="details-heading">
             <Typography
               variant="muted"
@@ -307,27 +322,6 @@ export function DocumentDetailPage() {
               )}
             </dl>
           </section>
-
-          <Accordion>
-            <AccordionItem value="similar">
-              <AccordionTrigger>
-                <span className="inline-flex items-center gap-2">
-                  <LayersIcon className="text-muted-foreground size-4" />
-                  Similar documents
-                </span>
-              </AccordionTrigger>
-              <AccordionContent>
-                <SimilarDocuments
-                  document={doc}
-                  enabled
-                  hideHeading
-                  onSelect={(neighbourId) =>
-                    navigate(`/documents/${neighbourId}`)
-                  }
-                />
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
         </aside>
       </div>
     </div>
