@@ -1,13 +1,17 @@
 import { useNavigate } from "react-router-dom";
+import { useTheme } from "next-themes";
 import {
   BriefcaseIcon,
   ClipboardListIcon,
   FileTextIcon,
+  LaptopIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MoonIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
+  SunIcon,
   UploadIcon,
   UsersIcon,
 } from "lucide-react";
@@ -30,6 +34,7 @@ interface CommandPaletteProps {
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { setTheme } = useTheme();
 
   const run = (fn: () => void) => {
     onOpenChange(false);
@@ -84,6 +89,29 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           <CommandItem onSelect={() => run(() => navigate("/jobs/create"))}>
             <PlusIcon className="mr-2 size-4" />
             Create job
+          </CommandItem>
+        </CommandGroup>
+        <CommandGroup heading="Appearance">
+          <CommandItem
+            onSelect={() => run(() => setTheme("light"))}
+            keywords={["theme", "light", "appearance"]}
+          >
+            <SunIcon className="mr-2 size-4" />
+            Theme: Light
+          </CommandItem>
+          <CommandItem
+            onSelect={() => run(() => setTheme("dark"))}
+            keywords={["theme", "dark", "appearance"]}
+          >
+            <MoonIcon className="mr-2 size-4" />
+            Theme: Dark
+          </CommandItem>
+          <CommandItem
+            onSelect={() => run(() => setTheme("system"))}
+            keywords={["theme", "system", "appearance", "auto"]}
+          >
+            <LaptopIcon className="mr-2 size-4" />
+            Theme: System
           </CommandItem>
         </CommandGroup>
         <CommandGroup heading="Account">

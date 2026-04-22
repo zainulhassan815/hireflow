@@ -1,5 +1,7 @@
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
+import { useTheme } from "next-themes";
+import { LaptopIcon, MoonIcon, SunIcon } from "lucide-react";
 
 import { changePassword, updateProfile } from "@/api";
 import { EmailConnection } from "@/components/settings/email-connection";
@@ -11,7 +13,14 @@ import { Separator } from "@/components/ui/separator";
 import { Typography } from "@/components/ui/typography";
 import { useAuth } from "@/providers/use-auth";
 import { extractApiError } from "@/lib/api-errors";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+const THEME_OPTIONS = [
+  { value: "light", label: "Light", Icon: SunIcon },
+  { value: "dark", label: "Dark", Icon: MoonIcon },
+  { value: "system", label: "System", Icon: LaptopIcon },
+] as const;
 
 const GMAIL_ERROR_MESSAGES: Record<string, string> = {
   denied: "Gmail connection cancelled.",
@@ -22,6 +31,14 @@ const GMAIL_ERROR_MESSAGES: Record<string, string> = {
 
 export function SettingsPage() {
   const { user } = useAuth();
+  // next-themes resolves `theme === "system"` to the OS value via
+  // `resolvedTheme`, but the stored preference is what the picker
+  // should reflect. Fall back to "system" until mount to avoid an
+  // SSR/CSR mismatch on first paint.
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+  const activeTheme = mounted ? (theme ?? "system") : "system";
 
   const [fullName, setFullName] = React.useState(user?.full_name ?? "");
   const [email, setEmail] = React.useState(user?.email ?? "");
@@ -135,6 +152,43 @@ export function SettingsPage() {
             <Button onClick={handleSaveProfile} disabled={savingProfile}>
               {savingProfile ? "Saving..." : "Save Changes"}
             </Button>
+          </CardContent>
+        </Card>
+
+        <Separator />
+
+        {/* Appearance */}
+        <Card>
+          <CardHeader>
+            <Typography variant="h5">Appearance</Typography>
+            <Typography variant="muted">
+              Theme preference — applies to this browser
+            </Typography>
+          </CardHeader>
+          <CardContent>
+            <div
+              role="radiogroup"
+              aria-label="Theme"
+              className="flex flex-wrap gap-2"
+            >
+              {THEME_OPTIONS.map(({ value, label, Icon }) => {
+                const selected = activeTheme === value;
+                return (
+                  <Button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    variant={selected ? "default" : "outline"}
+                    onClick={() => setTheme(value)}
+                    className={cn("min-w-28 justify-start")}
+                  >
+                    <Icon className="size-4" data-icon="inline-start" />
+                    {label}
+                  </Button>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
 

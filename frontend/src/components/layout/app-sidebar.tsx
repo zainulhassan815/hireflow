@@ -1,13 +1,18 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useTheme } from "next-themes";
 import {
   BriefcaseIcon,
   ChevronDownIcon,
   ClipboardListIcon,
   FileTextIcon,
+  LaptopIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MoonIcon,
+  PaletteIcon,
   SearchIcon,
   SettingsIcon,
+  SunIcon,
   UsersIcon,
 } from "lucide-react";
 
@@ -29,7 +34,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -100,6 +110,7 @@ export function AppSidebar() {
   const { user, logout } = useAuth();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
+  const { theme, setTheme } = useTheme();
 
   const handleLogout = async () => {
     await logout();
@@ -253,6 +264,31 @@ export function AppSidebar() {
               <SettingsIcon className="mr-2 size-4" />
               Settings
             </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <PaletteIcon className="mr-2 size-4" />
+                Theme
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuRadioGroup
+                  value={theme ?? "system"}
+                  onValueChange={setTheme}
+                >
+                  <DropdownMenuRadioItem value="light">
+                    <SunIcon className="mr-2 size-4" />
+                    Light
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="dark">
+                    <MoonIcon className="mr-2 size-4" />
+                    Dark
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="system">
+                    <LaptopIcon className="mr-2 size-4" />
+                    System
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={handleLogout}
