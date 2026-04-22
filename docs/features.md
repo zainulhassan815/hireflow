@@ -852,6 +852,10 @@ Production-grade interface with attention to detail, accessibility, and delight.
     `kind: "pdf"` via the F105.a iframe path. 15 new tests incl.
     back-compat for pre-F105.b PDFs and idempotent re-prepare.
     Follow-ups: orphan `viewable/` blob cleanup on doc delete.
+    Backfill for pre-F105.b docs ships via
+    `scripts/prepare_viewables.py` (`--dry-run` / `--force` /
+    `--limit N`) — calls `ViewerPreparationService.prepare` directly,
+    ~60× cheaper than re-running extraction.
   - [ ] **F105.c** `SpreadsheetProvider` (xlsx, xls, ods via
     `openpyxl`) + `CsvTsvProvider` (stdlib `csv`) → `table`.
     Frontend `TableRenderer` using TanStack Table (already in repo)
