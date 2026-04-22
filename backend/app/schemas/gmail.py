@@ -20,24 +20,30 @@ class GmailAuthorizeResponse(BaseModel):
     )
 
 
-class GmailConnectionStatus(BaseModel):
-    """Current user's Gmail connection (empty fields if not connected)."""
+class GmailConnection(BaseModel):
+    """One Gmail mailbox connected to the current user.
 
-    connected: bool = Field(
-        ..., description="True if a Gmail connection exists for the current user."
-    )
-    gmail_email: EmailStr | None = Field(
-        None, description="The connected Gmail address, if any."
-    )
-    connected_at: datetime | None = Field(
-        None, description="When the current connection was established."
+    A user may hold multiple connections. The ``GET /gmail/connections``
+    endpoint returns a (possibly empty) list of these; empty means "no
+    mailbox connected yet".
+    """
+
+    id: UUID = Field(..., description="Stable identifier for this connection.")
+    gmail_email: EmailStr = Field(..., description="The connected Gmail address.")
+    connected_at: datetime = Field(
+        ...,
+        description="When the connection was first established.",
     )
     last_synced_at: datetime | None = Field(
-        None, description="When F51 last polled this connection; null until F51 runs."
+        None,
+        description=(
+            "When the worker last polled this connection; null until the "
+            "first sync run completes."
+        ),
     )
     scopes: list[str] = Field(
         default_factory=list,
-        description="OAuth scopes the user granted.",
+        description="OAuth scopes the user granted for this connection.",
     )
 
 
@@ -51,7 +57,7 @@ class GmailSyncTriggerResponse(BaseModel):
         default=True,
         description=(
             "Always true — the task was handed to the worker queue. "
-            "Watch ``last_synced_at`` on the status endpoint to know "
-            "when it finishes."
+            "Watch ``last_synced_at`` on the list endpoint to know when "
+            "it finishes."
         ),
     )

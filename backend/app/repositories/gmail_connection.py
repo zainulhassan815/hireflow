@@ -1,4 +1,9 @@
-"""Data access for the GmailConnection aggregate."""
+"""Data access for the GmailConnection aggregate.
+
+One row per ``(user_id, gmail_email)``. A user may hold multiple
+connections; ``upsert`` keys on both columns so re-authorizing the
+same address updates tokens in place while a new address adds a row.
+"""
 
 from __future__ import annotations
 
@@ -12,18 +17,46 @@ from app.models import GmailConnection
 
 
 class GmailConnectionRepository:
-    """One row per user. ``upsert`` replaces any existing connection atomically."""
-
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
-    async def get_by_user(self, user_id: UUID) -> GmailConnection | None:
+    async def list_by_user(self, user_id: UUID) -> list[GmailConnection]:
+        """Return every connection owned by ``user_id``, oldest first."""
         result = await self._db.execute(
-            select(GmailConnection).where(GmailConnection.user_id == user_id)
+            select(GmailConnection)
+            .where(GmailConnection.user_id == user_id)
+            .order_by(GmailConnection.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def get_by_user_and_email(
+        self, user_id: UUID, gmail_email: str
+    ) -> GmailConnection | None:
+        result = await self._db.execute(
+            select(GmailConnection).where(
+                GmailConnection.user_id == user_id,
+                GmailConnection.gmail_email == gmail_email,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_for_user(
+        self, user_id: UUID, connection_id: UUID
+    ) -> GmailConnection | None:
+        """Owner-scoped lookup. ``None`` if the id doesn't exist *or* belongs
+        to a different user — routes translate to 404, which hides
+        existence from the wrong owner."""
+        result = await self._db.execute(
+            select(GmailConnection).where(
+                GmailConnection.id == connection_id,
+                GmailConnection.user_id == user_id,
+            )
         )
         return result.scalar_one_or_none()
 
     async def get_by_id(self, connection_id: UUID) -> GmailConnection | None:
+        """Unscoped lookup — only safe inside the worker, which has no HTTP
+        user context. HTTP handlers must use ``get_for_user``."""
         return await self._db.get(GmailConnection, connection_id)
 
     async def list_all(self) -> list[GmailConnection]:
@@ -39,9 +72,8 @@ class GmailConnectionRepository:
         refresh_token: str,
         scopes: list[str],
     ) -> GmailConnection:
-        existing = await self.get_by_user(user_id)
+        existing = await self.get_by_user_and_email(user_id, gmail_email)
         if existing is not None:
-            existing.gmail_email = gmail_email
             existing.refresh_token = refresh_token
             existing.scopes = scopes
             conn = existing

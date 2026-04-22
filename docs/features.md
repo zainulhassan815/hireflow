@@ -212,6 +212,34 @@ Wire existing frontend pages to the real backend API. All pages must follow
   - Template-based follow-ups from candidate detail view
   - Send via Gmail API; log in activity trail
 
+- [x] **F53 · Multiple Gmail accounts per user** — today one HR user can
+  connect exactly one Gmail mailbox (the `gmail_connections` table has a
+  `UNIQUE (user_id)` constraint; re-authorizing overwrites the token).
+  HR teams run a recruiting inbox *and* personal inboxes that receive
+  resumes; the product assumption of one-per-user forces them to choose.
+  The sync service (`GmailSyncService.sync`) already takes a
+  `connection_id`, iterates all rows in the fan-out task, and dedupes
+  candidates at `(owner_id, email)` — so the business layer is already
+  multi-account-capable. Only the model constraint, the upsert, the
+  routes, and the UI assume one-per-user.
+  - [x] **F53.a** Backend: drop `UNIQUE (user_id)`, replace with
+    `UNIQUE (user_id, gmail_email)` (Alembic migration). Repository
+    grows `list_by_user`, `get_by_user_and_email`, `get_for_user`
+    (owner-scoped lookup by connection id); `upsert` keys on
+    `(user_id, gmail_email)` so re-authorizing the same address updates
+    tokens in place and a new address adds a row. Service +
+    routes pluralize: `GET /gmail/connections` (list),
+    `POST /gmail/connections/{id}/sync`,
+    `DELETE /gmail/connections/{id}`. `POST /gmail/authorize` stays;
+    callback flow unchanged (Google returns the email, upsert picks the
+    row). Singular `GET /gmail` / `POST /gmail/sync` / `DELETE /gmail`
+    removed — frontend moves in F53.b in the same commit window.
+  - [x] **F53.b** Frontend: replace the single-status card in
+    `settings/email-connection.tsx` with a per-row list (one row per
+    connection: email, connected_at, last_synced_at, Sync / Disconnect
+    buttons) plus a top-level "Connect another account" button.
+    Regenerate the SDK after F53.a.
+
 ---
 
 ## Phase 6 — Observability & Admin (FR19, FR20, UC-10, UC-11)

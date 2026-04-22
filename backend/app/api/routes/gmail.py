@@ -1,6 +1,15 @@
-"""Gmail OAuth connect/callback/disconnect/status endpoints."""
+"""Gmail OAuth connect/callback/list/sync/disconnect endpoints.
+
+A user may hold multiple connections (F53). The ``/connections``
+sub-resource models that: list, per-id sync, per-id disconnect.
+``/authorize`` and ``/callback`` stay user-scoped (there's exactly one
+OAuth flow in flight at a time per user; the callback routes into the
+right ``(user_id, gmail_email)`` row via Google's userinfo).
+"""
 
 from __future__ import annotations
+
+from uuid import UUID
 
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
@@ -11,7 +20,7 @@ from app.domain.exceptions import GmailAuthError, NotFound
 from app.schemas.errors import ErrorResponse
 from app.schemas.gmail import (
     GmailAuthorizeResponse,
-    GmailConnectionStatus,
+    GmailConnection,
     GmailSyncTriggerResponse,
 )
 
@@ -31,7 +40,10 @@ def _frontend_base() -> str:
         "Returns a Google consent URL. The frontend should redirect the "
         "browser to this URL. Google will call the backend's callback "
         "endpoint when the user approves or denies. A CSRF ``state`` is "
-        "stored in Redis (10-minute TTL) and verified on callback."
+        "stored in Redis (10-minute TTL) and verified on callback. Use "
+        "this endpoint for every new mailbox — connecting a different "
+        "Google account adds a row rather than overwriting the previous "
+        "one."
     ),
     responses={401: {"model": ErrorResponse, "description": "Not authenticated"}},
 )
@@ -47,10 +59,10 @@ async def gmail_authorize(
     summary="Gmail OAuth callback",
     description=(
         "Endpoint Google redirects to after consent. Exchanges the ``code`` "
-        "for tokens, verifies ``state``, and stores an encrypted refresh "
-        "token. On success, redirects the browser back to the frontend "
-        "settings page with ``?gmail=connected``. On error, redirects with "
-        "``?gmail=error&reason=<code>``."
+        "for tokens, verifies ``state``, and upserts a connection row keyed "
+        "by ``(user_id, gmail_email)``. On success, redirects the browser "
+        "back to the frontend settings page with ``?gmail=connected``. On "
+        "error, redirects with ``?gmail=error&reason=<code>``."
     ),
     include_in_schema=False,  # browser-only, not called by API consumers
 )
@@ -91,48 +103,56 @@ async def gmail_callback(
 
 
 @router.get(
-    "",
-    response_model=GmailConnectionStatus,
-    summary="Get Gmail connection status",
+    "/connections",
+    response_model=list[GmailConnection],
+    summary="List connected Gmail accounts",
+    description=(
+        "Returns every Gmail connection the current user holds, ordered "
+        "oldest first. An empty list means no mailbox is connected yet."
+    ),
     responses={401: {"model": ErrorResponse, "description": "Not authenticated"}},
 )
-async def gmail_status(
+async def list_gmail_connections(
     current_user: CurrentUser, gmail: GmailServiceDep
-) -> GmailConnectionStatus:
-    connection = await gmail.get_connection(current_user.id)
-    if connection is None:
-        return GmailConnectionStatus(connected=False)
-    return GmailConnectionStatus(
-        connected=True,
-        gmail_email=connection.gmail_email,
-        connected_at=connection.created_at,
-        last_synced_at=connection.last_synced_at,
-        scopes=connection.scopes,
-    )
+) -> list[GmailConnection]:
+    connections = await gmail.list_connections(current_user.id)
+    return [
+        GmailConnection(
+            id=c.id,
+            gmail_email=c.gmail_email,
+            connected_at=c.created_at,
+            last_synced_at=c.last_synced_at,
+            scopes=c.scopes,
+        )
+        for c in connections
+    ]
 
 
 @router.post(
-    "/sync",
+    "/connections/{connection_id}/sync",
     response_model=GmailSyncTriggerResponse,
     status_code=202,
     summary="Trigger a Gmail sync now",
     description=(
-        "Enqueues an immediate sync for the current user's Gmail "
-        "connection. Returns 202; the sync runs asynchronously in the "
-        "worker. Poll ``GET /api/auth/gmail`` to watch ``last_synced_at`` "
+        "Enqueues an immediate sync for the identified connection. "
+        "Returns 202; the sync runs asynchronously in the worker. Poll "
+        "``GET /api/auth/gmail/connections`` to watch ``last_synced_at`` "
         "update when it finishes."
     ),
     responses={
         401: {"model": ErrorResponse, "description": "Not authenticated"},
-        404: {"model": ErrorResponse, "description": "No Gmail connection"},
+        404: {
+            "model": ErrorResponse,
+            "description": "Connection not found or not owned by the current user",
+        },
     },
 )
 async def gmail_sync_now(
-    current_user: CurrentUser, gmail: GmailServiceDep
+    connection_id: UUID, current_user: CurrentUser, gmail: GmailServiceDep
 ) -> GmailSyncTriggerResponse:
-    connection = await gmail.get_connection(current_user.id)
+    connection = await gmail.get_connection_for_user(current_user.id, connection_id)
     if connection is None:
-        raise NotFound("No Gmail connection. Connect Gmail before syncing.")
+        raise NotFound("Gmail connection not found.")
 
     # Import inside the handler: the worker package loads Celery eagerly,
     # which we don't want at FastAPI import time in environments that
@@ -144,22 +164,29 @@ async def gmail_sync_now(
 
 
 @router.delete(
-    "",
+    "/connections/{connection_id}",
     status_code=204,
-    summary="Disconnect Gmail",
+    summary="Disconnect a Gmail account",
     description=(
         "Revokes the stored refresh token with Google and removes the "
-        "connection row. Safe to call even if Google is momentarily "
-        "unreachable — the local connection is still deleted."
+        "identified connection row. Safe to call even if Google is "
+        "momentarily unreachable — the local connection is still deleted. "
+        "Other connections owned by the user are untouched."
     ),
     responses={
         401: {"model": ErrorResponse, "description": "Not authenticated"},
-        404: {"model": ErrorResponse, "description": "No connection to disconnect"},
+        404: {
+            "model": ErrorResponse,
+            "description": "Connection not found or not owned by the current user",
+        },
     },
 )
 async def gmail_disconnect(
-    request: Request, current_user: CurrentUser, gmail: GmailServiceDep
+    connection_id: UUID,
+    request: Request,
+    current_user: CurrentUser,
+    gmail: GmailServiceDep,
 ) -> None:
     client = request.client
     ip = client.host if client else None
-    await gmail.disconnect(current_user.id, ip_address=ip)
+    await gmail.disconnect(current_user.id, connection_id, ip_address=ip)

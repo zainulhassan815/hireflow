@@ -6,9 +6,16 @@ Orchestrates the three moving parts of the connect flow:
    Redis keyed by the authenticating user, and return the Google
    consent URL.
 2. ``complete_authorization`` — pop the state, exchange the code for
-   tokens, learn the user's Gmail address, upsert the connection row.
+   tokens, learn the user's Gmail address, upsert the connection row
+   keyed by ``(user_id, gmail_email)``.
 3. ``disconnect`` — revoke the refresh token with Google, delete the
-   row.
+   identified connection.
+
+A user can hold multiple connections (F53). Re-authorizing the same
+address updates tokens in place; a new address adds a row. Disconnect
+takes a ``connection_id`` and is owner-scoped — deleting a connection
+that belongs to another user raises ``NotFound`` (same shape as
+"genuinely missing", which hides existence from the wrong owner).
 
 Both connect and disconnect emit ``ActivityLog`` entries so an audit
 can always answer who connected what and when.
@@ -90,8 +97,14 @@ class GmailService:
         )
         return connection
 
-    async def disconnect(self, user_id: UUID, *, ip_address: str | None = None) -> None:
-        connection = await self._connections.get_by_user(user_id)
+    async def disconnect(
+        self,
+        user_id: UUID,
+        connection_id: UUID,
+        *,
+        ip_address: str | None = None,
+    ) -> None:
+        connection = await self._connections.get_for_user(user_id, connection_id)
         if connection is None:
             raise NotFound("No Gmail connection to disconnect.")
 
@@ -113,8 +126,13 @@ class GmailService:
             ip_address=ip_address,
         )
 
-    async def get_connection(self, user_id: UUID) -> GmailConnection | None:
-        return await self._connections.get_by_user(user_id)
+    async def list_connections(self, user_id: UUID) -> list[GmailConnection]:
+        return await self._connections.list_by_user(user_id)
+
+    async def get_connection_for_user(
+        self, user_id: UUID, connection_id: UUID
+    ) -> GmailConnection | None:
+        return await self._connections.get_for_user(user_id, connection_id)
 
     async def _pop_state(self, state: str) -> UUID | None:
         key = _STATE_PREFIX + state
