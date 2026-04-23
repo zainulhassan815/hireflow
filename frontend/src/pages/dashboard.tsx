@@ -276,7 +276,7 @@ export function DashboardPage() {
                   <TableRow
                     key={doc.id}
                     className="cursor-pointer"
-                    onClick={() => navigate("/documents")}
+                    onClick={() => navigate(`/documents/${doc.id}`)}
                   >
                     <TableCell>
                       <div className="flex items-center gap-3">
