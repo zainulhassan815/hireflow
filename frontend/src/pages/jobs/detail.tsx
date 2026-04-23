@@ -22,6 +22,13 @@ import {
   matchCandidatesMutation,
   type ApplicationResponse,
 } from "@/api";
+import {
+  CandidateFilterBar,
+  EmptyFiltersState,
+  applyCandidateFilters,
+  useCandidateFilters,
+} from "@/components/jobs/candidate-filter-bar";
+import { JobCandidateBoard } from "@/components/jobs/job-candidate-board";
 import { JobCandidateList } from "@/components/jobs/job-candidate-list";
 import {
   AlertDialog,
@@ -43,11 +50,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Typography } from "@/components/ui/typography";
 import { cn, skillHueClass } from "@/lib/utils";
 
@@ -72,6 +74,13 @@ export function JobDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  // F93 — view toggle: list vs kanban board. Local state for now;
+  // lift to URL / localStorage later if we want it to stick.
+  const [viewMode, setViewMode] = React.useState<"list" | "kanban">("list");
+  // F93.e — filter state is shared between views so toggling
+  // preserves search / score tier / status multi-select / saved
+  // views. Each view still owns its own sort + selection + drawer.
+  const filters = useCandidateFilters();
 
   const {
     data: job,
@@ -252,41 +261,39 @@ export function JobDetailPage() {
         </div>
       </div>
 
-      {/* View toggle — F44.d.3. Kanban disabled until F93 ships. */}
+      {/* F93.e — shared filter bar with view toggle on the right.
+          Both list and kanban consume the already-filtered list. */}
       {applications.length > 0 && (
-        <div className="flex justify-end">
-          <ToggleGroup
-            variant="outline"
-            value={["list"]}
-            aria-label="View mode"
-          >
-            <ToggleGroupItem value="list" aria-label="List view">
-              <ListIcon className="size-4" data-icon="inline-start" />
-              List
-            </ToggleGroupItem>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <ToggleGroupItem
-                    value="kanban"
-                    aria-label="Kanban view"
-                    disabled
-                  >
-                    <LayoutGridIcon
-                      className="size-4"
-                      data-icon="inline-start"
-                    />
-                    Kanban
-                  </ToggleGroupItem>
-                }
-              />
-              <TooltipContent>Coming in F93</TooltipContent>
-            </Tooltip>
-          </ToggleGroup>
-        </div>
+        <CandidateFilterBar
+          api={filters}
+          totalCount={applications.length}
+          filteredCount={
+            applyCandidateFilters(applications, filters.state).length
+          }
+          rightSlot={
+            <ToggleGroup
+              variant="outline"
+              value={[viewMode]}
+              onValueChange={(value) => {
+                const next = Array.isArray(value) ? value[0] : value;
+                if (next === "list" || next === "kanban") setViewMode(next);
+              }}
+              aria-label="View mode"
+            >
+              <ToggleGroupItem value="list" aria-label="List view">
+                <ListIcon className="size-4" data-icon="inline-start" />
+                List
+              </ToggleGroupItem>
+              <ToggleGroupItem value="kanban" aria-label="Kanban view">
+                <LayoutGridIcon className="size-4" data-icon="inline-start" />
+                Kanban
+              </ToggleGroupItem>
+            </ToggleGroup>
+          }
+        />
       )}
 
-      {/* Candidate list */}
+      {/* Candidate view — list or board depending on viewMode */}
       {appsLoading ? (
         <div className="flex h-48 items-center justify-center">
           <Loader2Icon className="text-muted-foreground size-5 animate-spin" />
@@ -294,8 +301,10 @@ export function JobDetailPage() {
       ) : applications.length === 0 ? (
         <EmptyCandidates onRunMatch={runMatch} pending={matchMut.isPending} />
       ) : (
-        <JobCandidateList
+        <CandidateViewContent
           applications={applications}
+          filters={filters}
+          viewMode={viewMode}
           onStatusChanged={onStatusChanged}
         />
       )}
@@ -323,6 +332,40 @@ export function JobDetailPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function CandidateViewContent({
+  applications,
+  filters,
+  viewMode,
+  onStatusChanged,
+}: {
+  applications: ApplicationResponse[];
+  filters: ReturnType<typeof useCandidateFilters>;
+  viewMode: "list" | "kanban";
+  onStatusChanged: () => void;
+}) {
+  const filtered = React.useMemo(
+    () => applyCandidateFilters(applications, filters.state),
+    [applications, filters.state]
+  );
+
+  if (filtered.length === 0) {
+    return <EmptyFiltersState api={filters} />;
+  }
+
+  return viewMode === "kanban" ? (
+    <JobCandidateBoard
+      applications={filtered}
+      onStatusChanged={onStatusChanged}
+    />
+  ) : (
+    <JobCandidateList
+      applications={filtered}
+      onStatusChanged={onStatusChanged}
+      searchInputRef={filters.searchInputRef}
+    />
   );
 }
 

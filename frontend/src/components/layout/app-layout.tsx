@@ -24,10 +24,16 @@ export function AppLayout() {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
-        <main className="flex-1 overflow-auto p-6">
-          <Outlet />
-        </main>
+      {/* SidebarInset is already a <main> — no need to nest another.
+          `min-w-0` is load-bearing: SidebarInset is a flex-row child
+          of sidebar-wrapper with `flex-1`, and its default
+          `min-width: auto` lets wide content (the F93 Kanban's 5 ×
+          288px columns) push it past the viewport and scroll the
+          whole page body. Overriding min-width to 0 lets flex-1
+          actually constrain the main area; `overflow-auto` scopes
+          the scroll inside the main region. */}
+      <SidebarInset className="min-w-0 overflow-auto p-6">
+        <Outlet />
       </SidebarInset>
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
     </SidebarProvider>

@@ -675,19 +675,61 @@ Production-grade interface with attention to detail, accessibility, and delight.
     - [ ] **F92.10** Keyboard shortcuts: ⌘+Enter to send (already works), ⌘+N new chat, ⌘+K focus search, Escape to stop generation, ↑ to edit last message.
     - [ ] **F92.11** Error / empty-state UX: network down, LLM rate-limited, no retrieval hits — clear messaging + "retry" affordance. Pairs with F81.i backend.
 
-- [ ] **F93 · Jobs & candidates UX**
-  - Job detail page with description, requirements, and matched candidates list
-  - Candidate profile page: resume viewer + extracted info + application history
-  - Kanban board view for applications (drag between new/shortlisted/rejected/hired)
-  - Match score visualization: radar chart or bar breakdown (skills/experience/vector)
-  - One-click "create candidates from all resumes" batch action
-  - CSV export button directly on the candidates table
-  - **Data model prerequisite** (flagged by F90.d, post-F90 critique):
-    the per-page heroes in brief §5 (Jobs status bar, Candidates scoring
-    column) depend on (a) Job.status carrying `open / screening /
-    interviewing / closed` states, and (b) a `match_score` field on
-    Candidate or CandidateApplication. Neither exists yet — schema work
-    blocks the layout work.
+- [~] **F93 · Kanban board view for applications** — reached after
+  F44 surfaced the list-mode triage flow; Kanban is the same data
+  visualized as columns you drag between. F44's view-toggle button
+  has been waiting for this renderer since F44.d.3.
+
+  Prereq note from the old F93 entry is stale: `Job.status` already
+  exists (F90 / F53), `Application.score` exists (F41), and
+  `Application.match_breakdown` landed in F44.d.6. No schema work
+  blocks the Kanban itself.
+
+  - [x] **F93.a** Board view using `@dnd-kit/core` (+ `/sortable`,
+    `/utilities`). Five fixed columns mirroring the status enum:
+    New · Shortlisted · Interviewed · Hired · Rejected (far-right,
+    visually muted). Drag a card across columns → `PATCH
+    /applications/{id}/status` via the existing endpoint, cache
+    patched optimistically, rollback on error (same pattern the
+    row and drawer use). Cards pack the same content the list
+    row shows: avatar, name link, score bar with breakdown
+    hover-card, top-3 skill chips. Click card → opens the
+    existing `CandidateDrawer`. `MouseSensor` requires 5px of
+    movement before drag-start so a click-and-release still opens
+    the drawer; `TouchSensor` has a 200ms delay so vertical scroll
+    on mobile doesn't accidentally drag. `DragOverlay` renders the
+    lifted card outside document flow — source column doesn't
+    reflow during drag. `useDroppable` marks columns; hovering
+    highlights the target column bg + border. Keyboard drag
+    supported natively by dnd-kit (Tab to card, Space pick up,
+    Arrows move, Space drop). Within-column reorder is out of
+    scope (F93.c, needs `column_position`).
+  - [x] **F93.b** WIP count per column rendered as a pill badge
+    next to the column header. No hard WIP limit — just a visible
+    indicator. Real WIP-limit warnings (e.g. "Shortlisted · 12/15
+    — at capacity") can follow once users pick a meaningful cap.
+  - [ ] **F93.c** Within-column reorder. Adds `column_position
+    FLOAT NOT NULL DEFAULT 0` on Application + `PATCH
+    /applications/{id}/position` endpoint. Use midpoint-between-
+    neighbors trick so one drag = one UPDATE. Ship when users
+    actually ask for hand-ranking.
+  - [ ] **F93.d** Multi-card drag via the F44.d.7 bulk endpoint.
+    Dnd-kit supports multi-drag via the `MultipleContainers`
+    strategy.
+  - [x] **F93.e** Filter-state lift — promoted from follow-up
+    after the first user toggled to Kanban and lost the whole
+    filter UI. Filter bar (search, score tier, status multi-
+    select, saved views, keyboard hint, active chips) extracted
+    into `candidate-filter-bar.tsx` with a shared
+    `useCandidateFilters` hook + pure `applyCandidateFilters`
+    reducer. Detail page owns filter state and renders the bar
+    above both views; list and board each receive pre-filtered
+    applications. The `[List | Kanban]` toggle slots into the
+    bar's `rightSlot` prop so it stays visible across modes.
+    List keeps local sort / selection / drawer / keyboard state;
+    board keeps local drag / drawer state. When filters produce
+    an empty result the parent renders `<EmptyFiltersState>`
+    with a "Clear filters" link instead of either view.
 
 - [ ] **F94 · Dashboard & navigation**
   - Activity feed: recent actions as a timeline (not just table)

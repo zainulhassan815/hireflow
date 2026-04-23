@@ -3,13 +3,8 @@ import { formatDistanceToNow } from "date-fns";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
-  BookmarkIcon,
   CheckIcon,
   ChevronRightIcon,
-  FilterIcon,
-  KeyboardIcon,
-  SearchIcon,
-  Trash2Icon,
   UndoIcon,
   XIcon,
 } from "lucide-react";
@@ -32,13 +27,6 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import { Input } from "@/components/ui/input";
-import { Kbd } from "@/components/ui/kbd";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -48,175 +36,42 @@ import { Typography } from "@/components/ui/typography";
 import { cn, skillHueClass } from "@/lib/utils";
 
 /**
- * F44.b/c/d — candidate triage surface.
+ * F44.b/c/d — candidate triage list (table view).
  *
- * F44.d reworked the visual density against established ATS / issue-
- * tracker patterns (Linear issues, Lever pipeline, Notion database):
- * one quiet filter row, compact rows, always-visible action buttons,
- * active-filter chips, score-tier buttons instead of a range slider.
+ * As of F93.e the filter bar lives in the parent page — this
+ * component receives already-filtered `applications` and focuses
+ * on: sort, bulk select, keyboard navigation, and the drawer.
  *
  * Row actions (status change) use optimistic mutation: click → row
  * flips immediately via onMutate; rolls back on error.
- *
- * Sortable columns: click Candidate / Score header to toggle.
- *
- * Bulk select: checkbox column feeds a sticky toolbar. No bulk
- * backend endpoint today — frontend fans out N PATCHes with
- * optimistic cache patch; rolls the whole batch back on any failure.
  */
 
-type StatusFilter = ApplicationStatus;
-type ScoreTier = "all" | "60" | "75" | "90";
 type SortKey = "score" | "name";
 type SortDir = "asc" | "desc";
-
-interface SavedView {
-  id: string;
-  name: string;
-  search: string;
-  scoreTier: ScoreTier;
-  statusSet: StatusFilter[];
-  sortKey: SortKey;
-  sortDir: SortDir;
-}
-
-// F44.d.8 — views are generic recipes (e.g. "High-score shortlist"),
-// not per-job, so keep a single global list. One-way migration if
-// they ever need per-user persistence: flip to a backend table,
-// seed from localStorage.
-const SAVED_VIEWS_KEY = "hireflow.candidate-saved-views";
-
-function loadSavedViews(): SavedView[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(SAVED_VIEWS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed as SavedView[];
-  } catch {
-    return [];
-  }
-}
-
-function persistSavedViews(views: SavedView[]) {
-  try {
-    window.localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(views));
-  } catch {
-    // localStorage can throw in Safari private mode or when quota
-    // is exhausted. Saving views is an optional affordance; swallow
-    // rather than blocking the user.
-  }
-}
-
-const SCORE_TIERS: { value: ScoreTier; label: string; threshold: number }[] = [
-  { value: "all", label: "All", threshold: 0 },
-  { value: "60", label: "≥ 60%", threshold: 60 },
-  { value: "75", label: "≥ 75%", threshold: 75 },
-  { value: "90", label: "≥ 90%", threshold: 90 },
-];
-
-const STATUS_LIST: {
-  value: StatusFilter;
-  label: string;
-  dotClass: string;
-}[] = [
-  { value: "new", label: "New", dotClass: "bg-muted-foreground" },
-  { value: "shortlisted", label: "Shortlisted", dotClass: "bg-success" },
-  { value: "rejected", label: "Rejected", dotClass: "bg-destructive" },
-  { value: "interviewed", label: "Interviewed", dotClass: "bg-cat-3" },
-  { value: "hired", label: "Hired", dotClass: "bg-cat-1" },
-];
 
 interface JobCandidateListProps {
   applications: ApplicationResponse[];
   onStatusChanged: () => void;
+  /** From the parent filter bar — the "/" shortcut focuses it. */
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 export function JobCandidateList({
   applications,
   onStatusChanged,
+  searchInputRef,
 }: JobCandidateListProps) {
-  const [search, setSearch] = React.useState("");
-  const [scoreTier, setScoreTier] = React.useState<ScoreTier>("all");
-  const [statusSet, setStatusSet] = React.useState<Set<StatusFilter>>(
-    () => new Set()
-  );
   const [sortKey, setSortKey] = React.useState<SortKey>("score");
   const [sortDir, setSortDir] = React.useState<SortDir>("desc");
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
     () => new Set()
   );
-  // F44.d.4 — drawer state lives here so F44.d.5's keyboard nav can
-  // advance to the next/previous candidate without losing the drawer.
   const [drawerAppId, setDrawerAppId] = React.useState<string | null>(null);
-  // F44.d.5 — which row has keyboard focus (visual ring), not DOM focus.
   const [focusedId, setFocusedId] = React.useState<string | null>(null);
-  const searchInputRef = React.useRef<HTMLInputElement>(null);
   const rowRefs = React.useRef(new Map<string, HTMLTableRowElement>());
-  // F44.d.8 — saved views in localStorage; shared across jobs so
-  // recipes like "High-score shortlist" don't have to be recreated.
-  const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
-    loadSavedViews()
-  );
-
-  const applyView = React.useCallback((view: SavedView) => {
-    setSearch(view.search);
-    setScoreTier(view.scoreTier);
-    setStatusSet(new Set(view.statusSet));
-    setSortKey(view.sortKey);
-    setSortDir(view.sortDir);
-  }, []);
-
-  const saveCurrentView = React.useCallback(
-    (name: string) => {
-      const view: SavedView = {
-        id: crypto.randomUUID(),
-        name,
-        search,
-        scoreTier,
-        statusSet: Array.from(statusSet),
-        sortKey,
-        sortDir,
-      };
-      setSavedViews((prev) => {
-        const next = [...prev, view];
-        persistSavedViews(next);
-        return next;
-      });
-      toast.success(`Saved view "${name}"`);
-    },
-    [search, scoreTier, statusSet, sortKey, sortDir]
-  );
-
-  const deleteView = React.useCallback((id: string) => {
-    setSavedViews((prev) => {
-      const next = prev.filter((v) => v.id !== id);
-      persistSavedViews(next);
-      return next;
-    });
-  }, []);
-
-  const scoreThreshold =
-    SCORE_TIERS.find((t) => t.value === scoreTier)?.threshold ?? 0;
-
-  const filtered = React.useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return applications.filter((app) => {
-      if (statusSet.size > 0 && !statusSet.has(app.status)) return false;
-      const score100 = Math.round((app.score ?? 0) * 100);
-      if (score100 < scoreThreshold) return false;
-      if (!needle) return true;
-      const c = app.candidate;
-      const haystacks = [c.name ?? "", c.email ?? "", ...(c.skills ?? [])].map(
-        (s) => s.toLowerCase()
-      );
-      return haystacks.some((h) => h.includes(needle));
-    });
-  }, [applications, search, scoreThreshold, statusSet]);
 
   const sorted = React.useMemo(() => {
-    const copy = [...filtered];
+    const copy = [...applications];
     copy.sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
       if (sortKey === "name") {
@@ -229,7 +84,7 @@ export function JobCandidateList({
       return (as - bs) * dir;
     });
     return copy;
-  }, [filtered, sortKey, sortDir]);
+  }, [applications, sortKey, sortDir]);
 
   React.useEffect(() => {
     setSelectedIds((prev) => {
@@ -278,8 +133,8 @@ export function JobCandidateList({
     // Don't nest setSortDir inside a setSortKey updater — React calls
     // updater fns twice in StrictMode and the toggle cancels itself,
     // which is exactly the "clicking the same column does nothing" bug
-    // this replaces. Compute against the closure-captured current
-    // state; React batches both setStates from the same event.
+    // this replaces. Compute against the closure-captured current state;
+    // React batches both setStates from the same event.
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
@@ -288,12 +143,6 @@ export function JobCandidateList({
     }
   };
 
-  const activeFilterCount =
-    (scoreTier !== "all" ? 1 : 0) + (statusSet.size > 0 ? 1 : 0);
-  const activeTierMeta = SCORE_TIERS.find((t) => t.value === scoreTier);
-
-  // F44.d.5 — keyboard navigation. Resolves against the current
-  // sorted+filtered list so j/k follows what the user sees.
   const focusedIndex = React.useMemo(
     () => (focusedId ? sorted.findIndex((a) => a.id === focusedId) : -1),
     [focusedId, sorted]
@@ -306,8 +155,6 @@ export function JobCandidateList({
       const next = Math.max(0, Math.min(sorted.length - 1, current + delta));
       const app = sorted[next];
       setFocusedId(app.id);
-      // Scroll the focused row into view so long lists don't drop
-      // focus off-screen.
       const el = rowRefs.current.get(app.id);
       if (el) el.scrollIntoView({ block: "nearest" });
       return app;
@@ -328,16 +175,12 @@ export function JobCandidateList({
     [applications, drawerAppId]
   );
 
-  // Single status mutation used by the row and by keyboard shortcuts
-  // targeting the currently-focused row. Optimistic update mirrors
-  // the per-row mutation.
   const queryKey =
     applications.length > 0
       ? listJobApplicationsQueryKey({
           path: { job_id: applications[0].job_id },
         })
       : null;
-
   const queryClient = useQueryClient();
   const shortcutMut = useMutation({
     ...updateApplicationStatusMutation(),
@@ -373,10 +216,6 @@ export function JobCandidateList({
     [shortcutMut]
   );
 
-  // Global keyboard listener, scoped to the list's lifetime. Ignores
-  // keys when an input/textarea is focused, when a modifier is held,
-  // or when a dialog is modal over the page. The drawer itself is
-  // Sheet-backed and also handles its own j/k via `drawerKeyDown`.
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -385,12 +224,9 @@ export function JobCandidateList({
         tag === "INPUT" ||
         tag === "TEXTAREA" ||
         (e.target as HTMLElement | null)?.isContentEditable;
-      // When the drawer is open, only j/k/s/r/u/Escape are meaningful;
-      // other shortcuts fall through to Sheet's own handlers.
       const drawerOpen = drawerAppId != null;
       if (isTyping) {
-        if (e.key === "Escape" && searchInputRef.current === e.target) {
-          setSearch("");
+        if (e.key === "Escape" && searchInputRef?.current === e.target) {
           searchInputRef.current?.blur();
         }
         return;
@@ -414,7 +250,6 @@ export function JobCandidateList({
           openDrawer(app);
         }
       } else if (key === "Escape" && drawerOpen) {
-        // Sheet handles Escape too; belt-and-braces.
         setDrawerAppId(null);
       } else if (key === "s" || key === "r" || key === "u") {
         const target = drawerOpen
@@ -438,10 +273,10 @@ export function JobCandidateList({
           else nextSet.add(id);
           return nextSet;
         });
-      } else if (key === "/" && !drawerOpen) {
+      } else if (key === "/" && !drawerOpen && searchInputRef?.current) {
         e.preventDefault();
-        searchInputRef.current?.focus();
-        searchInputRef.current?.select();
+        searchInputRef.current.focus();
+        searchInputRef.current.select();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -452,70 +287,13 @@ export function JobCandidateList({
     focusedId,
     moveFocus,
     openDrawer,
+    searchInputRef,
     setStatusFor,
     sorted,
   ]);
 
   return (
     <div className="flex flex-col gap-3">
-      <FilterRow
-        search={search}
-        onSearch={setSearch}
-        searchInputRef={searchInputRef}
-        scoreTier={scoreTier}
-        onScoreTier={setScoreTier}
-        statusSet={statusSet}
-        onStatusSet={setStatusSet}
-        activeFilterCount={activeFilterCount}
-        totalCount={applications.length}
-        filteredCount={sorted.length}
-        savedViews={savedViews}
-        onApplyView={applyView}
-        onSaveView={saveCurrentView}
-        onDeleteView={deleteView}
-      />
-
-      {activeFilterCount > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {scoreTier !== "all" && activeTierMeta && (
-            <FilterChip
-              label={`Score ${activeTierMeta.label}`}
-              onRemove={() => setScoreTier("all")}
-            />
-          )}
-          {Array.from(statusSet).map((s) => {
-            const meta = STATUS_LIST.find((m) => m.value === s);
-            if (!meta) return null;
-            return (
-              <FilterChip
-                key={s}
-                label={meta.label}
-                dotClass={meta.dotClass}
-                onRemove={() => {
-                  setStatusSet((prev) => {
-                    const next = new Set(prev);
-                    next.delete(s);
-                    return next;
-                  });
-                }}
-              />
-            );
-          })}
-          {activeFilterCount > 0 && (
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground ml-1 text-xs"
-              onClick={() => {
-                setScoreTier("all");
-                setStatusSet(new Set());
-              }}
-            >
-              Clear all
-            </button>
-          )}
-        </div>
-      )}
-
       {selectedIds.size > 0 && (
         <BulkActionBar
           selected={selectedApps}
@@ -575,30 +353,6 @@ export function JobCandidateList({
                 }}
               />
             ))}
-            {sorted.length === 0 && (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="text-muted-foreground px-4 py-12 text-center"
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <span>No candidates match your filters.</span>
-                    {activeFilterCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setScoreTier("all");
-                          setStatusSet(new Set());
-                        }}
-                        className="text-primary text-xs font-medium hover:underline"
-                      >
-                        Clear filters
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
@@ -614,378 +368,7 @@ export function JobCandidateList({
   );
 }
 
-/* -------------------------------- Filter row ------------------------------ */
-
-function FilterRow({
-  search,
-  onSearch,
-  searchInputRef,
-  scoreTier,
-  onScoreTier,
-  statusSet,
-  onStatusSet,
-  activeFilterCount,
-  totalCount,
-  filteredCount,
-  savedViews,
-  onApplyView,
-  onSaveView,
-  onDeleteView,
-}: {
-  search: string;
-  onSearch: (v: string) => void;
-  searchInputRef: React.RefObject<HTMLInputElement | null>;
-  scoreTier: ScoreTier;
-  onScoreTier: (v: ScoreTier) => void;
-  statusSet: Set<StatusFilter>;
-  onStatusSet: (v: Set<StatusFilter>) => void;
-  activeFilterCount: number;
-  totalCount: number;
-  filteredCount: number;
-  savedViews: SavedView[];
-  onApplyView: (view: SavedView) => void;
-  onSaveView: (name: string) => void;
-  onDeleteView: (id: string) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-[220px] flex-1">
-        <SearchIcon className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-        <Input
-          ref={searchInputRef}
-          value={search}
-          onChange={(e) => onSearch(e.target.value)}
-          placeholder="Search — press / to focus"
-          className="pl-9"
-        />
-      </div>
-
-      <Popover>
-        <PopoverTrigger
-          render={
-            <Button variant="outline">
-              <FilterIcon className="size-4" data-icon="inline-start" />
-              Filter
-              {activeFilterCount > 0 && (
-                <span className="bg-primary text-primary-foreground ml-1 rounded-full px-1.5 text-[10px] leading-4 font-semibold">
-                  {activeFilterCount}
-                </span>
-              )}
-            </Button>
-          }
-        />
-        <PopoverContent align="end" className="w-80">
-          <div className="flex flex-col gap-4">
-            <div>
-              <Typography
-                variant="small"
-                className="text-muted-foreground mb-2 block text-xs font-medium tracking-wide uppercase"
-              >
-                Match score
-              </Typography>
-              <div className="grid grid-cols-4 gap-1">
-                {SCORE_TIERS.map((t) => (
-                  <button
-                    key={t.value}
-                    type="button"
-                    onClick={() => onScoreTier(t.value)}
-                    className={cn(
-                      "rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
-                      scoreTier === t.value
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "hover:bg-muted"
-                    )}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <Typography
-                variant="small"
-                className="text-muted-foreground mb-2 block text-xs font-medium tracking-wide uppercase"
-              >
-                Status
-              </Typography>
-              <div className="flex flex-col gap-1">
-                {STATUS_LIST.map((s) => {
-                  const checked = statusSet.has(s.value);
-                  return (
-                    <label
-                      key={s.value}
-                      className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(v) => {
-                          const next = new Set(statusSet);
-                          if (v) next.add(s.value);
-                          else next.delete(s.value);
-                          onStatusSet(next);
-                        }}
-                      />
-                      <span
-                        aria-hidden
-                        className={cn(
-                          "inline-block size-2 rounded-full",
-                          s.dotClass
-                        )}
-                      />
-                      {s.label}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </PopoverContent>
-      </Popover>
-
-      <SavedViewsButton
-        views={savedViews}
-        onApply={onApplyView}
-        onSave={onSaveView}
-        onDelete={onDeleteView}
-        canSave={activeFilterCount > 0 || search.length > 0}
-      />
-
-      <span className="text-muted-foreground ml-auto text-xs tabular-nums">
-        {filteredCount === totalCount
-          ? `${totalCount} candidate${totalCount === 1 ? "" : "s"}`
-          : `${filteredCount} of ${totalCount}`}
-      </span>
-
-      <KeyboardHint />
-    </div>
-  );
-}
-
-function SavedViewsButton({
-  views,
-  onApply,
-  onSave,
-  onDelete,
-  canSave,
-}: {
-  views: SavedView[];
-  onApply: (view: SavedView) => void;
-  onSave: (name: string) => void;
-  onDelete: (id: string) => void;
-  canSave: boolean;
-}) {
-  const [name, setName] = React.useState("");
-  const [open, setOpen] = React.useState(false);
-
-  const trySave = () => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    onSave(trimmed);
-    setName("");
-    setOpen(false);
-  };
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <Button variant="outline" size="sm">
-            <BookmarkIcon className="size-4" data-icon="inline-start" />
-            Views
-            {views.length > 0 && (
-              <span className="bg-muted text-muted-foreground ml-1 rounded-full px-1.5 text-[10px] leading-4 font-semibold">
-                {views.length}
-              </span>
-            )}
-          </Button>
-        }
-      />
-      <PopoverContent align="end" className="w-80">
-        <div className="flex flex-col gap-3">
-          <Typography
-            variant="small"
-            className="text-muted-foreground text-xs font-medium tracking-wide uppercase"
-          >
-            Saved views
-          </Typography>
-
-          {views.length === 0 ? (
-            <Typography
-              variant="muted"
-              className="bg-muted/40 rounded-md p-3 text-center text-xs"
-            >
-              No saved views yet. Set some filters and save the current view
-              below.
-            </Typography>
-          ) : (
-            <div className="flex flex-col gap-1">
-              {views.map((view) => (
-                <div
-                  key={view.id}
-                  className="hover:bg-muted/50 group flex items-center gap-2 rounded-md px-2 py-1.5"
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onApply(view);
-                      setOpen(false);
-                    }}
-                    className="flex-1 truncate text-left text-sm"
-                  >
-                    {view.name}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDelete(view.id)}
-                    aria-label={`Delete ${view.name}`}
-                    className="text-muted-foreground hover:text-destructive rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
-                  >
-                    <Trash2Icon className="size-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="border-t pt-3">
-            <Typography
-              variant="muted"
-              className="mb-1.5 block text-xs font-medium"
-            >
-              Save current view
-            </Typography>
-            <div className="flex gap-1">
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    trySave();
-                  }
-                }}
-                placeholder={
-                  canSave ? "e.g. High-score shortlist" : "Set filters first"
-                }
-                disabled={!canSave}
-                className="h-8 text-xs"
-              />
-              <Button
-                size="sm"
-                onClick={trySave}
-                disabled={!canSave || !name.trim()}
-              >
-                Save
-              </Button>
-            </div>
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function KeyboardHint() {
-  return (
-    <Popover>
-      <PopoverTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Keyboard shortcuts"
-            title="Keyboard shortcuts"
-          >
-            <KeyboardIcon className="size-4" />
-          </Button>
-        }
-      />
-      <PopoverContent align="end" className="w-72">
-        <div className="flex flex-col gap-2">
-          <Typography
-            variant="small"
-            className="text-muted-foreground mb-1 block text-xs font-medium tracking-wide uppercase"
-          >
-            Keyboard shortcuts
-          </Typography>
-          <ShortcutRow label="Next / previous candidate">
-            <Kbd>j</Kbd>
-            <Kbd>k</Kbd>
-          </ShortcutRow>
-          <ShortcutRow label="Open drawer">
-            <Kbd>Enter</Kbd>
-          </ShortcutRow>
-          <ShortcutRow label="Close drawer / blur search">
-            <Kbd>Esc</Kbd>
-          </ShortcutRow>
-          <ShortcutRow label="Shortlist">
-            <Kbd>s</Kbd>
-          </ShortcutRow>
-          <ShortcutRow label="Reject">
-            <Kbd>r</Kbd>
-          </ShortcutRow>
-          <ShortcutRow label="Undo (back to new)">
-            <Kbd>u</Kbd>
-          </ShortcutRow>
-          <ShortcutRow label="Toggle selection">
-            <Kbd>x</Kbd>
-          </ShortcutRow>
-          <ShortcutRow label="Focus search">
-            <Kbd>/</Kbd>
-          </ShortcutRow>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function ShortcutRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <div className="flex gap-1">{children}</div>
-    </div>
-  );
-}
-
-function FilterChip({
-  label,
-  dotClass,
-  onRemove,
-}: {
-  label: string;
-  dotClass?: string;
-  onRemove: () => void;
-}) {
-  return (
-    <span className="bg-muted text-foreground inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium">
-      {dotClass && (
-        <span
-          aria-hidden
-          className={cn("inline-block size-1.5 rounded-full", dotClass)}
-        />
-      )}
-      {label}
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label={`Remove ${label} filter`}
-        className="hover:bg-foreground/10 -mr-1 rounded-full p-0.5"
-      >
-        <XIcon className="size-3" />
-      </button>
-    </span>
-  );
-}
-
-/* -------------------------------- Bulk bar -------------------------------- */
+/* ------------------------------ Bulk bar ------------------------------ */
 
 function BulkActionBar({
   selected,
@@ -1006,10 +389,6 @@ function BulkActionBar({
       a.status === "rejected"
   );
 
-  // F44.d.7 — single round-trip via PATCH /applications/bulk-status.
-  // Replaces the earlier N-PATCH fan-out. Server-side transaction
-  // means "all changes apply or none do" without the frontend
-  // needing to reconcile partial success.
   const applyBulk = async (status: ApplicationStatus) => {
     if (actionable.length === 0) return;
     setPending(true);
@@ -1125,6 +504,40 @@ function SortableHeader({
   );
 }
 
+function candidateInitials(
+  name: string | null | undefined,
+  email: string | null | undefined
+): string {
+  const source = (name ?? email ?? "?").trim();
+  if (!source || source === "?") return "?";
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return source.slice(0, 2).toUpperCase();
+}
+
+function Avatar({
+  name,
+  email,
+}: {
+  name: string | null | undefined;
+  email: string | null | undefined;
+}) {
+  const key = name || email || "?";
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+        skillHueClass(key)
+      )}
+    >
+      {candidateInitials(name, email)}
+    </span>
+  );
+}
+
 function CandidateRow({
   app,
   selected,
@@ -1183,11 +596,6 @@ function CandidateRow({
   const score100 = Math.round((app.score ?? 0) * 100);
   const updated = new Date(app.updated_at);
 
-  // Row-level click opens the drawer — a pointer-only convenience,
-  // not a semantic claim. The keyboard-accessible trigger is the
-  // name button inside the Candidate cell. Interactive children
-  // (checkbox, name button, action buttons) stopPropagation so they
-  // don't bubble back into this handler.
   const openDrawerFromRowClick = (e: React.MouseEvent) => {
     if (e.defaultPrevented) return;
     onOpen();
@@ -1198,11 +606,6 @@ function CandidateRow({
       ref={registerRef}
       className={cn(
         "group relative cursor-pointer border-b transition-colors last:border-0",
-        // Three states with distinct visuals so hover, keyboard-focus,
-        // and selection never feel alike:
-        //   selected  → primary-tinted bg + 3px left strip
-        //   focused   → muted bg + full inset primary ring
-        //   hover     → just the muted bg
         selected && "bg-primary/10",
         focused &&
           !selected &&
@@ -1216,8 +619,6 @@ function CandidateRow({
         className="relative px-3 py-3 align-middle"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Selection left-strip. (Focused state uses the inset box
-            shadow above so it doesn't compete with the strip.) */}
         {selected && (
           <span
             aria-hidden
@@ -1335,9 +736,6 @@ function MatchScoreBar({
     </div>
   );
 
-  // F44.d.6 — hover the bar to see the per-signal breakdown. No
-  // breakdown means a pre-F44.d.6 application that hasn't been
-  // re-matched; render the bar plain so hover doesn't mislead.
   if (!breakdown) return bar;
 
   return (
@@ -1433,16 +831,8 @@ function StatusLabel({ status }: { status: ApplicationStatus }) {
       dot: "bg-destructive",
       text: "text-destructive",
     },
-    interviewed: {
-      label: "Interviewed",
-      dot: "bg-cat-3",
-      text: "text-cat-3",
-    },
-    hired: {
-      label: "Hired",
-      dot: "bg-cat-1",
-      text: "text-cat-1",
-    },
+    interviewed: { label: "Interviewed", dot: "bg-cat-3", text: "text-cat-3" },
+    hired: { label: "Hired", dot: "bg-cat-1", text: "text-cat-1" },
   };
   const m = meta[status];
   return (
@@ -1510,42 +900,5 @@ function ActionButtons({
         Undo
       </Button>
     </div>
-  );
-}
-
-function candidateInitials(
-  name: string | null | undefined,
-  email: string | null | undefined
-): string {
-  const source = (name ?? email ?? "?").trim();
-  if (!source || source === "?") return "?";
-  const parts = source.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-  return source.slice(0, 2).toUpperCase();
-}
-
-function Avatar({
-  name,
-  email,
-}: {
-  name: string | null | undefined;
-  email: string | null | undefined;
-}) {
-  // Pseudo-random hue per candidate — same `skillHueClass` hash used
-  // elsewhere, so a given person keeps the same color across pages.
-  // Driven by display name; falls back to email for anonymous resumes.
-  const key = name || email || "?";
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
-        skillHueClass(key)
-      )}
-    >
-      {candidateInitials(name, email)}
-    </span>
   );
 }
