@@ -47,12 +47,12 @@ class MatchBreakdown(BaseModel):
 class ApplicationResponse(BaseModel):
     """A candidate's application to a job.
 
-    F44.b — embeds the candidate so the job detail page renders each row
-    in one round-trip (no N+1 ``getCandidate`` per row). The Application
-    model auto-loads ``candidate`` via ``lazy="selectin"`` so the embed
-    is free server-side.
+    Embeds the candidate so the job detail page renders each row in one
+    round-trip (no N+1 ``getCandidate`` per row). The Application model
+    auto-loads ``candidate`` via ``lazy="selectin"`` so the embed is
+    free server-side.
 
-    F44.d.6 — includes ``breakdown`` (the skill/experience/vector split
+    Includes ``breakdown`` (the skill/experience/vector split
     ``MatchingService`` already persists) so the list-side hover popover
     can render "why this score" without a second endpoint.
     """
@@ -80,9 +80,8 @@ class ApplicationResponse(BaseModel):
         validation_alias="match_breakdown",
         description=(
             "Per-signal split that produced the score (skill overlap, "
-            "experience fit, vector similarity). Null for applications "
-            "that predate F44.d.6; re-running the job's match populates "
-            "it."
+            "experience fit, vector similarity). Null until the job's "
+            "match is (re-)run against this candidate."
         ),
     )
     created_at: datetime = Field(..., description="Application timestamp (UTC)")
