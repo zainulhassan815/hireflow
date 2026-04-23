@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +17,18 @@ from app.core.encryption import get_cipher
 from app.domain.exceptions import DomainError
 
 
+def _configure_dev_logging() -> None:
+    # basicConfig is a no-op when the root logger already has handlers,
+    # so uvicorn reload and pytest (which configures its own) are safe.
+    if settings.debug:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        )
+
+
 def create_app() -> FastAPI:
+    _configure_dev_logging()
     get_cipher()  # fail-fast if ENCRYPTION_KEYS is unset
 
     app = FastAPI(

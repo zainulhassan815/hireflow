@@ -755,7 +755,7 @@ validation for both features.
   Depends on: F20, F40, F41
   - Real counts (documents, jobs, candidates, recent activity) replacing mocks
 
-- [ ] **F63 · Dev-mode logging config**
+- [x] **F63 · Dev-mode logging config**
   Depends on: —
   - Today the project has no root logging handler, so `logger.info(...)` from `app.*` gets dropped in dev runs (SQLAlchemy shows up because it configures its own handler; our modules don't).
   - Add a `DEBUG`-guarded `logging.basicConfig(level=INFO)` in `app/main.py` so dev runs surface observability lines like F81.b/c's `rag context: ...` without a custom log config.
