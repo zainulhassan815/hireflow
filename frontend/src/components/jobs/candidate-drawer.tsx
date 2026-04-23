@@ -26,22 +26,13 @@ import { Typography } from "@/components/ui/typography";
 import { cn, skillHueClass } from "@/lib/utils";
 
 /**
- * F44.d.4 — candidate slide-over drawer.
+ * Parent mirrors the freshest row from the list cache into the `app`
+ * prop each render, so bulk actions / rescoring / row-level flips
+ * reflect inside the drawer live.
  *
- * Triage-without-leaving-the-list. Click a row in <JobCandidateList>
- * → Sheet opens on the right with candidate header, status + inline
- * action buttons, match score bar, skills, and the F105 DocumentViewer
- * embedded for the candidate's source resume. Escape closes.
- *
- * Status mutation is local to the drawer but writes back into the
- * parent listJobApplications cache, so the list underneath stays
- * in sync. Parent mirrors the freshest row from the cache into the
- * `app` prop on each render, so bulk actions / refresh-scores /
- * row-level flips reflect inside the drawer live.
- *
- * Uses shadcn's Sheet (base-ui Dialog) rather than vaul's Drawer —
- * vaul's direction="right" had a body-not-rendering bug in 1.1.2 on
- * this setup; Sheet's side-right is the first-class primitive here.
+ * Uses shadcn's Sheet rather than vaul's Drawer — vaul's
+ * direction="right" had a body-not-rendering bug in 1.1.2 on this
+ * setup; Sheet's side-right is the first-class primitive here.
  */
 
 interface CandidateDrawerProps {
@@ -145,7 +136,6 @@ function Body({
       </SheetHeader>
 
       <div className="flex-1 overflow-y-auto p-4">
-        {/* Status + actions */}
         <div className="bg-muted/30 mb-4 rounded-lg border p-3">
           <div className="mb-2 flex items-center justify-between">
             <Typography
@@ -170,7 +160,6 @@ function Body({
           </div>
         </div>
 
-        {/* Match score + breakdown */}
         <div className="mb-4">
           <Typography
             variant="small"
@@ -217,7 +206,6 @@ function Body({
           )}
         </div>
 
-        {/* Skills */}
         {c.skills && c.skills.length > 0 && (
           <div className="mb-4">
             <Typography
@@ -242,7 +230,6 @@ function Body({
 
         <Separator className="my-4" />
 
-        {/* Resume */}
         <div>
           <div className="mb-2">
             <Typography

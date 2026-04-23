@@ -101,12 +101,10 @@ class CandidateService:
         app = await self._applications.get(application_id)
         if app is None:
             raise NotFound("Application not found.")
-        # F44.a — caller must own the parent job (admins bypass). The
-        # Application model auto-loads ``job`` via ``lazy="selectin"``
-        # so this costs no extra round-trip. Matches the Forbidden-on-
-        # cross-tenant convention used by Document/Candidate/Job
-        # services; 403 keeps the failure mode consistent across the
-        # app rather than coining a bespoke 404-for-hiding semantic.
+        # Caller must own the parent job (admins bypass). Application
+        # auto-loads ``job`` via ``lazy="selectin"`` so this costs no
+        # extra round-trip. 403 (not 404) matches the cross-tenant
+        # convention used by Document/Candidate/Job services.
         self._ensure_job_access(app.job, actor)
         app.status = status
         return await self._applications.save(app)
@@ -118,7 +116,7 @@ class CandidateService:
         *,
         actor: User,
     ) -> list[Application]:
-        """F44.d.7 — apply ``status`` to a batch of applications atomically.
+        """Apply ``status`` to a batch of applications atomically.
 
         All-or-nothing: if any application is missing or owned by a
         different user, the whole batch rejects (404 / 403). Frontend
@@ -155,8 +153,8 @@ class CandidateService:
         limit: int = 50,
         offset: int = 0,
     ) -> list[Application]:
-        # F44.a — authorize by fetching the parent job first. Missing
-        # job ⇒ 404 (no applications to leak); wrong owner ⇒ 403.
+        # Authorize by fetching the parent job first. Missing job ⇒
+        # 404 (no applications to leak); wrong owner ⇒ 403.
         job = await self._jobs.get(job_id)
         if job is None:
             raise NotFound("Job not found.")
@@ -188,7 +186,7 @@ class CandidateService:
 
     @staticmethod
     def _ensure_job_access(job, actor: User) -> None:
-        """F44.a — applications inherit their parent job's ownership.
+        """Applications inherit their parent job's ownership.
 
         Kept local (not calling ``JobService._ensure_access``) to avoid
         a service-to-service import; the policy is trivial and unlikely

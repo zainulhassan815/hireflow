@@ -102,12 +102,9 @@ class Application(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # F44.d.6 — persist the breakdown components `MatchingService`
-    # computed (skill overlap, experience fit, vector similarity) so
-    # the candidate list can render a hover popover explaining the
-    # score without recomputing. Shape matches `MatchBreakdown` in
-    # app/schemas/candidate.py; JSONB for flexibility if the weighting
-    # model gains more signals via F45.
+    # Persisted so the list hover popover can render the breakdown
+    # without recomputing. Shape matches `MatchBreakdown` in
+    # app/schemas/candidate.py; JSONB for forward flexibility.
     match_breakdown: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     candidate: Mapped[Candidate] = relationship(

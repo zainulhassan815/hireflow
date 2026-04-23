@@ -28,16 +28,11 @@ import { Typography } from "@/components/ui/typography";
 import { cn } from "@/lib/utils";
 
 /**
- * F93.e — shared filter state + UI between the list and Kanban views.
- *
- * Previously this lived inside JobCandidateList. Lifting it out so
- * toggling views preserves search/filters/saved-views and both
- * renderers receive the same filtered applications.
- *
- * Ownership: parent (detail page) holds the state via
- * `useCandidateFilters`; it passes setters + the current values
- * into `<CandidateFilterBar>` for rendering, and uses
- * `applyCandidateFilters` to reduce the raw applications to the
+ * Filter state lives on the parent (detail page) so toggling between
+ * list and Kanban preserves search / score tier / status multi-select
+ * / saved views. Parent holds the state via `useCandidateFilters`,
+ * passes setters + current values into `<CandidateFilterBar>`, and
+ * uses `applyCandidateFilters` to reduce the raw applications to the
  * visible set each view receives.
  */
 
@@ -52,7 +47,7 @@ export interface SavedView {
   statusSet: StatusFilter[];
 }
 
-// F44.d.8 — saved views are job-agnostic recipes.
+// Saved views are job-agnostic recipes, keyed globally.
 const SAVED_VIEWS_KEY = "hireflow.candidate-saved-views";
 
 function loadSavedViews(): SavedView[] {
@@ -204,8 +199,6 @@ export function applyCandidateFilters(
     return haystacks.some((h) => h.includes(needle));
   });
 }
-
-/* -------------------------------- UI ---------------------------------- */
 
 export function CandidateFilterBar({
   api,

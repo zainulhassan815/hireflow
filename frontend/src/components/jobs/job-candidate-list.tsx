@@ -36,14 +36,12 @@ import { Typography } from "@/components/ui/typography";
 import { cn, skillHueClass } from "@/lib/utils";
 
 /**
- * F44.b/c/d — candidate triage list (table view).
+ * Table view of a job's applications. Receives already-filtered rows
+ * from the parent and owns sort, bulk select, keyboard navigation,
+ * and the row drawer.
  *
- * As of F93.e the filter bar lives in the parent page — this
- * component receives already-filtered `applications` and focuses
- * on: sort, bulk select, keyboard navigation, and the drawer.
- *
- * Row actions (status change) use optimistic mutation: click → row
- * flips immediately via onMutate; rolls back on error.
+ * Row status changes use optimistic mutation: the row flips
+ * immediately via onMutate and rolls back on error.
  */
 
 type SortKey = "score" | "name";
@@ -368,8 +366,6 @@ export function JobCandidateList({
   );
 }
 
-/* ------------------------------ Bulk bar ------------------------------ */
-
 function BulkActionBar({
   selected,
   onApplied,
@@ -466,8 +462,6 @@ function BulkActionBar({
     </div>
   );
 }
-
-/* --------------------------------- Rows ----------------------------------- */
 
 function SortableHeader({
   label,

@@ -122,7 +122,7 @@ class UpdateApplicationStatusRequest(BaseModel):
 
 
 class BulkUpdateApplicationStatusRequest(BaseModel):
-    """Apply the same status to a batch of applications (F44.d.7)."""
+    """Apply the same status to a batch of applications."""
 
     application_ids: list[UUID] = Field(
         ...,
@@ -139,7 +139,7 @@ class BulkUpdateApplicationStatusRequest(BaseModel):
 
 
 class BulkUpdateApplicationStatusResponse(BaseModel):
-    """Result of a bulk status change (F44.d.7)."""
+    """Result of a bulk status change."""
 
     updated: list[ApplicationResponse] = Field(
         ...,

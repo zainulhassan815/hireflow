@@ -91,3 +91,8 @@ Every feature follows this loop. Docs live in `docs/dev/<feature-id>/`:
 - **No mock data in committed code** past F02. Frontend pages should call the real API.
 - **Security defaults:** never commit secrets, never weaken CORS/auth to make tests pass, fail-fast on missing env vars.
 - **Scope discipline:** implement only what the current feature covers. Park unrelated fixes in a "follow-ups" list in the summary.
+- **Comments earn their place.** Code is self-documenting by default; a comment only survives if it explains something the code cannot.
+  - **Do write:** a non-obvious *why* — hidden constraint, subtle invariant, vendor/browser quirk, workaround with a link, security/correctness warning, ordering requirement, perf trick that isn't visible in the code.
+  - **Don't write:** restatements of the next line, section banners (`# ---- Foo ----`, `/* ---- UI ---- */`), JSX labels (`{/* Header */}`, `{/* Status + actions */}`), docstrings that just re-say the function/class name, speculative TODOs ("lift to URL later"), refactor history ("Previously this lived in X; moved here"), or persona/user narrative ("Priya does Y daily").
+  - **No feature-id tags** (`F44.b — …`, `(F93.e)`, `F89.c` prefixes) in code or docstrings. The commit message + `docs/dev/<id>/` are the durable record; source-tree tags rot. Pydantic field/class docstrings and FastAPI route `summary`/`description` are still required per `docs/openapi-standards.md` — write them as plain contracts, without the `FXX —` prefix.
+  - **Rule of thumb:** if deleting the comment would not confuse a future reader, delete it. If it *would*, keep it and make the *why* explicit.

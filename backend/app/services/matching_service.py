@@ -57,11 +57,10 @@ class MatchingService:
         results = []
         for candidate in candidates:
             score = self._compute_score(job, candidate, vector_scores)
-            # F44.d.6 — persist the breakdown alongside the score so
-            # the list hover popover can render it without recomputing.
-            # ``_breakdown`` already returns a dict in the shape
-            # ``MatchBreakdown`` expects; the list endpoint consumes
-            # it straight via Pydantic model_validate.
+            # Persist the breakdown alongside the score so the list
+            # hover popover can render it without recomputing.
+            # ``_breakdown`` returns the shape ``MatchBreakdown``
+            # expects; the list endpoint consumes it via model_validate.
             breakdown = self._breakdown(job, candidate, vector_scores)
 
             app = await self._applications.get_for_job_and_candidate(
@@ -167,7 +166,6 @@ class MatchingService:
                 doc_id = UUID(hit.document_id)
             except ValueError:
                 continue
-            # Map document_id back to candidate via source_document_id
             for c in candidates:
                 if c.source_document_id == doc_id:
                     # Cosine distance → similarity (lower distance = higher similarity)

@@ -60,26 +60,16 @@ const statusDotClass: Record<string, string> = {
   archived: "bg-destructive",
 };
 
-/**
- * F44.b — job detail page at `/jobs/:id`.
- *
- * Header: title + status dot, required-skills chips, Edit / Delete.
- * Body: JobCandidateList renders the application rows with match score
- * bars and inline shortlist/reject/undo buttons. This page is the
- * primary landing spot for a job now; `/jobs/:id/edit` still exists
- * but is reachable from the Edit button here.
- */
 export function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = React.useState(false);
-  // F93 — view toggle: list vs kanban board. Local state for now;
-  // lift to URL / localStorage later if we want it to stick.
   const [viewMode, setViewMode] = React.useState<"list" | "kanban">("list");
-  // F93.e — filter state is shared between views so toggling
-  // preserves search / score tier / status multi-select / saved
-  // views. Each view still owns its own sort + selection + drawer.
+  // Filters live here (not inside each view) so toggling list ↔
+  // kanban preserves the active search / score tier / status set /
+  // saved view. Each view still owns its own sort, selection, and
+  // drawer state.
   const filters = useCandidateFilters();
 
   const {
@@ -108,10 +98,9 @@ export function JobDetailPage() {
     },
   });
 
-  // F44.c — re-score every candidate in the pool against this job.
-  // Idempotent per candidate: existing applications update in place,
-  // missing ones get created. Invalidates the list so fresh scores
-  // repopulate the table.
+  // Re-scores every candidate in the pool against this job. Idempotent
+  // per candidate: existing applications update in place, missing
+  // ones are created. Invalidates the list so fresh scores land.
   const matchMut = useMutation({
     ...matchCandidatesMutation(),
     onSuccess: (data) => {
@@ -177,7 +166,6 @@ export function JobDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header */}
       <div className="flex items-start gap-4">
         <Button
           variant="ghost"
@@ -261,8 +249,6 @@ export function JobDetailPage() {
         </div>
       </div>
 
-      {/* F93.e — shared filter bar with view toggle on the right.
-          Both list and kanban consume the already-filtered list. */}
       {applications.length > 0 && (
         <CandidateFilterBar
           api={filters}
@@ -293,7 +279,6 @@ export function JobDetailPage() {
         />
       )}
 
-      {/* Candidate view — list or board depending on viewMode */}
       {appsLoading ? (
         <div className="flex h-48 items-center justify-center">
           <Loader2Icon className="text-muted-foreground size-5 animate-spin" />
@@ -309,7 +294,6 @@ export function JobDetailPage() {
         />
       )}
 
-      {/* Delete confirm */}
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>

@@ -32,22 +32,13 @@ import { Typography } from "@/components/ui/typography";
 import { cn, skillHueClass } from "@/lib/utils";
 
 /**
- * F93.a/b — Kanban view of a job's applications.
- *
- * Five fixed columns mirroring the ApplicationStatus enum. Drag a
- * card between columns to flip its status; the backend call is the
- * existing single-row PATCH. Within-column drags are a no-op in
- * F93.a (ordering by match score). F93.c will add column_position
- * + a reorder endpoint when users actually need hand-ranking.
+ * Five fixed columns mirroring the ApplicationStatus enum. Dragging a
+ * card between columns flips its status via the single-row PATCH.
+ * Within-column drags are a no-op (ordering is by match score).
  *
  * Uses @dnd-kit/core for accessibility (keyboard + touch + screen
- * reader announcements). DragOverlay renders the lifted card
- * outside document flow so the source column doesn't reflow.
- *
- * Filters (search / score tier / status multi-select) are owned by
- * JobCandidateList today. The Kanban accepts the already-filtered
- * `applications` list, so filter state carries through the view
- * toggle once filter state is lifted (follow-up).
+ * reader announcements). DragOverlay renders the lifted card outside
+ * document flow so the source column doesn't reflow.
  */
 
 const COLUMNS: {
@@ -105,9 +96,7 @@ export function JobCandidateBoard({
     ? listJobApplicationsQueryKey({ path: { job_id: jobId } })
     : null;
 
-  // Group by status — columns render their slice. Sort within a
-  // column by match score desc so top matches land at the top of
-  // their column naturally.
+  // Top matches first within each column.
   const byStatus = React.useMemo(() => {
     const map = new Map<ApplicationStatus, ApplicationResponse[]>();
     for (const col of COLUMNS) map.set(col.id, []);
@@ -149,11 +138,9 @@ export function JobCandidateBoard({
     onSuccess: () => onStatusChanged(),
   });
 
-  // Dnd-kit sensors: MouseSensor + TouchSensor. TouchSensor has a
-  // 200ms delay so vertical scroll on mobile doesn't accidentally
-  // initiate a drag. The activationConstraint on MouseSensor
-  // requires 5px of movement before a drag starts — prevents
-  // click-and-release accidentally opening the drawer.
+  // TouchSensor's 200ms delay stops mobile vertical scroll from
+  // initiating a drag. MouseSensor's 5px distance stops a plain
+  // click from triggering a drag and suppressing the row open.
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, {
@@ -184,14 +171,12 @@ export function JobCandidateBoard({
   };
 
   return (
-    // Trello / Linear / Lever pattern: the board fills the viewport's
-    // remaining vertical space, columns stretch to equal height,
-    // and each column scrolls independently. `min-w-0` (horizontal)
-    // keeps the 5 × 288px columns from pushing the page sideways;
-    // `h-[calc(100dvh-14rem)]` gives the board a definite height so
-    // its inner flex-row can allocate that height to each column.
-    // 14rem is empirically tuned to the chrome above the board
-    // (SidebarInset padding + header block + filter bar + toggle).
+    // Board needs a definite height so its flex-row can allocate
+    // equal heights to each column and let each column scroll
+    // independently. 14rem ≈ chrome above the board (SidebarInset
+    // padding + header + filter bar + toggle) — retune if that
+    // stack changes. `min-w-0` keeps the 5 × 288px columns from
+    // pushing the page sideways.
     <div className="flex h-[calc(100dvh-14rem)] min-h-[420px] min-w-0 flex-col gap-3">
       <DndContext
         sensors={sensors}
@@ -226,13 +211,11 @@ export function JobCandidateBoard({
         </div>
 
         <DragOverlay
-          // Disable dnd-kit's default drop animation. By default the
-          // overlay animates back to the *original* source rect — but
-          // we optimistically moved the card to a different column on
-          // drop, so that animation is aimed at stale geometry and
-          // reads as "snap back". Dropping it entirely makes the
-          // overlay disappear at the drop point while the re-rendered
-          // card lands in its new column immediately.
+          // dnd-kit's default drop animation returns to the original
+          // source rect — but we optimistically moved the card to a
+          // new column, so that animation is aimed at stale geometry
+          // and reads as "snap back". Nulling it makes the overlay
+          // disappear at the drop point instantly.
           dropAnimation={null}
         >
           {activeApp ? <KanbanCardPreview app={activeApp} /> : null}
@@ -253,8 +236,6 @@ export function JobCandidateBoard({
     </div>
   );
 }
-
-/* ------------------------------- Column -------------------------------- */
 
 function KanbanColumn({
   id,
@@ -277,11 +258,9 @@ function KanbanColumn({
   const highlight = isOver || isHoverTarget;
 
   return (
-    // Column fills the board's height via `h-full`. Header is
-    // `shrink-0` so it stays pinned at the top even when the card
-    // list below it overflows. The droppable region (`setNodeRef`)
-    // is the scroll container itself — dragging over any part of
-    // the scroll area registers the column as the drop target.
+    // `setNodeRef` is bound to the scroll container, so dragging
+    // over any part of the card list registers the column as the
+    // drop target (not just the header).
     <div
       className={cn(
         "bg-muted/30 flex h-full w-72 shrink-0 flex-col gap-2 rounded-lg border p-2 transition-colors",
@@ -320,8 +299,6 @@ function KanbanColumn({
     </div>
   );
 }
-
-/* --------------------------------- Card -------------------------------- */
 
 function KanbanCard({
   app,

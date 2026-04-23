@@ -68,9 +68,9 @@ class ApplicationRepository:
         return app
 
     async def list_by_ids(self, ids: list[UUID]) -> list[Application]:
-        """F44.d.7 — fetch a batch by id. Application.job is selectin-
-        loaded by the model so callers can check ownership without an
-        extra round-trip."""
+        """Fetch a batch by id. Application.job is selectin-loaded by
+        the model so callers can check ownership without an extra
+        round-trip."""
         if not ids:
             return []
         result = await self._db.execute(
@@ -79,7 +79,6 @@ class ApplicationRepository:
         return list(result.scalars().all())
 
     async def save_many(self, apps: list[Application]) -> list[Application]:
-        """Commit a batch of mutations in a single transaction."""
         await self._db.commit()
         for app in apps:
             await self._db.refresh(app)
