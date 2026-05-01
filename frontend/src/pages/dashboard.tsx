@@ -1,7 +1,12 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { FileTextIcon, UploadIcon, SearchIcon } from "lucide-react";
+import {
+  FileTextIcon,
+  MessageCircleIcon,
+  SearchIcon,
+  UploadIcon,
+} from "lucide-react";
 
 import {
   listDocumentsOptions,
@@ -188,6 +193,10 @@ export function DashboardPage() {
           <Button variant="outline" onClick={() => navigate("/search")}>
             <SearchIcon className="size-4" data-icon="inline-start" />
             Search
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/qa")}>
+            <MessageCircleIcon className="size-4" data-icon="inline-start" />
+            Ask
           </Button>
           <Button onClick={() => navigate("/documents")}>
             <UploadIcon className="size-4" data-icon="inline-start" />

@@ -7,6 +7,7 @@ import {
   LaptopIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MessageCircleIcon,
   MoonIcon,
   PlusIcon,
   SearchIcon,
@@ -63,6 +64,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           <CommandItem onSelect={() => run(() => navigate("/search"))}>
             <SearchIcon className="mr-2 size-4" />
             Search
+          </CommandItem>
+          <CommandItem
+            onSelect={() => run(() => navigate("/qa"))}
+            keywords={["ask", "chat", "qa", "question"]}
+          >
+            <MessageCircleIcon className="mr-2 size-4" />
+            Ask
           </CommandItem>
           <CommandItem onSelect={() => run(() => navigate("/candidates"))}>
             <UsersIcon className="mr-2 size-4" />

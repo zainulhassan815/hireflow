@@ -12,6 +12,7 @@ import { CandidatesPage } from "@/pages/candidates";
 import { DocumentsPage } from "@/pages/documents";
 import { DocumentDetailPage } from "@/pages/documents/detail";
 import { SearchPage } from "@/pages/search";
+import { QaPage } from "@/pages/qa";
 import { LogsPage } from "@/pages/logs";
 import { SettingsPage } from "@/pages/settings";
 
@@ -105,6 +106,11 @@ export const router = createBrowserRouter([
         path: "search",
         element: <SearchPage />,
         handle: { title: "Search" },
+      },
+      {
+        path: "qa",
+        element: <QaPage />,
+        handle: { title: "Ask" },
       },
       {
         path: "logs",

@@ -8,6 +8,7 @@ import {
   LaptopIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MessageCircleIcon,
   MoonIcon,
   PaletteIcon,
   SearchIcon,
@@ -80,6 +81,12 @@ const primaryNav: NavEntry[] = [
     href: "/search",
     icon: SearchIcon,
     description: "Semantic document search",
+  },
+  {
+    title: "Ask",
+    href: "/qa",
+    icon: MessageCircleIcon,
+    description: "Chat with your library",
   },
   {
     title: "Candidates",
