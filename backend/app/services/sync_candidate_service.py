@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Candidate, Document, DocumentType
+from app.services.author_linkage_service import AuthorLinkageService
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,10 @@ logger = logging.getLogger(__name__)
 class SyncCandidateService:
     def __init__(self, session: Session) -> None:
         self._session = session
+        # F103.c — owns the deferred-resolution path. When a candidate
+        # is created or its email changes, scan unlinked docs that
+        # already mention this email and backfill the FK.
+        self._author_linkage = AuthorLinkageService(session)
 
     def handle_document_ready(self, document: Document) -> None:
         """Callback hook invoked by ``ExtractionService`` after a document
@@ -74,6 +79,7 @@ class SyncCandidateService:
                 existing.source_document_id = document.id
 
         if existing is not None:
+            email_changed = bool(email) and existing.email != email
             existing.name = name or existing.name
             existing.email = email or existing.email
             existing.phone = phone or existing.phone
@@ -90,6 +96,11 @@ class SyncCandidateService:
                 existing.id,
                 document.id,
             )
+            # F103.c — only re-scan unlinked docs when the email
+            # actually changed; otherwise the existing FKs still apply
+            # and a no-op scan is wasted work.
+            if email_changed:
+                self._author_linkage.backfill_for_candidate(existing)
             return existing
 
         candidate = Candidate(
@@ -108,6 +119,9 @@ class SyncCandidateService:
         logger.info(
             "auto-created candidate %s from resume %s", candidate.id, document.id
         )
+        # F103.c — fresh candidate may unlock prior portfolio docs
+        # uploaded before this candidate's resume.
+        self._author_linkage.backfill_for_candidate(candidate)
         return candidate
 
 

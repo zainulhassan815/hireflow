@@ -76,7 +76,7 @@ def _compute_confidence(kept: list[RetrievedChunk]) -> Confidence:
 # per request.
 
 _CONTEXT_TEMPLATE = """\
---- Document: {filename} (chunk {chunk_index}) ---
+--- Document: {filename} (chunk {chunk_index}){author_clause} ---
 {text}
 """
 
@@ -308,11 +308,21 @@ class RagService:
         terms = extract_query_terms(question)
 
         for chunk in kept:
+            # F103.c — surface the author when SearchService hydrated
+            # one (either via Document.authored_by_id or the resume
+            # self-link fallback). Empty string when unknown so the
+            # header reads naturally for unattributed docs.
+            author_clause = (
+                f" — Authored by: {chunk.authored_by_name}"
+                if chunk.authored_by_name
+                else ""
+            )
             context_parts.append(
                 _CONTEXT_TEMPLATE.format(
                     filename=chunk.filename,
                     chunk_index=chunk.chunk_index,
                     text=chunk.text,
+                    author_clause=author_clause,
                 )
             )
             snippet = chunk.text[:500]

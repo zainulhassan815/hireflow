@@ -43,6 +43,7 @@ def extract_document_text(self, document_id: str) -> None:
     from app.adapters.vision.registry import get_vision_provider
     from app.core.config import settings
     from app.core.db import get_sync_db
+    from app.services.author_linkage_service import AuthorLinkageService
     from app.services.embedding_service import EmbeddingService
     from app.services.extraction_service import ExtractionService
     from app.services.sync_candidate_service import SyncCandidateService
@@ -88,6 +89,19 @@ def extract_document_text(self, document_id: str) -> None:
 
     session = get_sync_db()
     try:
+        # F103.c — ``_on_ready`` is a single callback in the extraction
+        # service; chain the two post-ready hooks here. Order matters:
+        # ``SyncCandidateService`` first, so a fresh candidate exists
+        # before ``AuthorLinkageService`` looks one up by email. Both
+        # hooks already swallow exceptions, so a failure in either
+        # never rolls back extraction.
+        sync_candidates = SyncCandidateService(session)
+        author_linkage = AuthorLinkageService(session)
+
+        def _on_ready_chain(doc) -> None:
+            sync_candidates.handle_document_ready(doc)
+            author_linkage.handle_document_ready(doc)
+
         service = ExtractionService(
             session=session,
             extractor=CompositeExtractor(
@@ -99,7 +113,7 @@ def extract_document_text(self, document_id: str) -> None:
             storage_get=storage.get_sync,
             embedding=embedding,
             contextualizer=contextualizer,
-            on_ready=SyncCandidateService(session).handle_document_ready,
+            on_ready=_on_ready_chain,
         )
         service.process(UUID(document_id))
     except Exception as exc:

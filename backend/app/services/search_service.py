@@ -362,15 +362,55 @@ class SearchService:
             requested = set(document_ids)
             merged = [c for c in merged if c.document_id in requested]
 
-        # Hydrate filenames and drop non-READY docs in one pass.
+        # Hydrate filenames + author and drop non-READY docs in one pass.
         doc_ids = list({c.document_id for c in merged})
         docs_map = await self._documents.get_many(doc_ids)
+
+        # F103.c — derive author per chunk via two batched repo lookups
+        # rather than touching ``Document.authored_by`` directly. The
+        # relationship is selectin-loaded in production but transient
+        # ``Document`` instances (constructed in unit tests, never
+        # session-attached) trigger an async lazy-load attempt that
+        # surfaces as a coroutine on attribute access. The repo seam
+        # keeps both production hot path and test mock path uniform.
+        # ``find_candidates_by_ids`` covers the explicit FK;
+        # ``find_resume_authors`` is the resume self-link fallback for
+        # docs whose linkage step never ran.
+        explicit_ids = sorted(
+            {doc.authored_by_id for doc in docs_map.values() if doc.authored_by_id}
+        )
+        unlinked_resume_ids = [
+            doc.id
+            for doc in docs_map.values()
+            if doc.document_type == DocumentType.RESUME and doc.authored_by_id is None
+        ]
+        explicit_authors = (
+            await self._documents.find_candidates_by_ids(explicit_ids)
+            if explicit_ids
+            else {}
+        )
+        fallback_authors = await self._documents.find_resume_authors(
+            unlinked_resume_ids
+        )
+
         hydrated: list[RetrievedChunk] = []
         for chunk in merged:
             doc = docs_map.get(chunk.document_id)
             if doc is None or doc.status != DocumentStatus.READY:
                 continue
-            hydrated.append(replace(chunk, filename=doc.filename))
+            author = (
+                explicit_authors.get(doc.authored_by_id)
+                if doc.authored_by_id
+                else fallback_authors.get(doc.id)
+            )
+            hydrated.append(
+                replace(
+                    chunk,
+                    filename=doc.filename,
+                    authored_by_id=author.id if author else None,
+                    authored_by_name=author.name if author else None,
+                )
+            )
 
         if self._reranker is not None and hydrated:
             return self._rerank_chunks(query, hydrated, limit)

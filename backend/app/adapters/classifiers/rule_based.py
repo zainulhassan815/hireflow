@@ -140,13 +140,29 @@ class RuleBasedClassifier:
     def _extract_metadata(text: str, doc_type: str) -> dict:
         metadata: dict = {}
 
-        if doc_type != "resume":
-            return metadata
-
+        # Skills + emails surface on every doc type. F103.b made
+        # ``metadata.skills`` correct on portfolios + case studies via
+        # the backfill; the runtime classifier now matches that path so
+        # re-processing a doc doesn't strip its skills back to empty.
+        # F103.c does the same for emails — needed by
+        # ``AuthorLinkageService`` to match doc → candidate.
         skills = extract_skills(text)
         if skills:
             metadata["skills"] = skills
             logger.info("skills extracted: %d tokens (source=rule-based)", len(skills))
+
+        # Lowercase at extraction so every read site
+        # (``AuthorLinkageService``, deferred backfill, search filters)
+        # uses one normalisation contract.
+        emails = sorted({m.group(0).lower() for m in _EMAIL_PATTERN.finditer(text)})
+        if emails:
+            metadata["emails"] = emails
+
+        # Resume-only fields. ``experience_years`` and ``education`` are
+        # resume-shaped concepts; ``phones`` rarely surface usefully on
+        # non-resume docs and would just add noise.
+        if doc_type != "resume":
+            return metadata
 
         exp_match = _EXPERIENCE_PATTERN.search(text)
         if exp_match:
@@ -157,10 +173,6 @@ class RuleBasedClassifier:
         )
         if education:
             metadata["education"] = education
-
-        emails = sorted({m.group(0) for m in _EMAIL_PATTERN.finditer(text)})
-        if emails:
-            metadata["emails"] = emails
 
         phones = sorted({m.group(0).strip() for m in _PHONE_PATTERN.finditer(text)})
         if phones:

@@ -461,6 +461,14 @@ class RetrievedChunk:
     distance: float
     score: float
     metadata: dict[str, Any] = field(default_factory=dict)
+    # F103.c — author attribution. Populated from
+    # ``Document.authored_by`` when set; for resumes also falls back to
+    # ``Candidate.source_document_id`` so the self-link is bullet-proof
+    # even when the FK linkage step never ran. ``None`` for documents
+    # whose author can't be derived. Surfaced into the RAG context
+    # block header so the LLM can attribute work natively.
+    authored_by_id: UUID | None = None
+    authored_by_name: str | None = None
 
 
 @runtime_checkable

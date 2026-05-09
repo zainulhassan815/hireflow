@@ -85,6 +85,11 @@ def _mock_repo(
     repo.full_text_search = AsyncMock(return_value=lexical_hits or [])
     repo.fuzzy_search = AsyncMock(return_value=fuzzy_hits or [])
     repo.get_many = AsyncMock(return_value={d.id: d for d in docs})
+    # F103.c — author hydration lookups. Tests that don't care about
+    # author attribution get empty dicts; tests that do can override
+    # the mocked return value after construction.
+    repo.find_candidates_by_ids = AsyncMock(return_value={})
+    repo.find_resume_authors = AsyncMock(return_value={})
     return repo
 
 

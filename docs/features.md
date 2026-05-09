@@ -1180,7 +1180,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     descriptions, not just explicit "Skills:" sections. Populates
     the parsed `skills` metadata so retrieval and scoring surface
     technology hits even when the candidate doesn't list them.
-  - [ ] **F103.c** Author linkage: portfolio / case-study
+  - [x] **F103.c** Author linkage: portfolio / case-study
     documents are authored by a candidate but the schema has no
     link. Infer via email-in-document ↔ candidate.email match at
     ingestion time, or add an explicit `authored_by` foreign key

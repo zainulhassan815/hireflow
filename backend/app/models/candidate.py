@@ -65,10 +65,27 @@ class Candidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     experience_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
     education: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
 
-    source_document: Mapped[Document | None] = relationship(lazy="selectin")
+    source_document: Mapped[Document | None] = relationship(
+        "Document",
+        foreign_keys=[source_document_id],
+        lazy="selectin",
+    )
     owner: Mapped[User] = relationship(lazy="selectin")
     applications: Mapped[list[Application]] = relationship(
         back_populates="candidate", lazy="selectin"
+    )
+    # F103.c — every doc whose ``authored_by_id`` points at this candidate.
+    # For resumes this includes the candidate's own ``source_document``;
+    # for portfolios / case studies / contracts it surfaces all the
+    # writing the candidate did. Distinct from ``source_document`` (which
+    # means "the resume this candidate was parsed from") on purpose —
+    # callers reading "what did this person write" should reach for
+    # ``authored_documents``.
+    authored_documents: Mapped[list[Document]] = relationship(
+        "Document",
+        foreign_keys="Document.authored_by_id",
+        back_populates="authored_by",
+        lazy="selectin",
     )
 
 

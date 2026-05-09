@@ -94,7 +94,44 @@ class TestRuleBasedClassifier:
         assert "jane@example.com" in result.metadata.get("emails", [])
         assert result.metadata.get("education")
 
-    def test_non_resume_has_no_skills_metadata(self) -> None:
+    def test_non_resume_extracts_skills_and_emails(self) -> None:
+        # F103.c — skills + emails are no longer resume-gated. A
+        # case-study / portfolio that happens to mention real
+        # technologies (or include an author email) surfaces both so
+        # downstream search and ``AuthorLinkageService`` can use them.
+        # Resume-only fields (``experience_years``, ``education``,
+        # ``phones``) stay gated.
+        case_study = """\
+Stripe Integration Case Study
+contact@example.com
+
+We built a FastAPI service powering the Stripe checkout integration.
+PostgreSQL stores ledger entries; Redis caches webhook idempotency keys.
+
+Bachelor's in Computer Science (this should NOT surface — non-resume).
+"""
+        result = self.classifier.classify(case_study, "stripe_case_study.pdf")
+        assert result.document_type != "resume"
+        skills = result.metadata.get("skills", [])
+        assert "stripe" in skills
+        assert "fastapi" in skills
+        assert "postgresql" in skills
+        assert "redis" in skills
+        assert result.metadata.get("emails") == ["contact@example.com"]
+        assert "experience_years" not in result.metadata
+        assert "education" not in result.metadata
+        assert "phones" not in result.metadata
+
+    def test_emails_are_lowercased(self) -> None:
+        # F103.c — extraction site lowercases so every read path uses
+        # the same normalisation contract.
+        text = "Reach me at Alice@Example.COM\n\nSKILLS\nPython"
+        result = self.classifier.classify(text, "alice_resume.pdf")
+        assert result.metadata.get("emails") == ["alice@example.com"]
+
+    def test_report_without_keywords_has_no_skills(self) -> None:
+        # Sanity: a non-resume that doesn't mention any KNOWN_SKILLS
+        # tech still ends up with no ``skills`` key.
         result = self.classifier.classify(_REPORT_TEXT, "q3_report.pdf")
         assert result.document_type == "report"
         assert "skills" not in result.metadata

@@ -9,7 +9,7 @@ from sqlalchemy import cast, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Document, DocumentStatus, DocumentType
+from app.models import Candidate, Document, DocumentStatus, DocumentType
 
 # Cap on chars passed to websearch_to_tsquery. Prevents pasted-in
 # job descriptions from blowing tsquery cost. F88.a.
@@ -165,6 +165,48 @@ class DocumentRepository:
         )
         docs = result.scalars().all()
         return {doc.id: doc for doc in docs}
+
+    async def find_candidates_by_ids(
+        self, candidate_ids: list[UUID]
+    ) -> dict[UUID, Candidate]:
+        """F103.c — batched lookup of candidates by primary key.
+
+        Used by ``SearchService.retrieve_chunks`` to attach an author
+        to each chunk via ``Document.authored_by_id``. Lives on the
+        document repo (rather than a candidate repo) because the
+        search path already routes all data access through this seam
+        and adding a fresh repository for one method would be noise.
+        """
+        if not candidate_ids:
+            return {}
+        result = await self._db.execute(
+            select(Candidate).where(Candidate.id.in_(candidate_ids))
+        )
+        return {c.id: c for c in result.scalars().all()}
+
+    async def find_resume_authors(
+        self, document_ids: list[UUID]
+    ) -> dict[UUID, Candidate]:
+        """F103.c — resume self-link fallback. Returns the candidate that
+        owns each given resume via ``Candidate.source_document_id``.
+
+        Used by ``SearchService`` chunk hydration to derive an author
+        when ``Document.authored_by_id`` is NULL but the document is
+        actually a resume — that candidate is whoever points at this
+        resume as their source. Belt-and-suspenders for the rare race
+        where the linkage step never ran (worker died between candidate
+        commit and link commit).
+        """
+        if not document_ids:
+            return {}
+        result = await self._db.execute(
+            select(Candidate).where(Candidate.source_document_id.in_(document_ids))
+        )
+        return {
+            c.source_document_id: c
+            for c in result.scalars().all()
+            if c.source_document_id is not None
+        }
 
     async def full_text_search(
         self,

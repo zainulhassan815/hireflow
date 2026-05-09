@@ -12,6 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from app.models.candidate import Candidate
     from app.models.document_element import DocumentElement
     from app.models.user import User
 
@@ -110,7 +111,29 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         server_onupdate=FetchedValue(),
     )
 
+    # F103.c — author linkage. Set by ``AuthorLinkageService`` either at
+    # ingestion time (email-in-doc ↔ candidate.email) or via the deferred
+    # backfill that runs whenever a candidate is created/updated. NULL
+    # for documents whose author can't be inferred (no extractable email,
+    # or email not yet matching a candidate). Mutual FK with
+    # ``Candidate.source_document_id`` is intentional and reflects the
+    # real graph: a candidate references the resume it parsed from, the
+    # resume (and any other doc the candidate authored) references back.
+    # ON DELETE SET NULL on both edges — no cascade loop.
+    authored_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("candidates.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     owner: Mapped[User] = relationship(lazy="selectin")
+    authored_by: Mapped[Candidate | None] = relationship(
+        "Candidate",
+        foreign_keys=[authored_by_id],
+        back_populates="authored_documents",
+        lazy="selectin",
+    )
 
     elements: Mapped[list[DocumentElement]] = relationship(
         back_populates="document",
