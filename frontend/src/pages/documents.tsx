@@ -22,6 +22,12 @@ import {
   downloadDocument,
   type DocumentResponse,
 } from "@/api";
+import { DocumentFilterBar } from "@/components/documents/document-filter-bar";
+import {
+  EMPTY_FILTERS,
+  type FilterState,
+  toApiFilters,
+} from "@/components/documents/document-filter-state";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -95,6 +101,7 @@ export function DocumentsPage() {
   const navigate = useNavigate();
   const [view, setView] = React.useState<"list" | "grid">("list");
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [filters, setFilters] = React.useState<FilterState>(EMPTY_FILTERS);
   const [uploadOpen, setUploadOpen] = React.useState(false);
   const [confirmDelete, setConfirmDelete] =
     React.useState<DocumentResponse | null>(null);
@@ -108,14 +115,22 @@ export function DocumentsPage() {
   );
   const [bulkConfirmOpen, setBulkConfirmOpen] = React.useState(false);
 
+  // F32 — filter chips go into the TanStack query key so each filter
+  // combination has its own cache slot. Per-keystroke input within
+  // the picker is local state inside the bar component, NOT part of
+  // the key.
+  const listOptions = listDocumentsOptions({
+    query: { limit: 100, ...toApiFilters(filters) },
+  });
+
   const invalidateDocs = React.useCallback(() => {
     queryClient.invalidateQueries({
-      queryKey: listDocumentsOptions().queryKey,
+      queryKey: listOptions.queryKey,
     });
-  }, [queryClient]);
+  }, [queryClient, listOptions.queryKey]);
 
   const { data: documents = [], isLoading } = useQuery({
-    ...listDocumentsOptions(),
+    ...listOptions,
     select: (data) => data ?? [],
     // F91 — live status polling. While any doc is pending/processing,
     // refetch every 3s so the table updates without a manual refresh.
@@ -372,6 +387,7 @@ export function DocumentsPage() {
             </Button>
           </div>
         </div>
+        <DocumentFilterBar value={filters} onChange={setFilters} />
         <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <span className="tabular-nums">
             {filtered.length === documents.length

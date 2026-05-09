@@ -4,6 +4,12 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { searchDocuments, type SearchResultItem } from "@/api";
+import { DocumentFilterBar } from "@/components/documents/document-filter-bar";
+import {
+  EMPTY_FILTERS,
+  type FilterState,
+  toApiFilters,
+} from "@/components/documents/document-filter-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,6 +48,7 @@ const CONFIDENCE_DISPLAY: Record<
 export function SearchPage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [filters, setFilters] = React.useState<FilterState>(EMPTY_FILTERS);
   const [isSearching, setIsSearching] = React.useState(false);
   const [searchResults, setSearchResults] = React.useState<SearchResultItem[]>(
     []
@@ -49,26 +56,40 @@ export function SearchPage() {
   const [queryTimeMs, setQueryTimeMs] = React.useState<number | null>(null);
   const [hasSearched, setHasSearched] = React.useState(false);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
+  const runSearch = React.useCallback(
+    async (q: string, f: FilterState) => {
+      if (!q.trim()) return;
+      setIsSearching(true);
+      setHasSearched(true);
 
-    setIsSearching(true);
-    setHasSearched(true);
+      const { data, error } = await searchDocuments({
+        body: { query: q, ...toApiFilters(f) },
+      });
 
-    const { data, error } = await searchDocuments({
-      body: { query: searchQuery },
-    });
+      if (error) {
+        toast.error(extractApiError(error).message);
+        setIsSearching(false);
+        return;
+      }
 
-    if (error) {
-      toast.error(extractApiError(error).message);
+      setSearchResults(data?.results ?? []);
+      setQueryTimeMs(data?.query_time_ms ?? null);
       setIsSearching(false);
-      return;
-    }
+    },
+    []
+  );
 
-    setSearchResults(data?.results ?? []);
-    setQueryTimeMs(data?.query_time_ms ?? null);
-    setIsSearching(false);
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    void runSearch(searchQuery, filters);
+  };
+
+  // F32 — filter changes auto-fire a re-search using the current
+  // query (plan-review §4). Avoids stale results sitting under a
+  // freshly-changed filter.
+  const handleFilterChange = (next: FilterState) => {
+    setFilters(next);
+    if (searchQuery.trim()) void runSearch(searchQuery, next);
   };
 
   return (
@@ -100,6 +121,8 @@ export function SearchPage() {
           {isSearching ? "Searching…" : "Search"}
         </Button>
       </form>
+
+      <DocumentFilterBar value={filters} onChange={handleFilterChange} />
 
       {searchResults.length > 0 && (
         <div className="space-y-4">

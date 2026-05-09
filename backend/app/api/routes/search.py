@@ -4,8 +4,36 @@ from fastapi import APIRouter
 
 from app.api.deps import CurrentUser, SearchServiceDep
 from app.schemas.search import SearchRequest, SearchResponse, SearchResultItem
+from app.services.query_parser_vocab import KNOWN_SKILLS
 
 router = APIRouter()
+
+
+@router.get(
+    "/skills",
+    response_model=list[str],
+    summary="List the canonical skill vocabulary",
+    description=(
+        "Returns the sorted, lowercased ``KNOWN_SKILLS`` set used by "
+        "the rule-based classifier and the F89.a query parser. "
+        "Frontends use this for skill-picker suggestions on the "
+        "search + documents filter bars (F32). The vocabulary is "
+        "small (~80 entries) and stable enough that a single GET "
+        "on page mount is fine.\n\n"
+        "Free-text submission is also accepted by ``GET /documents`` "
+        "and ``POST /search`` — a skill not in the canonical vocab "
+        "still filters correctly. The endpoint is the suggestion "
+        "source, not a contract."
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+    },
+)
+def list_known_skills(current_user: CurrentUser) -> list[str]:
+    # ``current_user`` reads as unused but is the auth gate — every
+    # authenticated user gets the same vocabulary.
+    del current_user
+    return sorted(KNOWN_SKILLS)
 
 
 @router.post(

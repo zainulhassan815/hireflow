@@ -110,9 +110,59 @@ class DocumentService:
         await self._documents.delete(doc)
 
     async def list_for_user(
-        self, owner_id: UUID, *, limit: int = 50, offset: int = 0
+        self,
+        owner_id: UUID,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        document_type: object = None,
+        skills: list[str] | None = None,
+        min_experience_years: int | None = None,
+        date_from: object = None,
+        date_to: object = None,
     ) -> list[Document]:
-        return await self._documents.list_by_owner(owner_id, limit=limit, offset=offset)
+        """F32 — list with optional structured filters.
+
+        Branches on filter presence: zero filters → fast unfiltered
+        path via ``list_by_owner``; one or more filters → status-flexible
+        ``search_by_metadata(status=None, ...)`` so the documents-list
+        page surfaces pending / processing / failed rows alongside
+        ready ones.
+        """
+        from app.models import DocumentType
+
+        any_filter = (
+            document_type is not None
+            or skills
+            or min_experience_years is not None
+            or date_from is not None
+            or date_to is not None
+        )
+        if not any_filter:
+            return await self._documents.list_by_owner(
+                owner_id, limit=limit, offset=offset
+            )
+
+        # ``document_type`` may arrive as a string from the route's
+        # query parser; coerce to the enum here so the repo's
+        # comparison stays type-clean.
+        doc_type_enum: DocumentType | None
+        if document_type is None or isinstance(document_type, DocumentType):
+            doc_type_enum = document_type
+        else:
+            doc_type_enum = DocumentType(str(document_type))
+
+        return await self._documents.search_by_metadata(
+            owner_id=owner_id,
+            limit=limit,
+            offset=offset,
+            status=None,
+            document_type=doc_type_enum,
+            skills=skills,
+            min_experience_years=min_experience_years,
+            date_from=date_from,  # type: ignore[arg-type]
+            date_to=date_to,  # type: ignore[arg-type]
+        )
 
     async def presigned_url(
         self, document_id: UUID, *, actor: User, expires_seconds: int = 3600

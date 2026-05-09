@@ -126,7 +126,7 @@ They compose. Good first slice: **F96.a–e** (DB + API + streaming endpoint + U
   - `POST /search` — natural-language query → ranked chunks + parent docs
   - Return snippets with highlights
 
-- [ ] **F32 · Filters (skills / role / date / type)**
+- [x] **F32 · Filters (skills / role / date / type)**
   SRS: FR08, FR10, UC-04 · Depends on: F31, F23
   - Hybrid filter: SQL metadata filter + vector similarity
   - Frontend `search.tsx` + `documents.tsx` filter UI wired

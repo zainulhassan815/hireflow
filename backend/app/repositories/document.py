@@ -90,14 +90,23 @@ class DocumentRepository:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         limit: int = 50,
+        offset: int = 0,
         owner_id: UUID | None = None,
+        status: DocumentStatus | None = DocumentStatus.READY,
     ) -> list[Document]:
         """Filter documents by structured metadata fields.
 
         ``owner_id`` scopes results to a single user; pass ``None`` for an
         unscoped query (admin-level access). Required by F86 search-scoping.
+
+        ``status`` defaults to ``READY`` for the search-side caller (search
+        only ranks fully-processed docs). F32 passes ``None`` from the
+        documents-list path so HR users see pending / processing / failed
+        rows alongside ready ones.
         """
-        stmt = select(Document).where(Document.status == DocumentStatus.READY)
+        stmt = select(Document)
+        if status is not None:
+            stmt = stmt.where(Document.status == status)
 
         if owner_id is not None:
             stmt = stmt.where(Document.owner_id == owner_id)
@@ -151,7 +160,7 @@ class DocumentRepository:
         if date_to is not None:
             stmt = stmt.where(Document.created_at <= date_to)
 
-        stmt = stmt.order_by(Document.created_at.desc()).limit(limit)
+        stmt = stmt.order_by(Document.created_at.desc()).limit(limit).offset(offset)
 
         result = await self._db.execute(stmt)
         return list(result.scalars().all())

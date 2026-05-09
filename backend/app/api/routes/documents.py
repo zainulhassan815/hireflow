@@ -1,5 +1,6 @@
 """Document management endpoints."""
 
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Query, UploadFile
@@ -12,6 +13,7 @@ from app.api.deps import (
     SearchServiceDep,
     ViewerServiceDep,
 )
+from app.models.document import DocumentType
 from app.schemas.document import (
     DocumentMetadataResponse,
     DocumentResponse,
@@ -74,7 +76,12 @@ async def upload_document(
     description=(
         "Return documents owned by the authenticated user, "
         "ordered by upload date (newest first). "
-        "Supports limit/offset pagination."
+        "Supports limit/offset pagination plus the F32 structured "
+        "filters (document_type, skills, min_experience_years, "
+        "date_from, date_to). When no filters are set, returns all "
+        "statuses (pending / processing / failed / ready); a filter "
+        "set still includes non-ready rows so the operator sees the "
+        "full pipeline state."
     ),
     responses={
         401: {"description": "Not authenticated"},
@@ -85,8 +92,54 @@ async def list_documents(
     documents: DocumentServiceDep,
     limit: int = Query(50, ge=1, le=100, description="Maximum documents to return"),
     offset: int = Query(0, ge=0, description="Number of documents to skip"),
+    document_type: DocumentType | None = Query(
+        None,
+        description="Filter to a single document category.",
+    ),
+    skills: list[str] | None = Query(
+        None,
+        description=(
+            "Filter to documents whose ``metadata.skills`` contains "
+            "every listed skill (intersection / AND). Case-insensitive; "
+            "the backend lowercases each value before the JSONB "
+            "containment check."
+        ),
+        examples=[["python", "react"]],
+    ),
+    min_experience_years: int | None = Query(
+        None,
+        ge=0,
+        description=(
+            "Minimum years of experience extracted on the candidate "
+            "resume (filters by ``metadata.experience_years``)."
+        ),
+    ),
+    date_from: datetime | None = Query(
+        None,
+        description=(
+            "Filter to documents uploaded on/after this timestamp "
+            "(``Document.created_at``). Inclusive."
+        ),
+    ),
+    date_to: datetime | None = Query(
+        None,
+        description=(
+            "Filter to documents uploaded on/before this timestamp. "
+            "FE convention: pass end-of-day for ``date_to`` so the "
+            "operator's UI date range is whole-day inclusive."
+        ),
+    ),
 ) -> list[DocumentResponse]:
-    docs = await documents.list_for_user(current_user.id, limit=limit, offset=offset)
+    docs = await documents.list_for_user(
+        current_user.id,
+        limit=limit,
+        offset=offset,
+        document_type=document_type,
+        skills=skills,
+        min_experience_years=min_experience_years,
+        date_from=date_from,
+        date_to=date_to,
+    )
     return [DocumentResponse.model_validate(d) for d in docs]
 
 
