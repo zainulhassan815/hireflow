@@ -63,6 +63,9 @@ eval-parser: ## Run F89.a query-parser accuracy eval
 eval-skill-extraction: services ## Run F103.b LLM skill-extraction accuracy eval
 	cd backend && $(TEST_ENV) uv run pytest tests/eval/test_skill_extraction_accuracy.py -xvs
 
+eval-rag-answer: services ## Run F103.e RAG answer-quality eval
+	cd backend && $(TEST_ENV) uv run pytest tests/eval/test_rag_answer_quality.py -xvs
+
 stop: ## Stop Docker services
 	docker compose down
 

@@ -1200,7 +1200,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     Requires a bump to the contextualizer prompt version and a full
     re-embed so the new summaries land in vectors. Pairs naturally
     with F103.b landing first.
-  - [ ] **F103.e** Improved summarization prompt for the RAG
+  - [x] **F103.e** Improved summarization prompt for the RAG
     answer layer (distinct from F103.d which is the chunk-level
     contextualizer). Today's prompt is a minimum viable citation
     + deflection contract. A stronger prompt would: (1) name

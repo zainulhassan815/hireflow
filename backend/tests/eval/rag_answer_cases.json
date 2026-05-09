@@ -1,0 +1,125 @@
+[
+  {
+    "name": "name-carries-from-resume-to-case-study",
+    "intent": "general",
+    "question": "do we have any candidate with stripe experience?",
+    "chunks": [
+      {
+        "filename": "cv.pdf",
+        "chunk_index": 0,
+        "text": "Zain Ul Hassan — Senior Full-Stack Engineer\nEXPERIENCE\n- Built a Stripe checkout integration handling $2M/mo in workshop bookings at Tutorelli\n- Owned the FastAPI service powering the customer portal\nSKILLS: stripe, fastapi, postgresql, react, typescript",
+        "authored_by_name": "Zain Ul Hassan"
+      },
+      {
+        "filename": "tutorelli_case_study.pdf",
+        "chunk_index": 3,
+        "text": "Tutorelli Workshop Booking — GHL, Stripe and TypeScript\nThe payment system handled cascading product variants with Stripe Connect Express, idempotent webhook retry logic, and inline checkout rendered within GHL pages.",
+        "authored_by_name": null
+      }
+    ],
+    "must_include": ["Zain"],
+    "must_not_include": ["the candidate"]
+  },
+  {
+    "name": "multi-candidate-no-blending",
+    "intent": "general",
+    "question": "who has Postgres experience?",
+    "chunks": [
+      {
+        "filename": "alice_resume.pdf",
+        "chunk_index": 0,
+        "text": "Alice Ng — Backend Engineer\nEXPERIENCE\n- Operated PostgreSQL replicas with read scale-out at Acme\nSKILLS: python, fastapi, postgresql",
+        "authored_by_name": "Alice Ng"
+      },
+      {
+        "filename": "bob_resume.pdf",
+        "chunk_index": 0,
+        "text": "Bob Chen — Data Engineer\nEXPERIENCE\n- Migrated a 5TB warehouse from PostgreSQL to Snowflake at BetaCorp\nSKILLS: python, postgresql, snowflake, airflow",
+        "authored_by_name": "Bob Chen"
+      }
+    ],
+    "must_include": ["Alice", "Bob"],
+    "must_not_include": ["Alice Chen", "Bob Ng"]
+  },
+  {
+    "name": "quantification-from-evidence",
+    "intent": "general",
+    "question": "how much Python experience does Alice have?",
+    "chunks": [
+      {
+        "filename": "alice_resume.pdf",
+        "chunk_index": 0,
+        "text": "Alice Ng — Senior Backend Engineer\nProfessional summary: 8 years of Python at FastAPI shops, leading two microservice teams.",
+        "authored_by_name": "Alice Ng"
+      }
+    ],
+    "must_include": ["8"],
+    "must_not_include": ["some Python"]
+  },
+  {
+    "name": "specificity-not-hedging",
+    "intent": "general",
+    "question": "describe the Stripe integration work in the Tutorelli case study",
+    "chunks": [
+      {
+        "filename": "tutorelli_case_study.pdf",
+        "chunk_index": 3,
+        "text": "Tutorelli Workshop Booking implemented a $2M/mo Stripe checkout integration with cascading product variants (Year Group → Subject → Date → Time), Stripe Connect Express, and idempotent webhook retry handling.",
+        "authored_by_name": null
+      }
+    ],
+    "must_include": ["$2M"],
+    "must_not_include": ["has Stripe experience"]
+  },
+  {
+    "name": "multi-doc-folded-claim",
+    "intent": "general",
+    "question": "what does the corpus tell us about Zain's Stripe work?",
+    "chunks": [
+      {
+        "filename": "cv.pdf",
+        "chunk_index": 0,
+        "text": "Zain Ul Hassan — Senior Full-Stack Engineer\n3+ years of Stripe integration work across multiple production deployments.",
+        "authored_by_name": "Zain Ul Hassan"
+      },
+      {
+        "filename": "tutorelli_case_study.pdf",
+        "chunk_index": 3,
+        "text": "Tutorelli Workshop Booking handles $2M/mo via a Stripe checkout integration with idempotent webhook retry logic.",
+        "authored_by_name": null
+      }
+    ],
+    "must_include": ["Zain", "[cv.pdf]", "[tutorelli_case_study.pdf]"],
+    "must_not_include": ["the candidate"]
+  },
+  {
+    "name": "genuinely-off-topic-fallback",
+    "intent": "general",
+    "question": "who has Stripe experience?",
+    "chunks": [
+      {
+        "filename": "pasta_recipe.pdf",
+        "chunk_index": 0,
+        "text": "Boil a large pot of salted water. Add 500g spaghetti and cook for 8-10 minutes. Drain and serve with a tomato sauce of crushed San Marzano tomatoes, garlic, olive oil, and basil.",
+        "authored_by_name": null
+      }
+    ],
+    "must_include": ["Not in the provided documents."],
+    "must_not_include": ["the candidate", "Yes,", "Yes."]
+  },
+  {
+    "name": "no-name-in-context-no-invention",
+    "intent": "general",
+    "question": "describe the workshop booking system's tech stack",
+    "chunks": [
+      {
+        "filename": "tutorelli_case_study.pdf",
+        "chunk_index": 3,
+        "text": "The workshop booking system was built using GHL Custom Objects as the data store, with Stripe checkout for payments and Bun as the runtime. Cascading dropdowns drove product variants.",
+        "authored_by_name": null
+      }
+    ],
+    "must_include": ["Bun"],
+    "must_not_include": ["Alice Ng", "Bob Chen", "Zain Ul Hassan", "the candidate"]
+  }
+]

@@ -7,6 +7,7 @@ Exhaustiveness of ``FORMAT_RULES`` is asserted at import time in
 
 from __future__ import annotations
 
+import re
 from typing import get_args
 
 from app.services.intent_canonicals import Intent
@@ -19,13 +20,25 @@ from app.services.rag_prompts import (
     build_system_prompt,
 )
 
+
+def _normalised(text: str) -> str:
+    """Collapse all whitespace runs to a single space so substring
+    checks aren't fooled by line wraps in the prompt source. The
+    LLM reads the prompt with whitespace, so the *content* is what
+    matters, not the linebreak placement."""
+    return re.sub(r"\s+", " ", text).strip()
+
+
 # ---------------------------------------------------------------------------
 # Version + exhaustiveness
 # ---------------------------------------------------------------------------
 
 
-def test_prompt_version_is_set() -> None:
-    assert PROMPT_VERSION and isinstance(PROMPT_VERSION, str)
+def test_prompt_version_is_v4() -> None:
+    """F103.e bumped v3 → v4. Literal pin so a developer rebasing an
+    older v3 onto a v4 main and forgetting to renumber trips the
+    assert rather than silently shipping a regression."""
+    assert PROMPT_VERSION == "v4"
 
 
 def test_format_rules_cover_every_intent() -> None:
@@ -144,3 +157,64 @@ def test_identity_is_a_single_paragraph() -> None:
     # Identity should be terse — one paragraph, not a page.
     stripped = IDENTITY.strip()
     assert "\n\n" not in stripped, "IDENTITY grew to multiple paragraphs"
+
+
+# ---------------------------------------------------------------------------
+# F103.e — six numbered evidence rules
+# ---------------------------------------------------------------------------
+
+
+def test_evidence_rules_have_six_numbered_headers() -> None:
+    """Rule headers are scannable anchor points; check each is present."""
+    for header in (
+        "1. Citations.",
+        "2. Indirect evidence.",
+        "3. Naming.",
+        "4. Specificity and quantification.",
+        "5. Multi-document claims.",
+        "6. Fallback.",
+    ):
+        assert header in EVIDENCE_RULES, f"missing rule header: {header!r}"
+
+
+def test_naming_rule_covers_three_regimes() -> None:
+    """Rule 3's three-regime phrasing is the load-bearing F103.e fix."""
+    rules = _normalised(EVIDENCE_RULES)
+    # Single-named-candidate regime.
+    assert "exactly one named candidate" in rules
+    # Multiple-named-candidate regime — explicit no-blend.
+    assert "never blend attributions" in rules
+    # No-name regime.
+    assert "without inventing a name" in rules
+
+
+def test_specificity_rule_present() -> None:
+    rules = _normalised(EVIDENCE_RULES)
+    assert "strongest specific claim" in rules
+    # Anti-hallucination guardrail (case-insensitive — prompt has
+    # "Do not invent quantities" mid-sentence).
+    assert "do not invent quantities" in rules.lower()
+
+
+def test_multi_document_claims_rule_present() -> None:
+    rules = _normalised(EVIDENCE_RULES)
+    assert "two or more cited documents" in rules
+    # Concrete example uses the F103-motivating corpus name; if a
+    # future maintainer abstracts it to a placeholder, this trips and
+    # a code review surfaces the change.
+    assert "Zain Ul Hassan" in rules
+
+
+def test_fallback_sentinel_unchanged() -> None:
+    """Frontend + eval harness both grep for the literal sentinel.
+    Any wording change here is a breaking surface change — lock it
+    in with a literal."""
+    assert "Not in the provided documents." in EVIDENCE_RULES
+
+
+def test_citation_rule_keeps_one_per_claim_contract() -> None:
+    """F103.e rule 5 expanded the *sentence-level* concept (multiple
+    cited claims in one sentence) but rule 1 still says one filename
+    per bracket. Stacking like ``[a.pdf, b.pdf]`` is still forbidden."""
+    rules = _normalised(EVIDENCE_RULES)
+    assert "do not stack filenames" in rules.lower()
