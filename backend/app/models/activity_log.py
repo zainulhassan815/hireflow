@@ -19,6 +19,8 @@ class ActivityAction(StrEnum):
     DOCUMENT_UPLOAD = "document_upload"
     DOCUMENT_DELETE = "document_delete"
     DOCUMENT_PROCESSED = "document_processed"
+    DOCUMENT_AUTHOR_SET = "document_author_set"
+    DOCUMENT_AUTHOR_CLEARED = "document_author_cleared"
     JOB_CREATE = "job_create"
     JOB_UPDATE = "job_update"
     JOB_DELETE = "job_delete"

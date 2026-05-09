@@ -4,7 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.document import DocumentStatus, DocumentType
+from app.models.document import AuthorSource, DocumentStatus, DocumentType
+from app.schemas.candidate import CandidateLite
 
 
 class DocumentResponse(BaseModel):
@@ -42,8 +43,56 @@ class DocumentResponse(BaseModel):
         description="Extracted metadata (skills, experience, education, etc.)",
         alias="metadata_",
     )
+    authored_by_id: UUID | None = Field(
+        None,
+        description=(
+            "Candidate who authored this document. Set automatically by "
+            "F103.c's email-match heuristic when the document text "
+            "embeds a candidate's email; can be set or cleared manually "
+            "via PATCH /documents/{id}/author (F103.c.2)."
+        ),
+    )
+    authored_by: CandidateLite | None = Field(
+        None,
+        description=(
+            "Compact view of the linked candidate. Eager-loaded with the "
+            "document so consumers can render the author without a "
+            "second request. ``null`` when ``authored_by_id`` is unset "
+            "or the candidate has been deleted."
+        ),
+    )
+    authored_by_source: AuthorSource | None = Field(
+        None,
+        description=(
+            "How the link was set: ``email_match`` (F103.c heuristic) "
+            "or ``manual`` (F103.c.2 operator override). May be "
+            "non-null while ``authored_by_id`` is null if a previously-"
+            "linked candidate was deleted; readers should check "
+            "``authored_by_id`` first."
+        ),
+    )
     created_at: datetime = Field(..., description="Upload timestamp (UTC)")
     updated_at: datetime = Field(..., description="Last modification timestamp (UTC)")
+
+
+class UpdateDocumentAuthorRequest(BaseModel):
+    """F103.c.2 — body for ``PATCH /documents/{id}/author``.
+
+    Pass a candidate id to link the document to that candidate; pass
+    ``null`` to clear an existing link. The route stamps
+    ``authored_by_source = 'manual'`` on a successful set so future
+    F103.c email-match backfills don't overwrite the operator's
+    intent.
+    """
+
+    candidate_id: UUID | None = Field(
+        ...,
+        description=(
+            "Candidate to attribute this document to, or ``null`` to "
+            "clear an existing link."
+        ),
+        examples=["c4b91a7e-2f10-4d3f-8b9c-e2a4f6d7c8b1", None],
+    )
 
 
 class DocumentMetadataResponse(BaseModel):

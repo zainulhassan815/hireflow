@@ -130,8 +130,18 @@ def _process_document(
 ) -> tuple[bool, str | None]:
     """Returns ``(changed, status)``. ``status`` is a short string
     summarising the outcome for the per-doc log line."""
+    from app.models import AuthorSource
+
     if doc.authored_by_id is not None:
         return (False, "already-linked")
+    # F103.c.2 — also skip docs whose author was once set manually
+    # but whose candidate has since been deleted (FK now NULL,
+    # source still 'manual' due to ON DELETE SET NULL leaving the
+    # source dangling). The operator explicitly chose this doc's
+    # author once; auto-relinking to a different candidate would
+    # silently undo that choice.
+    if doc.authored_by_source == AuthorSource.MANUAL:
+        return (False, "manual-source-skipped")
 
     emails = _ensure_emails_metadata(doc)
     if not emails:
@@ -148,6 +158,7 @@ def _process_document(
         snapshot.write(json.dumps(_snapshot_row(doc, emails)) + "\n")
 
     doc.authored_by_id = candidate.id
+    doc.authored_by_source = AuthorSource.EMAIL_MATCH
     doc.metadata_ = {
         **(doc.metadata_ or {}),
         "author_linkage_version": AUTHOR_LINKAGE_VERSION,

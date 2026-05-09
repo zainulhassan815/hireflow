@@ -120,6 +120,61 @@ class DocumentService:
         doc = await self.get(document_id, actor=actor)
         return await self._storage.presigned_url(doc.storage_key, expires_seconds)
 
+    async def set_author(
+        self,
+        document_id: UUID,
+        *,
+        candidate_id: UUID | None,
+        actor: User,
+    ) -> tuple[Document, bool]:
+        """F103.c.2 — manually set or clear ``Document.authored_by_id``.
+
+        Owner-scoped; the operator must own the document **and** the
+        candidate (cross-tenant linking is rejected as 404 to keep
+        the existence side-channel closed). Stamps
+        ``authored_by_source = 'manual'`` on a successful set so
+        future F103.c email-match backfills don't overwrite the
+        operator's intent.
+
+        Idempotent: returns ``(doc, changed=False)`` when the FK
+        + source already match the requested state — caller skips
+        the activity-log write and the re-embed enqueue in that
+        case.
+        """
+        from app.models import AuthorSource, UserRole
+
+        doc = await self._documents.get(document_id)
+        if doc is None:
+            raise NotFound("Document not found.")
+        self._ensure_access(doc, actor)
+
+        if candidate_id is not None:
+            candidate = await self._documents.get_candidate(candidate_id)
+            if candidate is None:
+                raise NotFound("Candidate not found.")
+            # Cross-tenant: same 404 as a missing candidate so we
+            # don't leak the existence of another owner's candidate.
+            if actor.role != UserRole.ADMIN and candidate.owner_id != actor.id:
+                raise NotFound("Candidate not found.")
+
+        # Idempotent fast path. If the FK + source already match the
+        # requested state, return without writing anything. The
+        # source check matters because re-PATCH-ing the same
+        # candidate after an email-match auto-link should still flip
+        # the source to 'manual' — that's a meaningful state change
+        # the audit trail wants to record.
+        target_source = AuthorSource.MANUAL if candidate_id else None
+        if (
+            doc.authored_by_id == candidate_id
+            and doc.authored_by_source == target_source
+        ):
+            return doc, False
+
+        doc.authored_by_id = candidate_id
+        doc.authored_by_source = target_source
+        await self._documents.save(doc)
+        return doc, True
+
     @staticmethod
     def _ensure_access(doc: Document, actor: User) -> None:
         from app.models import UserRole

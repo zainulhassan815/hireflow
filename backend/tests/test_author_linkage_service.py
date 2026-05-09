@@ -15,7 +15,13 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.core.db import sync_engine
-from app.models import Candidate, Document, DocumentStatus, DocumentType
+from app.models import (
+    AuthorSource,
+    Candidate,
+    Document,
+    DocumentStatus,
+    DocumentType,
+)
 from app.services.author_linkage_service import AuthorLinkageService
 
 
@@ -27,6 +33,7 @@ def _seed_doc(
     document_type: DocumentType | None = DocumentType.OTHER,
     emails: list[str] | None = None,
     authored_by_id=None,
+    authored_by_source: AuthorSource | None = None,
 ) -> Document:
     metadata = {"emails": emails} if emails is not None else None
     doc = Document(
@@ -39,6 +46,7 @@ def _seed_doc(
         document_type=document_type,
         metadata_=metadata,
         authored_by_id=authored_by_id,
+        authored_by_source=authored_by_source,
     )
     session.add(doc)
     session.commit()
@@ -301,3 +309,103 @@ async def test_resume_self_link_via_email(admin_user) -> None:
         session.refresh(candidate)
         authored_ids = {d.id for d in candidate.authored_documents}
         assert resume.id in authored_ids
+
+
+# ---------- F103.c.2: source flag + manual-skip ----------
+
+
+@pytest.mark.asyncio
+async def test_email_match_stamps_email_match_source(admin_user) -> None:
+    """F103.c.2 — handle_document_ready stamps
+    ``authored_by_source = 'email_match'`` so the F103.c.2 PATCH
+    route can later detect the link as inferred."""
+    with Session(sync_engine) as session:
+        candidate = _seed_candidate(
+            session, owner_id=admin_user.id, email="alice@example.com"
+        )
+        doc = _seed_doc(session, owner_id=admin_user.id, emails=["alice@example.com"])
+
+        AuthorLinkageService(session).handle_document_ready(doc)
+
+        session.refresh(doc)
+        assert doc.authored_by_id == candidate.id
+        assert doc.authored_by_source == AuthorSource.EMAIL_MATCH
+
+
+@pytest.mark.asyncio
+async def test_link_if_match_skips_dangling_manual_source(admin_user) -> None:
+    """F103.c.2 dangling-source case: candidate deleted via
+    ON DELETE SET NULL leaves ``authored_by_id`` NULL but
+    ``authored_by_source`` still 'manual'. The operator's intent
+    was specific to the deleted candidate; auto-relinking to a
+    different candidate via a fresh email match would silently
+    undo that intent. Skip."""
+    with Session(sync_engine) as session:
+        # Seed a doc that's been "manually linked, candidate deleted":
+        # FK NULL, source MANUAL.
+        doc = _seed_doc(
+            session,
+            owner_id=admin_user.id,
+            emails=["alice@example.com"],
+            authored_by_id=None,
+            authored_by_source=AuthorSource.MANUAL,
+        )
+        # New candidate appears with the same email.
+        new_candidate = _seed_candidate(
+            session, owner_id=admin_user.id, email="alice@example.com"
+        )
+
+        AuthorLinkageService(session).handle_document_ready(doc)
+
+        session.refresh(doc)
+        # FK stays NULL; source stays manual; the new candidate is
+        # NOT auto-linked.
+        assert doc.authored_by_id is None
+        assert doc.authored_by_source == AuthorSource.MANUAL
+        # Belt-and-suspenders: the new candidate has no
+        # authored_documents.
+        session.refresh(new_candidate)
+        assert list(new_candidate.authored_documents) == []
+
+
+@pytest.mark.asyncio
+async def test_backfill_for_candidate_skips_dangling_manual_source(admin_user) -> None:
+    """Same dangling-source story for the deferred-resolution path."""
+    with Session(sync_engine) as session:
+        doc = _seed_doc(
+            session,
+            owner_id=admin_user.id,
+            emails=["alice@example.com"],
+            authored_by_id=None,
+            authored_by_source=AuthorSource.MANUAL,
+        )
+        new_candidate = _seed_candidate(
+            session, owner_id=admin_user.id, email="alice@example.com"
+        )
+
+        linked = AuthorLinkageService(session).backfill_for_candidate(new_candidate)
+        assert linked == 0
+
+        session.refresh(doc)
+        assert doc.authored_by_id is None
+        assert doc.authored_by_source == AuthorSource.MANUAL
+
+
+@pytest.mark.asyncio
+async def test_backfill_for_candidate_stamps_email_match_source(
+    admin_user,
+) -> None:
+    """F103.c.2 — when the deferred backfill links a doc, it stamps
+    the source so the manual-override route can later detect it."""
+    with Session(sync_engine) as session:
+        doc = _seed_doc(session, owner_id=admin_user.id, emails=["alice@example.com"])
+        candidate = _seed_candidate(
+            session, owner_id=admin_user.id, email="alice@example.com"
+        )
+
+        linked = AuthorLinkageService(session).backfill_for_candidate(candidate)
+        assert linked == 1
+
+        session.refresh(doc)
+        assert doc.authored_by_id == candidate.id
+        assert doc.authored_by_source == AuthorSource.EMAIL_MATCH

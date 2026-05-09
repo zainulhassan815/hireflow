@@ -139,6 +139,77 @@ def extract_document_text(self, document_id: str) -> None:
         prep_session.close()
 
 
+# ---------- F103.c.2 — targeted re-embed ----------
+
+
+@celery.task(
+    name="reembed_document",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=30,
+    acks_late=True,
+)
+def reembed_document(self, document_id: str) -> None:
+    """F103.c.2 — re-run chunking + contextualization + embedding for
+    one document.
+
+    Enqueued by ``DocumentService.set_author`` after the operator
+    sets or clears ``Document.authored_by_id``. The contextualizer's
+    rendered ``Authored by:`` clause changes when the FK changes, so
+    the chunks need fresh vectors for the change to land in
+    retrieval.
+
+    Mirrors ``extract_document_text``'s wiring (sync session, Chroma
+    + embedder + contextualizer from the registries) but only runs
+    the chunk-rebuild branch — extraction, classification, candidate
+    sync, and viewer prep already ran at ingestion time.
+    """
+    from sqlalchemy import select
+
+    from app.adapters.chroma_store import ChromaVectorStore
+    from app.adapters.contextualizers.registry import get_contextualizer
+    from app.adapters.embeddings.registry import get_embedding_provider
+    from app.core.config import settings
+    from app.core.db import get_sync_db
+    from app.models import Document
+    from app.services.embedding_service import EmbeddingService
+    from app.services.reembed_service import ReembedService
+
+    embedder = get_embedding_provider(settings)
+    vector_store = ChromaVectorStore(
+        host=settings.chroma_host,
+        port=settings.chroma_port,
+        embedder=embedder,
+    )
+    embedding = EmbeddingService(
+        vector_store,
+        embedder,
+        similarity_store=vector_store,
+    )
+    contextualizer = get_contextualizer(settings)
+
+    session = get_sync_db()
+    try:
+        doc = session.execute(
+            select(Document).where(Document.id == UUID(document_id))
+        ).scalar_one_or_none()
+        if doc is None:
+            logger.warning("reembed_document: %s not found, skipping", document_id)
+            return
+
+        ReembedService(
+            session=session,
+            embedding=embedding,
+            contextualizer=contextualizer,
+        ).reembed_document(doc)
+        session.commit()
+    except Exception as exc:
+        logger.exception("reembed_document failed for %s", document_id)
+        raise self.retry(exc=exc) from exc
+    finally:
+        session.close()
+
+
 # ---------- Gmail sync ----------
 
 

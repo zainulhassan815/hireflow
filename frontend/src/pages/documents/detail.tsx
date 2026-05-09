@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Typography } from "@/components/ui/typography";
+import { DocumentAuthorPicker } from "@/components/documents/document-author-picker";
 import { DocumentViewer } from "@/components/documents/document-viewer";
 import { SimilarDocuments } from "@/components/documents/similar-documents";
 import {
@@ -320,6 +321,14 @@ export function DocumentDetailPage() {
                   </dd>
                 </div>
               )}
+              <div>
+                <dt className="text-muted-foreground mb-1 text-xs tracking-wide uppercase">
+                  Author
+                </dt>
+                <dd>
+                  <DocumentAuthorPicker document={doc} />
+                </dd>
+              </div>
             </dl>
           </section>
         </aside>

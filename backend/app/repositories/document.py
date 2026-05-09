@@ -166,6 +166,14 @@ class DocumentRepository:
         docs = result.scalars().all()
         return {doc.id: doc for doc in docs}
 
+    async def get_candidate(self, candidate_id: UUID) -> Candidate | None:
+        """F103.c.2 — single-candidate lookup for the manual-author
+        route. Lives here for the same reason ``find_candidates_by_ids``
+        does: the document service already routes all data access
+        through this repo, and adding a fresh candidate-repo dependency
+        for one method would be noise."""
+        return await self._db.get(Candidate, candidate_id)
+
     async def find_candidates_by_ids(
         self, candidate_ids: list[UUID]
     ) -> dict[UUID, Candidate]:

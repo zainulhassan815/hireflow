@@ -8,6 +8,32 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models.candidate import ApplicationStatus
 
 
+class CandidateLite(BaseModel):
+    """Compact candidate descriptor used in nested responses.
+
+    F103.c.2 — surfaced inside ``DocumentResponse.authored_by`` so a
+    document's author can be rendered without a second request. Other
+    endpoints can reuse this shape when they need to embed a
+    candidate-summary without the full ``CandidateResponse`` payload
+    (skills, education, experience, timestamps).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID = Field(..., description="Unique candidate identifier")
+    name: str | None = Field(
+        None, description="Candidate name", examples=["Alice Smith"]
+    )
+    email: str | None = Field(
+        None,
+        description=(
+            "Candidate email. Surfaced for picker disambiguation when "
+            "two candidates share a name."
+        ),
+        examples=["alice@example.com"],
+    )
+
+
 class CandidateResponse(BaseModel):
     """A candidate derived from a processed resume."""
 

@@ -32,6 +32,24 @@ class DocumentType(StrEnum):
     OTHER = "other"
 
 
+class AuthorSource(StrEnum):
+    """How ``Document.authored_by_id`` got set.
+
+    F103.c's ``AuthorLinkageService`` sets ``email_match`` when an
+    email-in-doc matches a candidate's email. F103.c.2's manual
+    PATCH route sets ``manual``. Backfill scripts must not
+    overwrite ``manual`` links — that's the audit trail's purpose.
+
+    Dangling-source caveat: when a candidate is deleted, the FK
+    becomes NULL via ``ON DELETE SET NULL`` but this column stays
+    at its prior value. Every reader checks ``authored_by_id IS
+    NOT NULL`` first; the dangling value is benign.
+    """
+
+    EMAIL_MATCH = "email_match"
+    MANUAL = "manual"
+
+
 class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "documents"
 
@@ -125,6 +143,21 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("candidates.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+    # F103.c.2 — distinguishes operator-set ('manual') from inferred
+    # ('email_match') links. Used by AuthorLinkageService and the
+    # relink_authors backfill to skip docs whose author was set by
+    # hand. May dangle (non-NULL) after a candidate deletion sets
+    # ``authored_by_id`` to NULL via ON DELETE SET NULL — readers
+    # must check ``authored_by_id IS NOT NULL`` first.
+    authored_by_source: Mapped[AuthorSource | None] = mapped_column(
+        SAEnum(
+            AuthorSource,
+            name="documents_authored_by_source",
+            native_enum=True,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=True,
     )
 
     owner: Mapped[User] = relationship(lazy="selectin")

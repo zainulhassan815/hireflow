@@ -1162,7 +1162,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - [ ] **F102.g (deferred, Phase B)** Shortcut hint badges (`<Kbd>`)
     inline in buttons, menus, and tooltips.
 
-- [~] **F103 · RAG indirect-evidence reasoning** — surfaced by a
+- [x] **F103 · RAG indirect-evidence reasoning** — surfaced by a
   real-world query: *"do we have any candidate with stripe
   experience?"* Retrieval correctly returned a project case study
   documenting a Stripe integration; the LLM answered "Not in the
@@ -1212,6 +1212,21 @@ Production-grade interface with attention to detail, accessibility, and delight.
     resume + case study both speak to a skill. Writable and
     testable offline via the existing RAG eval harness once we
     stub sample queries.
+  - [x] **F103.c.2** Manual author override UI. F103.c's
+    email-match heuristic can't link case studies / portfolios
+    that don't embed the candidate's email — surfaced on the
+    F103.d/e manual test (chat-UI answers say "the candidate"
+    instead of the candidate's name on Stripe-in-case-study
+    queries). The schema already supports an explicit FK
+    (`Document.authored_by_id` is `nullable=True`); this slice
+    adds the `PATCH /documents/{id}/author` route, a candidate-
+    detail "linked documents" surface, and a per-doc author
+    picker so an operator can wire the relationship by hand. A
+    targeted re-embed of the affected doc happens after the FK
+    write so the contextualizer's `Author: <name>` clause
+    surfaces in the new vectors. Adds an
+    `authored_by_source ENUM('email_match', 'manual')` column
+    so filter UIs can distinguish inferred from operator-set.
 
 - [ ] **F104 · RAG + search moonshots** — menu of improvements,
   each independently shippable, each individually meaningful.

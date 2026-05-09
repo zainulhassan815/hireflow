@@ -36,7 +36,7 @@ from sqlalchemy import cast, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.types import Text
 
-from app.models import Candidate, Document
+from app.models import AuthorSource, Candidate, Document
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,16 @@ class AuthorLinkageService:
             logger.exception("author linkage failed for document %s", document.id)
 
     def _link_if_match(self, document: Document) -> None:
+        # F103.c.2 — never overwrite an operator-set link. The
+        # ``authored_by_id is not None`` guard already covers
+        # operator-set FKs (since they're non-null) but checking
+        # the source explicitly is belt-and-suspenders against the
+        # rare dangling-source case (candidate deleted via
+        # ON DELETE SET NULL leaves the source 'manual' on a doc
+        # whose FK is now NULL).
         if document.authored_by_id is not None:
+            return
+        if document.authored_by_source == AuthorSource.MANUAL:
             return
         emails = (document.metadata_ or {}).get("emails") or []
         # ``RuleBasedClassifier`` lowercases at extraction (F103.c).
@@ -90,7 +99,10 @@ class AuthorLinkageService:
                 candidates[0].id,
             )
 
+        # F103.c.2 — stamp source so future backfills + the F103.c.2
+        # PATCH route can distinguish inferred from operator-set.
         document.authored_by_id = candidates[0].id
+        document.authored_by_source = AuthorSource.EMAIL_MATCH
         self._session.commit()
         logger.info(
             "linked document %s → candidate %s via email match",
@@ -126,12 +138,20 @@ class AuthorLinkageService:
 
         linked = 0
         for doc in candidates_text:
+            # F103.c.2 — defensive skip for manual links. The SQL
+            # filter already excludes ``authored_by_id IS NOT NULL``,
+            # so this only matters for the rare dangling-source case
+            # (FK NULL after candidate deletion, source still
+            # 'manual'). Keep the operator's intent intact.
+            if doc.authored_by_source == AuthorSource.MANUAL:
+                continue
             doc_emails = (doc.metadata_ or {}).get("emails") or []
             # Exact element membership — the SQL prefilter can match a
             # substring like "john@example.com" inside
             # "johndoe@example.com" if both sit in the same array.
             if target in {e.lower() for e in doc_emails if isinstance(e, str)}:
                 doc.authored_by_id = candidate.id
+                doc.authored_by_source = AuthorSource.EMAIL_MATCH
                 linked += 1
 
         if linked:

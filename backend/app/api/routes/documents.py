@@ -18,9 +18,10 @@ from app.schemas.document import (
     SimilarDocument,
     SimilarDocumentsRequest,
     SimilarDocumentsResponse,
+    UpdateDocumentAuthorRequest,
 )
 from app.schemas.viewer import ViewablePayloadResponse
-from app.worker.tasks import extract_document_text
+from app.worker.tasks import extract_document_text, reembed_document
 
 router = APIRouter()
 
@@ -273,3 +274,64 @@ async def delete_document(
         resource_type="document",
         resource_id=str(document_id),
     )
+
+
+@router.patch(
+    "/{document_id}/author",
+    response_model=DocumentResponse,
+    summary="Manually set or clear the document's author",
+    description=(
+        "F103.c.2 — sets ``Document.authored_by_id`` to the given "
+        "candidate or clears it when ``candidate_id`` is ``null``. "
+        "Marks the linkage as ``authored_by_source = 'manual'`` so "
+        "future runs of the F103.c email-match backfill don't "
+        "overwrite the operator's intent.\n\n"
+        "Enqueues a targeted re-embed task in the background so the "
+        "F103.d contextualizer's ``Authored by:`` clause lands in "
+        "fresh chunk vectors without re-doing the entire corpus. "
+        "The response returns immediately; chat answers reflect the "
+        "new author once the worker finishes (~10s on Haiku for a "
+        "typical case study).\n\n"
+        "Owner-scoped: the operator must own both the document and "
+        "the candidate. Cross-tenant linking is rejected as 404 to "
+        "keep the existence side-channel closed."
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not the document owner or an admin"},
+        404: {
+            "description": (
+                "Document or candidate not found, or candidate belongs to another owner"
+            ),
+        },
+    },
+)
+async def update_document_author(
+    document_id: UUID,
+    request: UpdateDocumentAuthorRequest,
+    current_user: CurrentUser,
+    documents: DocumentServiceDep,
+    activity: ActivityServiceDep,
+) -> DocumentResponse:
+    doc, changed = await documents.set_author(
+        document_id,
+        candidate_id=request.candidate_id,
+        actor=current_user,
+    )
+    if changed:
+        action = (
+            "document_author_set"
+            if request.candidate_id is not None
+            else "document_author_cleared"
+        )
+        await activity.log(
+            actor_id=current_user.id,
+            action=action,
+            resource_type="document",
+            resource_id=str(document_id),
+        )
+        # Enqueue the targeted re-embed; the worker picks this up,
+        # rebuilds chunks with fresh author/contextualizer state,
+        # and stamps the new ``contextualization_version``.
+        reembed_document.delay(str(document_id))
+    return DocumentResponse.model_validate(doc)
