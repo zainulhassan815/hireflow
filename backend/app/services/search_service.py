@@ -27,10 +27,12 @@ from typing import Any, Literal
 from uuid import UUID
 
 from app.adapters.protocols import (
+    CandidateSimilarityStore,
     DocumentSimilarityStore,
     QueryParser,
     RerankCandidate,
     Reranker,
+    RetrievedCandidate,
     RetrievedChunk,
     VectorHit,
     VectorStore,
@@ -81,11 +83,16 @@ class SearchService:
         reranker: Reranker | None = None,
         query_parser: QueryParser | None = None,
         similarity_store: DocumentSimilarityStore | None = None,
+        candidate_summary_store: CandidateSimilarityStore | None = None,
     ) -> None:
         self._documents = documents
         self._vector_store = vector_store
         self._reranker = reranker
         self._similarity_store = similarity_store
+        # F104.a — separate retrieval lane backed by the candidates
+        # Chroma collection. ``None`` for legacy / test callers that
+        # don't use the candidate-summary path.
+        self._candidate_summary_store = candidate_summary_store
         # F89.a — NullQueryParser (empty-filter emitter) is a safe
         # default for legacy callers (test harnesses). Production
         # always injects HeuristicQueryParser via the composition root.
@@ -415,6 +422,119 @@ class SearchService:
         if self._reranker is not None and hydrated:
             return self._rerank_chunks(query, hydrated, limit)
         return hydrated[:limit]
+
+    async def retrieve_candidate_summaries(
+        self,
+        *,
+        actor: User,
+        query: str,
+        limit: int,
+    ) -> list[RetrievedCandidate]:
+        """F104.a — candidate-summary retrieval lane for RAG.
+
+        Queries the dedicated candidate-summary Chroma collection
+        with the user's question, applies a per-lane distance
+        cutoff (``settings.rag_candidate_max_distance``), and
+        hydrates each hit's ``name`` + source-document filename
+        from Postgres so the answer can cite the resume directly.
+
+        Owner-scoped via Chroma metadata ``where`` filter, with a
+        belt-and-braces post-hydration check (HR users only see
+        their own pool; admins bypass).
+
+        Returns at most ``limit`` results. The caller (RagService)
+        further caps via ``settings.rag_max_candidate_hits`` so a
+        flood of low-quality matches doesn't crowd chunks out of
+        the token budget.
+        """
+        if self._candidate_summary_store is None:
+            return []
+        if not query.strip():
+            return []
+
+        owner_filter = None if actor.role == UserRole.ADMIN else actor.id
+
+        where: dict[str, Any] | None = None
+        if owner_filter is not None:
+            where = {"owner_id": str(owner_filter)}
+
+        # Over-fetch a bit so the per-lane cutoff doesn't trim
+        # below ``limit``.
+        raw_hits = self._candidate_summary_store.query_candidate_summaries(
+            query, n_results=max(limit * 2, 5), where=where
+        )
+
+        cutoff = (
+            settings.rag_candidate_max_distance
+            if settings.rag_candidate_max_distance is not None
+            else settings.rag_context_max_distance
+        )
+
+        # Filter by distance cutoff (when set). Same semantics as
+        # ``_apply_context_gate``: drop hits whose distance is
+        # *strictly greater* than the cutoff. ``None`` means "no
+        # cutoff" — keep everything the store returned.
+        kept_hits = (
+            [h for h in raw_hits if cutoff is None or h.distance <= cutoff]
+            if cutoff is not None
+            else raw_hits
+        )
+        if not kept_hits:
+            return []
+
+        # Hydrate name + source filename from Postgres in batched
+        # lookups. Owner check is belt-and-braces — Chroma's
+        # ``where`` filter already scoped by owner_id.
+        candidate_ids: list[UUID] = []
+        for hit in kept_hits:
+            try:
+                candidate_ids.append(UUID(hit.candidate_id))
+            except (ValueError, TypeError):
+                continue
+        candidates = await self._documents.find_candidates_by_ids(candidate_ids)
+
+        source_doc_ids = sorted(
+            {
+                c.source_document_id
+                for c in candidates.values()
+                if c.source_document_id is not None
+            }
+        )
+        source_docs = (
+            await self._documents.get_many(source_doc_ids) if source_doc_ids else {}
+        )
+
+        out: list[RetrievedCandidate] = []
+        for hit in kept_hits:
+            try:
+                cand_uuid = UUID(hit.candidate_id)
+            except (ValueError, TypeError):
+                continue
+            candidate = candidates.get(cand_uuid)
+            if candidate is None:
+                # Orphan vector — vector store drift vs Postgres.
+                continue
+            if owner_filter is not None and candidate.owner_id != owner_filter:
+                continue
+            source_doc = (
+                source_docs.get(candidate.source_document_id)
+                if candidate.source_document_id
+                else None
+            )
+            out.append(
+                RetrievedCandidate(
+                    candidate_id=candidate.id,
+                    name=candidate.name,
+                    summary=hit.summary,
+                    distance=hit.distance,
+                    score=1.0 - hit.distance,
+                    source_document_id=candidate.source_document_id,
+                    source_filename=source_doc.filename if source_doc else None,
+                )
+            )
+            if len(out) >= limit:
+                break
+        return out
 
     async def find_similar_documents(
         self,

@@ -25,6 +25,14 @@ class _StubRetriever:
     ) -> list[RetrievedChunk]:
         return self._chunks
 
+    async def retrieve_candidate_summaries(
+        self, *, actor: Any, query: str, limit: int
+    ) -> list[Any]:
+        # F104.a — these tests pre-date the candidate lane and don't
+        # exercise it; empty list keeps the parent code path's
+        # "fallback to chunks" branch active.
+        return []
+
 
 class _StubLlm:
     model_name = "stub-model"

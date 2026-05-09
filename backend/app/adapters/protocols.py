@@ -494,6 +494,18 @@ class ChunkRetriever(Protocol):
         accept a User and apply the role-based owner scoping."""
         ...
 
+    async def retrieve_candidate_summaries(
+        self,
+        *,
+        actor: Any,
+        query: str,
+        limit: int,
+    ) -> list[RetrievedCandidate]:
+        """F104.a — return candidate-summary hits. Empty list when
+        the store isn't wired (legacy callers or test stubs without
+        candidate retrieval)."""
+        ...
+
 
 # ---------- Vector store ----------
 
@@ -598,6 +610,83 @@ class DocumentSimilarityStore(Protocol):
         callers map that to an explicit "re-index" message.
         """
         ...
+
+
+# ---------- Candidate-summary retrieval (F104.a) ----------
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateSummaryHit:
+    """One candidate-summary hit from the candidates collection.
+
+    Shape mirrors ``VectorHit`` / ``SimilarDocumentHit`` but the
+    storage unit is the candidate's recruiter-brief summary text
+    (rendered as the "document" field in Chroma so a hit carries the
+    human-readable text). Hydration of ``name`` and source-document
+    info happens in ``SearchService`` via ``CandidateRepository`` /
+    ``DocumentRepository``.
+    """
+
+    candidate_id: str
+    summary: str
+    distance: float
+    metadata: dict[str, Any]
+
+
+@runtime_checkable
+class CandidateSimilarityStore(Protocol):
+    """Candidate-level vector store for the F104.a retrieval lane.
+
+    Deliberately distinct from ``VectorStore`` and
+    ``DocumentSimilarityStore``. Storage unit: one vector per
+    candidate. Embedding text: the recruiter-brief one-liner. Same
+    embedding model as the other collections (vectors live in the
+    same space) but a separate Chroma collection so candidate hits
+    never accidentally surface as chunks and vice versa.
+    """
+
+    def upsert_candidate_summary(
+        self,
+        candidate_id: str,
+        summary: str,
+        embedding: list[float],
+        metadata: dict[str, Any],
+    ) -> None:
+        """Store (or replace) the vector + summary for ``candidate_id``."""
+        ...
+
+    def delete_candidate_summary(self, candidate_id: str) -> None:
+        """Remove the candidate vector (no-op if absent)."""
+        ...
+
+    def query_candidate_summaries(
+        self,
+        query_text: str,
+        n_results: int = 5,
+        where: dict[str, Any] | None = None,
+    ) -> list[CandidateSummaryHit]:
+        """Top-N candidate summaries for a query."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievedCandidate:
+    """A ranked candidate-summary hit produced by F104.a's retrieval
+    lane. Sibling of ``RetrievedChunk`` — the unit is a whole
+    candidate's summary, not a document chunk.
+
+    ``source_document_id`` / ``source_filename`` reverse-point at the
+    resume the summary derives from so a citation in the answer can
+    resolve to a real source the FE already knows how to render.
+    """
+
+    candidate_id: UUID
+    name: str | None
+    summary: str
+    distance: float
+    score: float
+    source_document_id: UUID | None
+    source_filename: str | None
 
 
 # ---------- Text extraction ----------

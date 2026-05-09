@@ -69,6 +69,13 @@ class _StubRetriever:
     ) -> list[RetrievedChunk]:
         return self._chunks
 
+    async def retrieve_candidate_summaries(
+        self, *, actor: Any, query: str, limit: int
+    ) -> list[Any]:
+        # F104.a — eval fixtures don't include candidate hits today;
+        # the chunk-only path remains the load-bearing eval signal.
+        return []
+
 
 class _StubUser:
     id = uuid4()

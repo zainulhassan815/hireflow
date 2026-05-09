@@ -147,6 +147,18 @@ class Settings(BaseSettings):
     # float always wins over the embedder recommendation — tighten if
     # answers still drag in off-topic chunks.
     rag_context_max_distance: float | None = None
+    # F104.a — distance cutoff for the candidate-summary retrieval
+    # lane. Same vector space as chunks (same embedding model), but
+    # the embedded text shape is different (one-line summary vs.
+    # context+chunk), so the right cutoff isn't necessarily the same.
+    # Defaults to ``None`` → falls back to the chunk cutoff. Tunable
+    # without a code change when summaries start surfacing too
+    # liberally (or too conservatively) relative to chunks.
+    rag_candidate_max_distance: float | None = None
+    # Cap on number of candidate hits stitched into the RAG context.
+    # Plan-review §8: prevents a flood of low-quality candidate
+    # matches from crowding chunks out of the token budget.
+    rag_max_candidate_hits: int = 3
     # Soft cap on context tokens stuffed into the prompt. Estimated via a
     # 4-chars-per-token heuristic (Anthropic's published approximation) —
     # never a hard API-limit check. Default 4000 leaves ~2.5k headroom

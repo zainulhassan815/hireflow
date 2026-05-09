@@ -1235,7 +1235,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   rough impact-per-effort.
 
   **Tier 1 — prompt / small infra, large visible effect:**
-  - [ ] **F104.a** Candidate one-liner at ingest: after parsing a
+  - [x] **F104.a** Candidate one-liner at ingest: after parsing a
     resume (or linking a case study via F103.c), generate a
     one-sentence candidate summary ("Zain Ul Hassan — full-stack,
     4+ yrs, Stripe + GHL + TypeScript heavy"). Store alongside

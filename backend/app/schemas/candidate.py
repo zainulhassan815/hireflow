@@ -52,6 +52,22 @@ class CandidateResponse(BaseModel):
     skills: list[str] = Field(..., description="Extracted skills")
     experience_years: int | None = Field(None, description="Years of experience")
     education: list[str] | None = Field(None, description="Education qualifications")
+    # F104.a — LLM-generated one-sentence recruiter brief (e.g.,
+    # "Alice Ng — backend engineer, 5+ yrs Python, FastAPI +
+    # Postgres heavy"). Populated at ingestion or via the
+    # ``backfill_candidate_summaries`` script. Surfaced here for
+    # candidate detail / drawer rendering. Intentionally absent
+    # from ``CandidateLite`` — the picker doesn't need it.
+    summary: str | None = Field(
+        None,
+        description=(
+            "One-sentence recruiter brief used as the candidate-"
+            "summary retrieval anchor. ``null`` until generated."
+        ),
+        examples=[
+            "Alice Ng — backend engineer, 5+ yrs Python, FastAPI + Postgres heavy.",
+        ],
+    )
     created_at: datetime = Field(..., description="Creation timestamp (UTC)")
     updated_at: datetime = Field(..., description="Last update timestamp (UTC)")
 

@@ -82,10 +82,39 @@ def extract_document_text(self, document_id: str) -> None:
     except Exception:
         logger.warning("ChromaDB unavailable, skipping embedding indexing")
         embedding = None
+        embedder = None  # type: ignore[assignment]
+        vector_store = None  # type: ignore[assignment]
 
     from app.adapters.contextualizers.registry import get_contextualizer
 
     contextualizer = get_contextualizer(settings)
+
+    # F104.a — build an LLM callable for the candidate-summary path.
+    # Reuses the same provider selection the LLM classifier uses
+    # (``llm_provider`` setting, anthropic or ollama). When no provider
+    # is configured, ``llm_call`` stays None and the summary path
+    # silently no-ops — same shape as the F103.b/c/d operator paths.
+    llm_call: object | None = None
+    provider = (settings.llm_provider or "").lower()
+    if provider == "anthropic" and settings.anthropic_api_key:
+        from app.adapters.classifiers.llm import create_claude_llm_call
+
+        llm_call = create_claude_llm_call(
+            settings.anthropic_api_key.get_secret_value(),
+            settings.llm_model,
+        )
+    elif provider == "ollama" and settings.ollama_base_url:
+        from app.adapters.classifiers.llm import create_ollama_llm_call
+
+        llm_call = create_ollama_llm_call(settings.ollama_base_url, settings.llm_model)
+
+    # F104.a — same store + embedder used for chunk indexing also
+    # backs the candidate-summary collection (same Chroma adapter
+    # implements the third Protocol). When Chroma is unavailable
+    # the summary still gets written to Postgres; only the retrieval
+    # lane goes silent.
+    candidate_store = vector_store if embedding is not None else None
+    candidate_embedder = embedder if embedding is not None else None
 
     session = get_sync_db()
     try:
@@ -95,7 +124,14 @@ def extract_document_text(self, document_id: str) -> None:
         # before ``AuthorLinkageService`` looks one up by email. Both
         # hooks already swallow exceptions, so a failure in either
         # never rolls back extraction.
-        sync_candidates = SyncCandidateService(session)
+        # F104.a — pass the LLM callable + embedder + store so the
+        # candidate-summary path generates the text AND indexes it.
+        sync_candidates = SyncCandidateService(
+            session,
+            llm_call=llm_call,
+            candidate_embedder=candidate_embedder,
+            candidate_store=candidate_store,
+        )
         author_linkage = AuthorLinkageService(session)
 
         def _on_ready_chain(doc) -> None:

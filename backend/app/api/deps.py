@@ -26,6 +26,7 @@ from app.adapters.llm.registry import get_llm_provider
 from app.adapters.minio_storage import MinioBlobStorage
 from app.adapters.protocols import (
     BlobStorage,
+    CandidateSimilarityStore,
     DocumentSimilarityStore,
     EmailSender,
     GmailOAuth,
@@ -107,14 +108,16 @@ try:
         embedder=get_embedding_provider(settings),
     )
     _vector_store: VectorStore | None = _chroma_store
-    # F89.c — same adapter implements both Protocols. Binding under
-    # separate names keeps service wiring explicit about which
-    # capability is being consumed.
+    # F89.c + F104.a — same adapter implements three Protocols.
+    # Binding under separate names keeps service wiring explicit
+    # about which capability is being consumed.
     _similarity_store: DocumentSimilarityStore | None = _chroma_store
+    _candidate_summary_store: CandidateSimilarityStore | None = _chroma_store
 except Exception:
     _logger.warning("ChromaDB unavailable at startup; vector search disabled")
     _vector_store = None
     _similarity_store = None
+    _candidate_summary_store = None
 
 _llm_provider = get_llm_provider(settings)
 if _llm_provider:
@@ -343,6 +346,7 @@ def get_search_service(documents: DocumentRepositoryDep) -> SearchService:
         reranker=_reranker,
         query_parser=_query_parser,  # F89.a
         similarity_store=_similarity_store,  # F89.c
+        candidate_summary_store=_candidate_summary_store,  # F104.a
     )
 
 
@@ -364,6 +368,7 @@ def get_rag_service(documents: DocumentRepositoryDep) -> RagService | None:
         reranker=_reranker,
         query_parser=_query_parser,
         similarity_store=_similarity_store,
+        candidate_summary_store=_candidate_summary_store,
     )
     return RagService(retriever, _llm_provider, _intent_classifier)
 

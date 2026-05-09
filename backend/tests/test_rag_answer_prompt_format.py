@@ -51,13 +51,26 @@ class _RecordingLlm:
 
 
 class _StubRetriever:
-    def __init__(self, chunks: list[RetrievedChunk]) -> None:
+    def __init__(
+        self,
+        chunks: list[RetrievedChunk],
+        candidates: list[Any] | None = None,
+    ) -> None:
         self._chunks = chunks
+        self._candidates = candidates or []
 
     async def retrieve_chunks(
         self, *, actor: Any, query: str, document_ids, limit: int
     ) -> list[RetrievedChunk]:
         return self._chunks
+
+    async def retrieve_candidate_summaries(
+        self, *, actor: Any, query: str, limit: int
+    ) -> list[Any]:
+        # F104.a — empty by default; tests can pass a non-empty list
+        # via the constructor when they want to exercise the
+        # candidate-block render path.
+        return list(self._candidates)[:limit]
 
 
 class _StubClassifier:

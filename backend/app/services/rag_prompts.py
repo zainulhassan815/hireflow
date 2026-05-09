@@ -30,7 +30,7 @@ from typing import get_args
 
 from app.services.intent_canonicals import Intent
 
-PROMPT_VERSION = "v4"
+PROMPT_VERSION = "v5"
 
 
 # ---------- Layer 1: identity + voice ----------
@@ -90,6 +90,11 @@ Evidence rules:
 - Introduce the candidate once with a short qualifier ("Alice Ng,
   senior engineer on the Restaurant Signup project") and use the
   short form afterward.
+- When a "Candidate:" block appears in the retrieved context AND
+  the question concerns who or which person, anchor the answer on
+  that candidate. For non-person-shaped questions (e.g. "describe
+  X's tech stack"), the Candidate block is supporting context —
+  describe the work first.
 
 4. Specificity and quantification.
 - Prefer the strongest specific claim the evidence supports rather

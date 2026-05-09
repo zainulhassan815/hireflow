@@ -65,6 +65,15 @@ class Candidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     experience_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
     education: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
 
+    # F104.a — one-sentence recruiter brief used as the candidate-
+    # summary retrieval anchor (separate Chroma collection, surfaced
+    # in RAG context for who/which-person-shaped questions).
+    # ``summary_version`` lets the backfill script detect a stale
+    # summary after a ``SUMMARY_VERSION`` bump in the
+    # ``CandidateSummaryService`` prompt.
+    summary: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    summary_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
     # ``post_update=True`` mirrors the same flag on the reverse edge
     # (``Document.authored_by``). The ``source_document_id`` →
     # ``Document.id`` direction is the original F41 link; pairing both

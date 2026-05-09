@@ -62,6 +62,17 @@ class _FakeChunkRetriever:
         requested = set(document_ids)
         return [c for c in self._chunks if c.document_id in requested]
 
+    async def retrieve_candidate_summaries(
+        self,
+        *,
+        actor: Any,
+        query: str,
+        limit: int,
+    ) -> list[Any]:
+        # F104.a — empty by default; these streaming tests pre-date
+        # the candidate retrieval lane and don't exercise it.
+        return []
+
 
 def _fake_user(*, role: UserRole = UserRole.HR) -> Any:
     """Minimal stand-in for ``app.models.User``.

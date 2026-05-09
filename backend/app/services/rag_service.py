@@ -80,6 +80,15 @@ _CONTEXT_TEMPLATE = """\
 {text}
 """
 
+# F104.a — candidate-summary block rendered before document chunks
+# in the user prompt. Each hit corresponds to one candidate's
+# recruiter-brief one-liner; the inline ``[filename]`` citation
+# resolves the same way chunk citations do.
+_CANDIDATE_TEMPLATE = """\
+--- Candidate: {name} ---
+{summary}{citation}
+"""
+
 _FALLBACK_NO_HITS = "Not in the provided documents."
 
 
@@ -282,13 +291,28 @@ class RagService:
             document_ids=document_ids,
             limit=max_chunks,
         )
-        if not chunks:
+
+        # F104.a — candidate-summary lane. Capped at
+        # ``rag_max_candidate_hits`` so a flood of low-quality
+        # matches doesn't crowd chunks out of the token budget.
+        # Skipped when ``document_ids`` is set (caller pinned a
+        # specific doc subset; candidate-level retrieval would
+        # spuriously surface other candidates).
+        candidates: list[Any] = []
+        if document_ids is None:
+            candidates = await self._retriever.retrieve_candidate_summaries(
+                actor=actor,
+                query=question,
+                limit=settings.rag_max_candidate_hits,
+            )
+
+        if not chunks and not candidates:
             return None
 
         cutoff = settings.rag_context_max_distance
         budget = settings.rag_context_token_budget
         kept, tokens_used = self._apply_context_gate(chunks, cutoff, budget)
-        if not kept:
+        if not kept and not candidates:
             logger.info(
                 "rag context: 0/%d chunks kept (cutoff=%s, budget=%d)",
                 len(chunks),
@@ -306,6 +330,38 @@ class RagService:
         context_parts: list[str] = []
         citations: list[dict[str, Any]] = []
         terms = extract_query_terms(question)
+
+        # F104.a — candidate hits render *before* document chunks so
+        # the LLM has the recruiter-shape anchor available before
+        # detail-level chunks. Each hit produces one citation entry
+        # with ``chunk_index = None`` — the FE renders these via the
+        # same "filename + snippet" path as chunk citations.
+        for cand in candidates:
+            citation_marker = (
+                f" [{cand.source_filename}]" if cand.source_filename else ""
+            )
+            context_parts.append(
+                _CANDIDATE_TEMPLATE.format(
+                    name=cand.name or "Unknown candidate",
+                    summary=cand.summary,
+                    citation=citation_marker,
+                )
+            )
+            citations.append(
+                {
+                    "document_id": (
+                        str(cand.source_document_id)
+                        if cand.source_document_id is not None
+                        else None
+                    ),
+                    "filename": cand.source_filename,
+                    "chunk_index": None,
+                    "text": cand.summary,
+                    "match_spans": find_match_spans(cand.summary, terms),
+                    "section_heading": None,
+                    "page_number": None,
+                }
+            )
 
         for chunk in kept:
             # F103.c — surface the author when SearchService hydrated
@@ -364,11 +420,33 @@ class RagService:
             len(system_prompt),
         )
 
+        # F104.a — confidence is derived from the strongest signal
+        # available. Chunks rank chunk-level retrieval quality;
+        # candidate-summary hits carry distance from a different vector
+        # space (one-line summary vs. context+chunk). When both are
+        # present, prefer chunk distance for confidence (it's the
+        # better-calibrated signal); when only candidates are present,
+        # fall back to the top candidate's distance.
+        if kept:
+            confidence = _compute_confidence(kept)
+        elif candidates:
+            top_distance = candidates[0].distance
+            if top_distance <= settings.rag_confidence_high_max_distance:
+                confidence = "high"
+            elif top_distance <= settings.rag_confidence_medium_max_distance:
+                confidence = "medium"
+            else:
+                confidence = "low"
+        else:
+            # _build_context returned None earlier in this case; this
+            # branch is unreachable but keeps the type checker happy.
+            confidence = "low"
+
         return _RagContext(
             citations=citations,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            confidence=_compute_confidence(kept),
+            confidence=confidence,
             intent=intent_result.intent,
             intent_confidence=intent_result.confidence,
         )

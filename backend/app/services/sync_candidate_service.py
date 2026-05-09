@@ -21,17 +21,39 @@ from sqlalchemy.orm import Session
 
 from app.models import Candidate, Document, DocumentType
 from app.services.author_linkage_service import AuthorLinkageService
+from app.services.candidate_summary_service import CandidateSummaryService
 
 logger = logging.getLogger(__name__)
 
 
 class SyncCandidateService:
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        llm_call: object | None = None,
+        candidate_embedder: object | None = None,
+        candidate_store: object | None = None,
+    ) -> None:
         self._session = session
         # F103.c — owns the deferred-resolution path. When a candidate
         # is created or its email changes, scan unlinked docs that
         # already mention this email and backfill the FK.
         self._author_linkage = AuthorLinkageService(session)
+        # F104.a — when present, generate a one-line recruiter brief
+        # and stamp it on the candidate row at creation/update time.
+        # ``None`` keeps the legacy/test path working when the LLM
+        # provider isn't wired (e.g., unit tests). The embedder + store
+        # are also optional — when set, the summary text is also
+        # indexed in the candidate-similarity Chroma collection.
+        self._summary: CandidateSummaryService | None = None
+        if llm_call is not None:
+            self._summary = CandidateSummaryService(
+                session,
+                llm_call,  # type: ignore[arg-type]
+                embedder=candidate_embedder,  # type: ignore[arg-type]
+                store=candidate_store,  # type: ignore[arg-type]
+            )
 
     def handle_document_ready(self, document: Document) -> None:
         """Callback hook invoked by ``ExtractionService`` after a document
@@ -101,6 +123,14 @@ class SyncCandidateService:
             # and a no-op scan is wasted work.
             if email_changed:
                 self._author_linkage.backfill_for_candidate(existing)
+            # F104.a — refresh the summary on each resume update so the
+            # one-liner reflects the latest skills / education / years.
+            # Worker swallows LLM failures internally; safe to call
+            # unconditionally.
+            if self._summary is not None:
+                self._summary.generate_for(
+                    existing, resume_text=document.extracted_text
+                )
             return existing
 
         candidate = Candidate(
@@ -122,6 +152,10 @@ class SyncCandidateService:
         # F103.c — fresh candidate may unlock prior portfolio docs
         # uploaded before this candidate's resume.
         self._author_linkage.backfill_for_candidate(candidate)
+        # F104.a — generate the recruiter brief now that the candidate
+        # row is stable. Worker swallows LLM failures internally.
+        if self._summary is not None:
+            self._summary.generate_for(candidate, resume_text=document.extracted_text)
         return candidate
 
 

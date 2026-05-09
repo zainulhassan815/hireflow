@@ -34,11 +34,12 @@ def _normalised(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def test_prompt_version_is_v4() -> None:
-    """F103.e bumped v3 → v4. Literal pin so a developer rebasing an
-    older v3 onto a v4 main and forgetting to renumber trips the
-    assert rather than silently shipping a regression."""
-    assert PROMPT_VERSION == "v4"
+def test_prompt_version_is_v5() -> None:
+    """F104.a bumped v4 → v5 to record the new candidate-anchor
+    naming bullet. Literal pin so a developer rebasing an older
+    revision and forgetting to renumber trips the assert rather
+    than silently shipping a regression."""
+    assert PROMPT_VERSION == "v5"
 
 
 def test_format_rules_cover_every_intent() -> None:
@@ -218,3 +219,16 @@ def test_citation_rule_keeps_one_per_claim_contract() -> None:
     per bracket. Stacking like ``[a.pdf, b.pdf]`` is still forbidden."""
     rules = _normalised(EVIDENCE_RULES)
     assert "do not stack filenames" in rules.lower()
+
+
+def test_naming_rule_anchors_on_candidate_block_for_who_questions() -> None:
+    """F104.a — the new bullet under rule 3 tells the LLM to anchor
+    on a ``Candidate:`` block when present **and** the question is
+    who/which-person-shaped. The non-person guard is load-bearing
+    (without it the LLM over-anchors on candidates for tech-stack
+    questions)."""
+    rules = _normalised(EVIDENCE_RULES)
+    assert '"Candidate:" block appears' in rules
+    assert "the question concerns who or which person" in rules
+    # Non-person guard.
+    assert "non-person-shaped questions" in rules

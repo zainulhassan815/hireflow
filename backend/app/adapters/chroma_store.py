@@ -20,13 +20,23 @@ from typing import Any
 
 import chromadb
 
-from app.adapters.protocols import EmbeddingProvider, SimilarDocumentHit, VectorHit
+from app.adapters.protocols import (
+    CandidateSummaryHit,
+    EmbeddingProvider,
+    SimilarDocumentHit,
+    VectorHit,
+)
 from app.domain.exceptions import DocumentNotIndexed
 
 logger = logging.getLogger(__name__)
 
 _COLLECTION_PREFIX = "documents"
 _WHOLE_COLLECTION_PREFIX = "documents_whole"
+# F104.a — third collection: one vector per candidate, keyed by
+# candidate_id, embedding text = the recruiter-brief summary.
+# Separate from the document collections so candidate retrieval
+# never accidentally surfaces a chunk and vice versa.
+_CANDIDATES_COLLECTION_PREFIX = "candidates"
 
 
 def _safe_collection_suffix(model_name: str) -> str:
@@ -80,6 +90,21 @@ class ChromaVectorStore:
             },
         )
 
+        # F104.a: third, separate collection holds one vector per
+        # candidate. Embedding text is the recruiter-brief summary.
+        # Same isolation rationale as the whole-doc collection — chunk
+        # queries never surface candidate rows and vice versa.
+        self._candidates_collection_name = (
+            f"{_CANDIDATES_COLLECTION_PREFIX}_{model_slug}"
+        )
+        self._candidates_collection = self._client.get_or_create_collection(
+            name=self._candidates_collection_name,
+            metadata={
+                "hnsw:space": "cosine",
+                "embedding_model": embedder.model_name,
+            },
+        )
+
         self._log_startup_integrity()
 
     @property
@@ -89,6 +114,10 @@ class ChromaVectorStore:
     @property
     def whole_collection_name(self) -> str:
         return self._whole_collection_name
+
+    @property
+    def candidates_collection_name(self) -> str:
+        return self._candidates_collection_name
 
     @property
     def embedder(self) -> EmbeddingProvider:
@@ -339,6 +368,86 @@ class ChromaVectorStore:
             hits.append(
                 SimilarDocumentHit(
                     document_id=doc_id,
+                    distance=distance,
+                    metadata=metadata or {},
+                )
+            )
+        return hits
+
+    # ---- CandidateSimilarityStore (F104.a) ---------------------------------
+
+    def upsert_candidate_summary(
+        self,
+        candidate_id: str,
+        summary: str,
+        embedding: list[float],
+        metadata: dict[str, Any],
+    ) -> None:
+        """Replace the vector + summary text for ``candidate_id``.
+
+        Stores the summary text as the Chroma "document" field so a
+        retrieval hit carries the human-readable summary alongside the
+        vector. Owner scoping happens via the metadata ``where`` filter
+        on query.
+        """
+        enriched = {**metadata, "candidate_id": candidate_id}
+        self._candidates_collection.upsert(
+            ids=[candidate_id],
+            documents=[summary],
+            embeddings=[embedding],
+            metadatas=[enriched],
+        )
+
+    def delete_candidate_summary(self, candidate_id: str) -> None:
+        """Remove the vector for ``candidate_id`` (no-op if absent)."""
+        try:
+            self._candidates_collection.delete(ids=[candidate_id])
+        except Exception:
+            logger.warning(
+                "failed to delete candidate vector for %s",
+                candidate_id,
+                exc_info=True,
+            )
+
+    def query_candidate_summaries(
+        self,
+        query_text: str,
+        n_results: int = 5,
+        where: dict[str, Any] | None = None,
+    ) -> list[CandidateSummaryHit]:
+        """Top-N candidate summaries for a query.
+
+        Embeds the query via the same ``EmbeddingProvider`` used for
+        chunks + whole-doc. Same vector space → distances are
+        comparable across the three collections (though F104.a uses a
+        per-lane distance cutoff because the *content* shape differs
+        between summaries and chunks).
+        """
+        query_embedding = self._embedder.embed_query(query_text)
+
+        kwargs: dict[str, Any] = {
+            "query_embeddings": [query_embedding],
+            "n_results": n_results,
+        }
+        if where:
+            kwargs["where"] = where
+
+        results = self._candidates_collection.query(**kwargs)
+        if not results["ids"] or not results["ids"][0]:
+            return []
+
+        hits: list[CandidateSummaryHit] = []
+        for cand_id, summary, metadata, distance in zip(
+            results["ids"][0],
+            results["documents"][0],
+            results["metadatas"][0],
+            results["distances"][0],
+            strict=True,
+        ):
+            hits.append(
+                CandidateSummaryHit(
+                    candidate_id=cand_id,
+                    summary=summary or "",
                     distance=distance,
                     metadata=metadata or {},
                 )
