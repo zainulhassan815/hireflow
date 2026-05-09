@@ -128,11 +128,20 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     owner: Mapped[User] = relationship(lazy="selectin")
+    # ``post_update=True`` breaks the deliberate FK cycle with
+    # ``Candidate.source_document_id`` at flush time. Without it, a
+    # transaction that touches both edges (e.g. F103.d's name backfill,
+    # which updates a Candidate row whose source_document_id points at
+    # this doc, then sets this doc's authored_by_id pointing back) hits
+    # a "Circular dependency detected" PendingRollbackError. The
+    # ``post_update`` semantic tells SA to issue the FK update as a
+    # separate UPDATE after both rows commit, sidestepping the cycle.
     authored_by: Mapped[Candidate | None] = relationship(
         "Candidate",
         foreign_keys=[authored_by_id],
         back_populates="authored_documents",
         lazy="selectin",
+        post_update=True,
     )
 
     elements: Mapped[list[DocumentElement]] = relationship(

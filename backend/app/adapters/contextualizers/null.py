@@ -16,12 +16,21 @@ if TYPE_CHECKING:
     from app.services.chunking import Chunk
 
 
+# F103.d — distinct stamp value so callers can tell "never
+# contextualized" (this) apart from "contextualized with v1/v2 prompt".
+_NULL_CONTEXTUALIZATION_VERSION = "null"
+
+
 class NullChunkContextualizer:
-    """No-op. Returns chunks unchanged."""
+    """No-op. Returns chunks unchanged but stamps the version key."""
 
     @property
     def model_name(self) -> str:
         return "none"
 
     def contextualize(self, document: Document, chunks: list[Chunk]) -> list[Chunk]:
+        document.metadata_ = {
+            **(document.metadata_ or {}),
+            "contextualization_version": _NULL_CONTEXTUALIZATION_VERSION,
+        }
         return chunks

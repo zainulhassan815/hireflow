@@ -23,7 +23,7 @@ from app.adapters.protocols import (
 )
 from app.models import Document, DocumentElement, DocumentStatus, DocumentType
 from app.services.chunking import CHUNKING_VERSION, chunk_elements
-from app.services.embedding_service import EmbeddingService
+from app.services.embedding_service import EmbeddingService, elements_from_orm
 
 logger = logging.getLogger(__name__)
 
@@ -148,19 +148,11 @@ class ExtractionService:
         if self._embedding is None:
             return
         try:
-            # Pass the fresh element objects rather than reloading them
-            # from the session — we haven't committed yet and eager-
-            # loading would round-trip unnecessarily.
-            elements = [
-                Element(
-                    kind=row.kind,
-                    text=row.text,
-                    page_number=row.page_number,
-                    order=row.order_index,
-                    metadata=row.metadata_ or {},
-                )
-                for row in sorted(doc.elements, key=lambda r: r.order_index)
-            ]
+            # Pass the fresh element objects rather than reloading from the
+            # session — we haven't committed yet and eager-loading would
+            # round-trip unnecessarily. ``elements_from_orm`` is shared
+            # with the reindex script so the conversion lives in one place.
+            elements = elements_from_orm(doc.elements)
             chunks = chunk_elements(elements)
             if self._contextualizer is not None:
                 chunks = self._contextualizer.contextualize(doc, chunks)

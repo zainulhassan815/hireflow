@@ -1187,7 +1187,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     set from extraction metadata. With the link, RAG context can
     include "this document was authored by {candidate}" so Claude
     attributes project work to the right person natively.
-  - [ ] **F103.d** Entity-aware contextualizer prompt: rewrite the
+  - [x] **F103.d** Entity-aware contextualizer prompt: rewrite the
     `ChunkContextualizer` prompt so the per-chunk summary preserves
     authorship and first-person language. Current summaries turn
     *"I built a Stripe integration"* into *"the API server was built

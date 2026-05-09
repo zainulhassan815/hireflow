@@ -65,10 +65,18 @@ class Candidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     experience_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
     education: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
 
+    # ``post_update=True`` mirrors the same flag on the reverse edge
+    # (``Document.authored_by``). The ``source_document_id`` →
+    # ``Document.id`` direction is the original F41 link; pairing both
+    # sides with post_update makes SA defer the FK writes to a
+    # separate UPDATE statement after both rows commit, which is the
+    # only reliable way to flush a transaction that touches both
+    # cycle directions in one session.
     source_document: Mapped[Document | None] = relationship(
         "Document",
         foreign_keys=[source_document_id],
         lazy="selectin",
+        post_update=True,
     )
     owner: Mapped[User] = relationship(lazy="selectin")
     applications: Mapped[list[Application]] = relationship(

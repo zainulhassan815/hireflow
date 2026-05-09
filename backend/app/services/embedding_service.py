@@ -9,6 +9,7 @@ store. Callers are the Celery extraction pipeline and the
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from typing import Any
 
 from app.adapters.protocols import (
@@ -17,7 +18,7 @@ from app.adapters.protocols import (
     EmbeddingProvider,
     VectorStore,
 )
-from app.models import Document
+from app.models import Document, DocumentElement
 from app.services.chunking import CHUNKING_VERSION, Chunk, chunk_elements
 from app.services.document_vector import pool_document_embedding
 
@@ -110,11 +111,17 @@ class EmbeddingService:
         doc.embedding_model_version = self._embedder.model_name
 
         contextualized = sum(1 for c in resolved_chunks if c.context)
+        # F103.d — surface the contextualization version (stamped by the
+        # contextualizer onto ``doc.metadata_``) so the post-index log is
+        # grep-able by prompt generation.
+        context_version = (doc.metadata_ or {}).get("contextualization_version", "∅")
         logger.info(
-            "indexed document %s (%d chunks, %d contextualized, chunking=%s)",
+            "indexed document %s (%d chunks, %d contextualized, "
+            "context_version=%s, chunking=%s)",
             doc.id,
             len(resolved_chunks),
             contextualized,
+            context_version,
             CHUNKING_VERSION,
         )
 
@@ -181,10 +188,15 @@ def _text_for_embedding(chunk: Chunk) -> str:
     return chunk.text
 
 
-def _load_elements(doc: Document) -> list[Element]:
-    """Load elements from the ORM relationship and convert to Element dataclass."""
-    if not doc.elements:
-        return []
+def elements_from_orm(rows: Iterable[DocumentElement]) -> list[Element]:
+    """Convert persisted ``DocumentElement`` rows to ``Element`` dataclasses.
+
+    Used by the extraction pipeline (post-extract, pre-flush) and by
+    ``scripts/reindex_embeddings.py`` (loading committed rows). Sorts
+    by ``order_index`` defensively — the relationship declares
+    ``order_by`` but a freshly-cleared collection in the same
+    transaction may not be ordered until flush.
+    """
     return [
         Element(
             kind=row.kind,
@@ -193,5 +205,12 @@ def _load_elements(doc: Document) -> list[Element]:
             order=row.order_index,
             metadata=row.metadata_ or {},
         )
-        for row in doc.elements
+        for row in sorted(rows, key=lambda r: r.order_index)
     ]
+
+
+def _load_elements(doc: Document) -> list[Element]:
+    """Load elements from the ORM relationship and convert."""
+    if not doc.elements:
+        return []
+    return elements_from_orm(doc.elements)

@@ -1,26 +1,42 @@
-"""F82.c: LlmChunkContextualizer unit tests.
+"""F82.c + F103.d — LlmChunkContextualizer unit tests.
 
-Uses a mock ``LlmProvider`` so these tests are fast and offline.
+Uses a hand-rolled stub ``LlmProvider`` and a typed-attribute
+fake ``Document`` so the contextualizer reads real strings rather
+than MagicMock children. Covers:
+
+- F82.c modes (summary / full_doc / auto), failure handling, edge
+  cases.
+- F103.d entity-aware prompt rendering: author + tech slots,
+  fallback ordering, skills truncation, system-prompt instructions.
+- F103.d version stamp on success path; null contextualizer's
+  distinct stamp value.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
-from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
-from app.adapters.contextualizers.llm import LlmChunkContextualizer
+from app.adapters.contextualizers.llm import (
+    CONTEXTUALIZATION_VERSION,
+    LlmChunkContextualizer,
+    _resolve_author,
+    _resolve_tech_clause,
+)
 from app.adapters.contextualizers.null import NullChunkContextualizer
 from app.services.chunking import Chunk
+
+# ---------- fakes ----------
 
 
 class _RecordingLlm:
     """Records every call; returns canned per-call strings."""
 
-    def __init__(self, responses: list[str]) -> None:
-        self._responses = responses
+    def __init__(self, responses: list[str] | None = None) -> None:
+        self._responses = responses or []
         self.calls: list[tuple[str, str]] = []
 
     def complete(self, system: str, user: str) -> str:
@@ -50,12 +66,35 @@ class _FailingLlm:
         return "failing-llm"
 
 
-def _doc(*, filename: str = "doc.pdf", body: str = "doc body") -> Any:
-    doc = MagicMock()
-    doc.id = uuid4()
-    doc.filename = filename
-    doc.extracted_text = body
-    return doc
+@dataclass
+class _FakeCandidate:
+    name: str | None
+
+
+class _FakeDocument:
+    """Typed-attribute Document stand-in. Production ``Document``
+    instances trigger SA's machinery; the contextualizer only reads
+    attributes, so a plain class is enough."""
+
+    def __init__(
+        self,
+        *,
+        filename: str = "doc.pdf",
+        body: str = "doc body",
+        metadata: dict[str, Any] | None = None,
+        authored_by: _FakeCandidate | None = None,
+    ) -> None:
+        self.id = uuid4()
+        self.filename = filename
+        self.extracted_text = body
+        self.metadata_: dict[str, Any] | None = (
+            None if metadata is None else dict(metadata)
+        )
+        self.authored_by = authored_by
+
+
+def _doc(*, filename: str = "doc.pdf", body: str = "doc body") -> _FakeDocument:
+    return _FakeDocument(filename=filename, body=body)
 
 
 def _chunk(text: str, idx: int) -> Chunk:
@@ -231,11 +270,186 @@ def test_model_name_delegates_to_llm() -> None:
     assert ctx.model_name == "test-llm"
 
 
+# ---------- F103.d: author resolution ----------
+
+
+def test_author_uses_authored_by_when_present() -> None:
+    doc = _FakeDocument(authored_by=_FakeCandidate(name="Alice Ng"))
+    assert _resolve_author(doc) == "Alice Ng"
+
+
+def test_author_falls_back_to_metadata_name(caplog) -> None:
+    doc = _FakeDocument(metadata={"name": "Bob Smith"})
+    with caplog.at_level("INFO", logger="app.adapters.contextualizers.llm"):
+        assert _resolve_author(doc) == "Bob Smith"
+    assert any("metadata.name fallback" in r.message for r in caplog.records)
+
+
+def test_author_unknown_when_neither_source(caplog) -> None:
+    doc = _FakeDocument(metadata=None, authored_by=None)
+    with caplog.at_level("INFO", logger="app.adapters.contextualizers.llm"):
+        assert _resolve_author(doc) == "unknown"
+    # No fallback log when there's nothing to fall back to.
+    assert not any("metadata.name fallback" in r.message for r in caplog.records)
+
+
+def test_author_prefers_authored_by_over_metadata() -> None:
+    """Linked candidate name beats metadata copy — single source of truth."""
+    doc = _FakeDocument(
+        authored_by=_FakeCandidate(name="Alice Linked"),
+        metadata={"name": "Alice Stale"},
+    )
+    assert _resolve_author(doc) == "Alice Linked"
+
+
+def test_author_skips_authored_by_with_null_name() -> None:
+    """``authored_by`` row with ``name=None`` falls through to
+    metadata fallback rather than rendering 'None'."""
+    doc = _FakeDocument(
+        authored_by=_FakeCandidate(name=None),
+        metadata={"name": "From Metadata"},
+    )
+    assert _resolve_author(doc) == "From Metadata"
+
+
+# ---------- F103.d: tech clause ----------
+
+
+def test_tech_clause_renders_sorted_skills() -> None:
+    doc = _FakeDocument(metadata={"skills": ["stripe", "fastapi", "postgres"]})
+    assert _resolve_tech_clause(doc) == "fastapi, postgres, stripe"
+
+
+def test_tech_clause_empty_when_no_skills() -> None:
+    doc = _FakeDocument(metadata={"skills": []})
+    assert _resolve_tech_clause(doc) == "(none extracted)"
+
+
+def test_tech_clause_truncates_with_explicit_count() -> None:
+    skills = [f"skill_{i:03d}" for i in range(60)]
+    doc = _FakeDocument(metadata={"skills": skills})
+    clause = _resolve_tech_clause(doc)
+    assert "…and 10 more" in clause
+
+
+# ---------- F103.d: prompt rendering ----------
+
+
+def test_summary_prompt_has_author_and_tech_slots() -> None:
+    llm = _RecordingLlm(responses=["SUMMARY", "CTX"])
+    ctx = LlmChunkContextualizer(llm, mode="summary")
+    doc = _FakeDocument(
+        body="a" * 500,
+        authored_by=_FakeCandidate(name="Alice Ng"),
+        metadata={"skills": ["stripe", "fastapi"]},
+    )
+
+    ctx.contextualize(doc, [_chunk("c", 0)])
+
+    # First call is the doc-level summary; second is the per-chunk
+    # situate. Both should carry the same author + tech clauses.
+    summary_user, situate_user = llm.calls[0][1], llm.calls[1][1]
+    assert "Author: Alice Ng" in summary_user
+    assert "Technologies mentioned in this document: fastapi, stripe" in summary_user
+    assert "Author: Alice Ng" in situate_user
+    assert "Technologies mentioned in this document: fastapi, stripe" in situate_user
+
+
+def test_unknown_author_renders_as_unknown_clause() -> None:
+    llm = _RecordingLlm(responses=["CTX"])
+    ctx = LlmChunkContextualizer(llm, mode="full_doc")
+    doc = _FakeDocument(body="x", metadata={"skills": []})
+
+    ctx.contextualize(doc, [_chunk("c", 0)])
+
+    user_prompt = llm.calls[0][1]
+    assert "Author: unknown" in user_prompt
+    assert "Technologies mentioned in this document: (none extracted)" in user_prompt
+
+
+def test_situate_system_prompt_instructs_preserve_agency() -> None:
+    """String-content assertion. We don't have a way to test LLM
+    output for actual agency preservation without a real eval; this
+    is honest about scope — we're verifying the prompt instructs the
+    right thing."""
+    llm = _RecordingLlm(responses=["CTX"])
+    ctx = LlmChunkContextualizer(llm, mode="full_doc")
+
+    ctx.contextualize(_FakeDocument(body="x"), [_chunk("c", 0)])
+
+    assert "Preserve agency" in llm.calls[0][0]
+
+
+def test_summarizer_system_prompt_instructs_preserve_agency() -> None:
+    llm = _RecordingLlm(responses=["SUMMARY", "CTX"])
+    ctx = LlmChunkContextualizer(llm, mode="summary")
+
+    ctx.contextualize(_FakeDocument(body="b" * 500), [_chunk("c", 0)])
+
+    # Summary call is index 0.
+    assert "Preserve agency" in llm.calls[0][0]
+
+
+# ---------- F103.d: version stamp ----------
+
+
+def test_contextualize_stamps_version_on_metadata() -> None:
+    llm = _RecordingLlm(responses=["CTX"])
+    ctx = LlmChunkContextualizer(llm, mode="full_doc")
+    doc = _FakeDocument(body="x")
+
+    ctx.contextualize(doc, [_chunk("c", 0)])
+
+    assert doc.metadata_ is not None
+    assert (
+        doc.metadata_.get("contextualization_version")
+        == CONTEXTUALIZATION_VERSION
+        == "v2-haiku-entity-aware"
+    )
+
+
+def test_stamp_preserves_other_metadata_keys() -> None:
+    llm = _RecordingLlm(responses=["CTX"])
+    ctx = LlmChunkContextualizer(llm, mode="full_doc")
+    doc = _FakeDocument(
+        body="x",
+        metadata={"skills": ["stripe"], "skill_extraction_version": "v1-narrative"},
+    )
+
+    ctx.contextualize(doc, [_chunk("c", 0)])
+
+    assert doc.metadata_["skills"] == ["stripe"]
+    assert doc.metadata_["skill_extraction_version"] == "v1-narrative"
+    assert doc.metadata_["contextualization_version"] == "v2-haiku-entity-aware"
+
+
+def test_stamp_skipped_when_chunks_empty() -> None:
+    """No chunks means nothing was contextualized — don't lie about
+    the version."""
+    llm = _RecordingLlm(responses=[])
+    ctx = LlmChunkContextualizer(llm, mode="full_doc")
+    doc = _FakeDocument(body="x")
+
+    ctx.contextualize(doc, [])
+
+    assert (doc.metadata_ or {}).get("contextualization_version") is None
+
+
 # ---------- NullChunkContextualizer ----------
 
 
-def test_null_contextualizer_passthrough() -> None:
-    ctx = NullChunkContextualizer()
+def test_null_contextualizer_passthrough_and_stamps_distinct_version() -> None:
+    """``null`` stamp lets future targeted re-embed distinguish 'never
+    contextualized' from 'contextualized with v1/v2 prompt'."""
+    null_ctx = NullChunkContextualizer()
+    doc = _FakeDocument(metadata={"skills": ["stripe"]})
+
     chunks = [_chunk("a", 0), _chunk("b", 1)]
-    assert ctx.contextualize(_doc(), chunks) == chunks
-    assert ctx.model_name == "none"
+    out = null_ctx.contextualize(doc, chunks)
+
+    assert out is chunks  # null is a no-op for chunks
+    assert null_ctx.model_name == "none"
+    assert doc.metadata_ is not None
+    assert doc.metadata_.get("contextualization_version") == "null"
+    # Pre-existing keys preserved.
+    assert doc.metadata_.get("skills") == ["stripe"]
