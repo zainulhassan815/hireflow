@@ -1,0 +1,50 @@
+[
+  {
+    "name": "stripe-in-narrative",
+    "filename": "alex_chen_resume.pdf",
+    "text": "Alex Chen — Senior Software Engineer\nalex@example.com | +1 555-0100\n\nPROFESSIONAL SUMMARY\nBackend engineer with 8 years building payment infrastructure and data platforms.\n\nEXPERIENCE\nSenior Engineer, Acme Co (2021-present)\n- Built a Stripe checkout integration handling $2M/mo in transactions\n- Migrated the data warehouse from Redshift to Snowflake; cut nightly batch by 40%\n- Owned the FastAPI service powering the customer portal\n- Operated Postgres replicas and tuned the Redis cache layer\n\nEDUCATION\nBachelor's in Computer Science, State University (2014)",
+    "expected_skills": ["stripe", "snowflake", "redshift", "fastapi", "postgres", "redis"]
+  },
+  {
+    "name": "frontend-narrative-no-skills-section",
+    "filename": "priya_patel_resume.pdf",
+    "text": "Priya Patel — Frontend Engineer\npriya.patel@example.com\n\nEXPERIENCE\nLead Frontend Engineer, Beam Co (2019-present)\n- Migrated a legacy Angular 1 app to React with TypeScript over 18 months\n- Set up the design system using Tailwind CSS and Storybook\n- Built the marketing site on Next.js with server-side rendering for SEO\n- Wrote E2E tests with Playwright across the checkout flow\n\nEDUCATION\nMaster's in HCI, University of Toronto",
+    "expected_skills": ["angular", "react", "typescript", "tailwind", "next.js"]
+  },
+  {
+    "name": "infra-narrative",
+    "filename": "marcus_kim_resume.pdf",
+    "text": "Marcus Kim\nmarcus.kim@example.com\n\nWORK EXPERIENCE\nStaff DevOps Engineer, Cloudly (2020-2024)\n- Operated 200+ Kubernetes clusters across AWS and GCP\n- Built CI/CD pipelines on GitHub Actions; replaced Jenkins for 80% of services\n- Infrastructure as code with Terraform; configuration with Ansible\n- Brokered messages with Kafka and orchestrated workflows in Airflow\n\nCERTIFICATIONS\nCKA (Certified Kubernetes Administrator)",
+    "expected_skills": ["kubernetes", "aws", "gcp", "github actions", "jenkins", "terraform", "ansible", "kafka", "airflow"]
+  },
+  {
+    "name": "ml-narrative",
+    "filename": "dana_lee_resume.pdf",
+    "text": "Dana Lee — ML Engineer\ndana.lee@example.com | github.com/danalee\n\nPROFESSIONAL SUMMARY\nML engineer with a PhD in Computer Vision and 5 years productionizing deep learning models.\n\nEXPERIENCE\nSenior ML Engineer, Visionary Labs (2022-present)\n- Trained and deployed PyTorch models for object detection at video scale\n- Built feature pipelines with Pandas and NumPy; orchestrated training on Airflow\n- Migrated legacy TensorFlow code to PyTorch for the next-gen model family\n- Collaborated with NLP team on a multimodal embedding model",
+    "expected_skills": ["pytorch", "pandas", "numpy", "airflow", "tensorflow", "nlp", "computer vision", "deep learning"]
+  },
+  {
+    "name": "explicit-skills-section-regression",
+    "filename": "jordan_park_resume.pdf",
+    "text": "Jordan Park\njordan@example.com\n\nSKILLS\nPython, Django, PostgreSQL, Docker, Kubernetes, AWS\n\nEXPERIENCE\nSoftware Engineer, Helix (2020-present)\n- Backend services in Python and Django\n- Postgres for primary data, deployed on AWS via Docker / Kubernetes\n\nEDUCATION\nB.S. in Computer Science",
+    "expected_skills": ["python", "django", "postgresql", "docker", "kubernetes", "aws"]
+  },
+  {
+    "name": "mixed-narrative-and-skills",
+    "filename": "sam_wright_resume.pdf",
+    "text": "Sam Wright — Full-Stack Engineer\nsam.wright@example.com\n\nSKILLS\nGo, React, Postgres\n\nEXPERIENCE\nSenior Engineer, Conduit (2021-present)\n- Built the realtime sync layer with Go and Redis pub/sub\n- Frontend in React with Tailwind CSS\n- Stripe billing integration with webhooks and idempotency keys\n- Caching layer on Redis with cache-aside pattern\n\nEDUCATION\nBachelor's in Software Engineering",
+    "expected_skills": ["react", "postgres", "redis", "tailwind", "stripe"]
+  },
+  {
+    "name": "special-char-skills",
+    "filename": "leo_nakamura_resume.pdf",
+    "text": "Leo Nakamura\nleo@example.com\n\nWORK EXPERIENCE\nSoftware Engineer, Quantra Labs (2019-2024)\n- Backend services in C++ and Rust\n- Built developer tools in C# and .NET 8\n- Server-side rendering with Node.js and Next.js\n- Real-time graphics using OpenGL bindings",
+    "expected_skills": ["c++", "rust", "c#", ".net", "node.js", "next.js"]
+  },
+  {
+    "name": "data-engineering-narrative",
+    "filename": "rosa_diaz_resume.pdf",
+    "text": "Rosa Diaz — Data Engineer\nrosa@example.com\n\nPROFESSIONAL SUMMARY\nData engineer with 6 years of experience building analytics platforms.\n\nEXPERIENCE\nSenior Data Engineer, Mosaic (2020-present)\n- Built ELT pipelines from Postgres into Snowflake using Airflow\n- Stream processing with Kafka and Spark Structured Streaming\n- BigQuery ad-hoc analytics for the growth team\n- Replaced legacy Redshift warehouse with Snowflake; 10x query speedup",
+    "expected_skills": ["postgres", "snowflake", "airflow", "kafka", "bigquery", "redshift"]
+  }
+]

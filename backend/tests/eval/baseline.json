@@ -2,7 +2,7 @@
   "overall": {
     "p@5": 0.2522,
     "r@5": 1.0,
-    "mrr": 0.8587
+    "mrr": 0.7898
   },
   "cases": [
     {
@@ -15,8 +15,8 @@
       "returned": [
         "resume_python_senior",
         "letter_cover_jane",
-        "resume_devops",
         "resume_javascript_junior",
+        "resume_devops",
         "resume_data_scientist"
       ],
       "p@5": 0.4,
@@ -63,13 +63,13 @@
         "resume_data_scientist"
       ],
       "returned": [
-        "resume_data_scientist",
         "resume_devops",
-        "letter_cover_jane"
+        "letter_cover_jane",
+        "resume_data_scientist"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
-      "mrr": 1.0,
+      "mrr": 0.333,
       "must_not_contain_violation": [],
       "notes": ""
     },
@@ -80,12 +80,12 @@
         "resume_python_senior"
       ],
       "returned": [
-        "resume_python_senior",
-        "letter_cover_jane"
+        "letter_cover_jane",
+        "resume_python_senior"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
-      "mrr": 1.0,
+      "mrr": 0.5,
       "must_not_contain_violation": [],
       "notes": "seniority implied"
     },
@@ -164,13 +164,13 @@
         "resume_python_senior"
       ],
       "returned": [
-        "resume_python_senior",
         "letter_cover_jane",
+        "resume_python_senior",
         "resume_devops"
       ],
       "p@5": 0.4,
       "r@5": 1.0,
-      "mrr": 1.0,
+      "mrr": 0.5,
       "must_not_contain_violation": [],
       "notes": "semantic + skill filter"
     },
@@ -331,14 +331,14 @@
         "resume_data_scientist"
       ],
       "returned": [
-        "letter_cover_jane",
-        "resume_python_senior",
         "resume_devops",
-        "resume_data_scientist"
+        "resume_python_senior",
+        "resume_data_scientist",
+        "letter_cover_jane"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
-      "mrr": 0.25,
+      "mrr": 0.333,
       "must_not_contain_violation": [],
       "notes": "ml expands to 'machine learning'"
     },

@@ -60,6 +60,9 @@ eval-intent: services ## Run F81.g intent-classification accuracy eval
 eval-parser: ## Run F89.a query-parser accuracy eval
 	cd backend && $(TEST_ENV) uv run pytest tests/eval/test_query_parser_accuracy.py -xvs
 
+eval-skill-extraction: services ## Run F103.b LLM skill-extraction accuracy eval
+	cd backend && $(TEST_ENV) uv run pytest tests/eval/test_skill_extraction_accuracy.py -xvs
+
 stop: ## Stop Docker services
 	docker compose down
 

@@ -7,9 +7,13 @@ ambiguous cases (via CompositeClassifier's confidence threshold).
 
 from __future__ import annotations
 
+import logging
 import re
 
 from app.adapters.protocols import ClassificationResult
+from app.services.skill_matcher import extract_skills
+
+logger = logging.getLogger(__name__)
 
 _RESUME_KEYWORDS = frozenset(
     {
@@ -82,18 +86,6 @@ _CATEGORIES: list[tuple[str, frozenset[str]]] = [
     ("letter", _LETTER_KEYWORDS),
 ]
 
-_SKILL_PATTERN = re.compile(
-    r"\b(?:python|java|javascript|typescript|react|angular|vue|node\.?js|"
-    r"sql|postgresql|mysql|mongodb|redis|docker|kubernetes|aws|gcp|azure|"
-    r"git|linux|c\+\+|c#|go|rust|ruby|php|swift|kotlin|scala|r|matlab|"
-    r"tensorflow|pytorch|pandas|numpy|scikit-learn|spark|kafka|airflow|"
-    r"fastapi|django|flask|spring|\.net|graphql|rest|grpc|"
-    r"html|css|tailwind|sass|webpack|vite|figma|photoshop|"
-    r"agile|scrum|jira|ci/cd|devops|mlops|data.?science|"
-    r"machine.?learning|deep.?learning|nlp|computer.?vision)\b",
-    re.IGNORECASE,
-)
-
 _EXPERIENCE_PATTERN = re.compile(
     r"(\d{1,2})\+?\s*(?:years?|yrs?)\s*(?:of\s+)?(?:experience|exp\.?)",
     re.IGNORECASE,
@@ -151,9 +143,10 @@ class RuleBasedClassifier:
         if doc_type != "resume":
             return metadata
 
-        skills = sorted({m.group(0).lower() for m in _SKILL_PATTERN.finditer(text)})
+        skills = extract_skills(text)
         if skills:
             metadata["skills"] = skills
+            logger.info("skills extracted: %d tokens (source=rule-based)", len(skills))
 
         exp_match = _EXPERIENCE_PATTERN.search(text)
         if exp_match:

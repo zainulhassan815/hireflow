@@ -36,6 +36,23 @@ Analyze the provided text and return a JSON object with exactly these fields:
   }
 }
 
+Skill-extraction rule for resumes: extract `skills` from anywhere in
+the document — project descriptions, experience bullets, accomplishments —
+not only from a "Skills:" section. A technology mentioned in a project
+narrative ("Built a Stripe checkout integration", "Migrated to Snowflake")
+counts as a skill. Use lowercase canonical names (e.g., "stripe", "fastapi",
+"node.js"). De-duplicate.
+
+Example resume body and expected skills:
+
+  EXPERIENCE
+  Senior Engineer, Acme Co (2021-present)
+  - Built a Stripe checkout integration handling $2M/mo
+  - Migrated the data warehouse from Redshift to Snowflake
+  - Owned the FastAPI service powering the customer portal
+
+Expected: "skills": ["fastapi", "redshift", "snowflake", "stripe"]
+
 Return ONLY valid JSON, no markdown fences, no commentary."""
 
 
@@ -55,7 +72,15 @@ class LlmClassifier:
 
         try:
             response = self._llm_call(_SYSTEM_PROMPT, user_prompt)
-            return _parse_llm_response(response)
+            result = _parse_llm_response(response)
+            skills = (
+                result.metadata.get("skills")
+                if isinstance(result.metadata, dict)
+                else None
+            )
+            if isinstance(skills, list) and skills:
+                logger.info("skills extracted: %d tokens (source=llm)", len(skills))
+            return result
         except Exception:
             logger.exception("LLM classification failed, returning fallback")
             return ClassificationResult(

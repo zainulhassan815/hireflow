@@ -27,36 +27,12 @@ import re
 from datetime import UTC, datetime, timedelta
 
 from app.adapters.protocols import ParsedFilters, QueryIntent
-
-# ---------------------------------------------------------------------------
-# Skill matching with a non-alphanumeric boundary check
-# ---------------------------------------------------------------------------
-# ``\b`` regex word boundaries don't work for skills with special
-# characters (``c++``, ``.net``, ``node.js``). We need a custom check:
-# the match must be preceded and followed by either a non-alphanumeric
-# character or the string boundary. That handles all skills uniformly
-# and correctly — "c++" inside "abc++def" doesn't match, but "c++"
-# alone or surrounded by spaces/punctuation does.
-
-
-def _skill_match(text_lower: str, skill_lower: str) -> tuple[int, int] | None:
-    idx = 0
-    while True:
-        pos = text_lower.find(skill_lower, idx)
-        if pos == -1:
-            return None
-        left_ok = pos == 0 or not text_lower[pos - 1].isalnum()
-        end = pos + len(skill_lower)
-        right_ok = end == len(text_lower) or not text_lower[end].isalnum()
-        if left_ok and right_ok:
-            return (pos, end)
-        idx = pos + 1
+from app.services.skill_matcher import find_skill as _skill_match
 
 
 def _keyword_match(text_lower: str, keyword_lower: str) -> tuple[int, int] | None:
-    """Same boundary rule as ``_skill_match``; separate for clarity
-    since keyword matching has the same semantics but a different
-    caller."""
+    """Same boundary rule as ``_skill_match``; separate name for clarity
+    at the document-type / seniority call sites."""
     return _skill_match(text_lower, keyword_lower)
 
 

@@ -1038,7 +1038,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - Bundle analysis: lazy-load heavy pages (search, RAG chat)
   - Image optimization: proper formats, lazy loading
 
-- [ ] **F96 · Persistent conversations (ChatGPT-style)** — replaces today's
+- [ ] **F96 · Persistent conversations (ChatGPT-style)** — *deferred — revisit after F103.b / F92.2 land; not a major-feature priority right now.* Replaces today's
   in-memory chat state in `SearchPage` with proper multi-conversation chat:
   sidebar, history, URL-per-conversation, survives page reload. Compose
   with F81.f (prompt-injected memory) and F92.9 (UI sidebar) — F96 is the
@@ -1175,7 +1175,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     indirect evidence is described and cited rather than deflected.
     Reserve the sentinel for genuinely off-topic retrievals.
     PROMPT_VERSION bumped v2 → v3.
-  - [ ] **F103.b** Narrative skill extraction: extend the skill
+  - [x] **F103.b** Narrative skill extraction: extend the skill
     classifier to read technologies out of experience / project
     descriptions, not just explicit "Skills:" sections. Populates
     the parsed `skills` metadata so retrieval and scoring surface

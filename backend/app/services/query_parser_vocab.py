@@ -114,6 +114,11 @@ KNOWN_SKILLS: frozenset[str] = frozenset(
         "elasticsearch",
         "cassandra",
         "dynamodb",
+        "snowflake",
+        "redshift",
+        "bigquery",
+        # Payments / SaaS APIs.
+        "stripe",
         # Messaging / workflow.
         "kafka",
         "rabbitmq",
@@ -129,6 +134,16 @@ KNOWN_SKILLS: frozenset[str] = frozenset(
         "deep learning",
         "nlp",
         "computer vision",
+        "matlab",
+        # Web foundations + querying.
+        "html",
+        "css",
+        "sql",
+        "graphql",
+        # Tooling / design.
+        "jira",
+        "photoshop",
+        "figma",
     }
 )
 
