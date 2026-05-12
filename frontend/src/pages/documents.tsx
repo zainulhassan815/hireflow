@@ -1,5 +1,10 @@
 import * as React from "react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+  useMutation,
+} from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
   CloudUploadIcon,
@@ -129,9 +134,19 @@ export function DocumentsPage() {
     });
   }, [queryClient, listOptions.queryKey]);
 
-  const { data: documents = [], isLoading } = useQuery({
+  const {
+    data: documents = [],
+    isLoading,
+    isFetching,
+    isPlaceholderData,
+  } = useQuery({
     ...listOptions,
     select: (data) => data ?? [],
+    // Filter changes mutate the query key, so a fresh fetch starts.
+    // Keep the previous page mounted instead of unmounting into the
+    // skeleton — otherwise the filter bar, header, and table all
+    // remount and steal focus from the filter being edited.
+    placeholderData: keepPreviousData,
     // F91 — live status polling. While any doc is pending/processing,
     // refetch every 3s so the table updates without a manual refresh.
     refetchInterval: (q) => {
@@ -142,6 +157,11 @@ export function DocumentsPage() {
       return anyProcessing ? 3000 : false;
     },
   });
+
+  // True only while a filter-change refetch is in flight (previous
+  // data still on screen). Drives a subtle inline indicator instead
+  // of a full skeleton swap.
+  const isRefetchingFilters = isFetching && isPlaceholderData;
 
   const deleteMut = useMutation({
     mutationFn: (doc: DocumentResponse) =>
@@ -406,6 +426,9 @@ export function DocumentsPage() {
             <span className="text-destructive tabular-nums">
               · {stats.failed} failed
             </span>
+          )}
+          {isRefetchingFilters && (
+            <span className="text-muted-foreground/70">· Updating…</span>
           )}
         </div>
       </div>
