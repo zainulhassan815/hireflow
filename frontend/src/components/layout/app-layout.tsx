@@ -32,7 +32,7 @@ export function AppLayout() {
           whole page body. Overriding min-width to 0 lets flex-1
           actually constrain the main area; `overflow-auto` scopes
           the scroll inside the main region. */}
-      <SidebarInset className="min-w-0 overflow-auto p-6">
+      <SidebarInset className="h-dvh min-w-0 overflow-auto p-6">
         <Outlet />
       </SidebarInset>
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
