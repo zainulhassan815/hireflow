@@ -249,7 +249,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
   Greenhouse, Notion) to get a clean triage surface that doesn't
   overwhelm. Reordered items below match the intended ship sequence
   — (1) kills the loudest visual noise, (6) unlocks daily velocity.
-  - [ ] **F44.d.1** Filter rework. Replace native range slider with
+  - [x] **F44.d.1** Filter rework. Replace native range slider with
     four tier buttons (`All / ≥60% / ≥75% / ≥90%`) — matches the way
     HR actually thinks about match quality and the color bands
     already used on the score bar. Status pills collapse into a
@@ -258,7 +258,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
     as removable chips below the search bar (Linear / GitHub
     pattern). Single compact row: `[search] [filter popover]
     [view toggle]`.
-  - [ ] **F44.d.2** Row density + always-visible actions. Compact
+  - [x] **F44.d.2** Row density + always-visible actions. Compact
     rows: name primary, email muted inline (not below), 3 skill
     chips + overflow count, smaller match bar (96px), status
     shown via dot + label. Shortlist/Reject/Undo buttons stay
@@ -266,7 +266,7 @@ Wire existing frontend pages to the real backend API. All pages must follow
     first-time users and doesn't exist on touch. Drop the
     "Updated" column; move relative time to a hover tooltip on
     the name. Zero-score bar reads as 0% (drop the 2% floor).
-  - [ ] **F44.d.3** Header overflow menu + view toggle.
+  - [x] **F44.d.3** Header overflow menu + view toggle.
     Refresh scores stays primary. Edit + Delete collapse into a
     `···` overflow dropdown. Segmented `[List | Kanban]` control
     top-right — Kanban disabled with "Coming in F93" tooltip.
