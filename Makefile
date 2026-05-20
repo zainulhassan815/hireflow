@@ -69,6 +69,9 @@ eval-rag-answer: services ## Run F103.e RAG answer-quality eval
 eval-matching: services ## Run F45.a candidate-matching quality eval
 	cd backend && $(TEST_ENV) uv run pytest tests/eval/test_matching_quality.py -xvs
 
+eval-matching-weights: services ## Run F45.b matching weight-tuning audit
+	cd backend && $(TEST_ENV) uv run pytest tests/eval/test_matching_weight_search.py -xvs
+
 stop: ## Stop Docker services
 	docker compose down
 
@@ -85,4 +88,4 @@ clean: stop ## Stop services + remove caches
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	rm -rf backend/.ruff_cache frontend/dist
 
-.PHONY: help setup services api worker beat web tilt tilt-down lint migrate generate test eval eval-intent eval-parser eval-matching stop prod-up prod-down prod-logs clean
+.PHONY: help setup services api worker beat web tilt tilt-down lint migrate generate test eval eval-intent eval-parser eval-matching eval-matching-weights stop prod-up prod-down prod-logs clean

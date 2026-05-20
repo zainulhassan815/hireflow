@@ -379,7 +379,7 @@ validation for both features.
     expected-rank) triples, run matching, emit ranked agreement
     metrics (Spearman, top-K agreement). Blocks tuning work so we
     can measure improvements.
-  - [ ] **F45.b** Audit the current weights: 45/20/35 is a guess.
+  - [x] **F45.b** Audit the current weights: 45/20/35 is a guess.
     With a live eval harness, search the 3-simplex (maybe 7 grid
     points) for the weight set that maximizes agreement with the
     fixture. Expected lift unknown; worth measuring.

@@ -23,55 +23,10 @@ from app.repositories.candidate import ApplicationRepository, CandidateRepositor
 from app.repositories.job import JobRepository
 from app.services.matching_service import MatchingService
 from tests.eval.matching_dataset import MATCH_CASES
+from tests.eval.matching_metrics import spearman, top_k_overlap
 
 _BASELINE_PATH = Path(__file__).parent / "matching_baseline.json"
 _MIN_MEAN_SPEARMAN = 0.4  # soft floor; prints if below, does not block
-
-
-def _average_ranks(values: list[float]) -> list[float]:
-    """Rank ``values`` largest→smallest (rank 1 = largest), averaging ties.
-
-    Average ranks keep Spearman correct when two candidates land on the
-    same rounded score — using sorted position would hide the tie.
-    """
-    order = sorted(range(len(values)), key=lambda i: values[i], reverse=True)
-    ranks = [0.0] * len(values)
-    i = 0
-    while i < len(order):
-        j = i
-        while j + 1 < len(order) and values[order[j + 1]] == values[order[i]]:
-            j += 1
-        shared = (i + j) / 2 + 1  # 1-based average rank for the tie group
-        for k in range(i, j + 1):
-            ranks[order[k]] = shared
-        i = j + 1
-    return ranks
-
-
-def _spearman(model_scores: list[float], expected_ranks: list[float]) -> float:
-    """Spearman ρ — Pearson correlation between the two rank vectors.
-
-    ``model_scores[i]`` is the model's score for the candidate whose
-    expected rank is ``expected_ranks[i]``. Returns 0.0 on a degenerate
-    (constant) input instead of dividing by zero.
-    """
-    model_ranks = _average_ranks(model_scores)
-    n = len(model_ranks)
-    if n < 2:
-        return 0.0
-    mr = mean(model_ranks)
-    er = mean(expected_ranks)
-    cov = sum((model_ranks[i] - mr) * (expected_ranks[i] - er) for i in range(n))
-    std_m = sum((model_ranks[i] - mr) ** 2 for i in range(n)) ** 0.5
-    std_e = sum((expected_ranks[i] - er) ** 2 for i in range(n)) ** 0.5
-    if std_m == 0 or std_e == 0:
-        return 0.0
-    return cov / (std_m * std_e)
-
-
-def _top_k_overlap(model_order: list[str], expected_order: list[str], k: int) -> float:
-    """Fraction of the expected top-k that appears in the model's top-k."""
-    return len(set(model_order[:k]) & set(expected_order[:k])) / k
 
 
 async def test_matching_quality_report(seeded_matching_corpus, eval_owner) -> None:
@@ -116,9 +71,9 @@ async def test_matching_quality_report(seeded_matching_corpus, eval_owner) -> No
             model_scores = [score_by_slug[slug] for slug in expected]
             expected_ranks = [float(i + 1) for i in range(len(expected))]
 
-            rho = _spearman(model_scores, expected_ranks)
+            rho = spearman(model_scores, expected_ranks)
             top1_hit = model_order[0] == expected[0]
-            top3 = _top_k_overlap(model_order, expected, 3)
+            top3 = top_k_overlap(model_order, expected, 3)
 
             violator = model_order[0] if model_order[0] in case.must_not_top else None
             if violator:

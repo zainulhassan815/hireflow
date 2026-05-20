@@ -1,0 +1,153 @@
+{
+  "grid_step": 0.05,
+  "grid_size": 231,
+  "retune_threshold": 0.05,
+  "current": {
+    "weights": [
+      0.45,
+      0.2,
+      0.35
+    ],
+    "mean_spearman": 0.8364,
+    "top1_accuracy": 1.0,
+    "mean_top3_overlap": 0.75,
+    "must_not_top_violations": 0
+  },
+  "current_rank": 101,
+  "best_valid": {
+    "weights": [
+      0.55,
+      0.35,
+      0.1
+    ],
+    "mean_spearman": 0.898,
+    "top1_accuracy": 1.0,
+    "mean_top3_overlap": 0.75,
+    "must_not_top_violations": 0
+  },
+  "recommended": {
+    "weights": [
+      0.55,
+      0.35,
+      0.1
+    ],
+    "mean_spearman": 0.898,
+    "top1_accuracy": 1.0,
+    "mean_top3_overlap": 0.75,
+    "must_not_top_violations": 0
+  },
+  "spearman_lift": 0.0616,
+  "verdict": "retune",
+  "top_10": [
+    {
+      "weights": [
+        0.55,
+        0.35,
+        0.1
+      ],
+      "mean_spearman": 0.898,
+      "top1_accuracy": 1.0,
+      "mean_top3_overlap": 0.75,
+      "must_not_top_violations": 0
+    },
+    {
+      "weights": [
+        0.5,
+        0.4,
+        0.1
+      ],
+      "mean_spearman": 0.8927,
+      "top1_accuracy": 1.0,
+      "mean_top3_overlap": 0.6667,
+      "must_not_top_violations": 0
+    },
+    {
+      "weights": [
+        0.75,
+        0.2,
+        0.05
+      ],
+      "mean_spearman": 0.8909,
+      "top1_accuracy": 1.0,
+      "mean_top3_overlap": 0.75,
+      "must_not_top_violations": 0
+    },
+    {
+      "weights": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "mean_spearman": 0.8867,
+      "top1_accuracy": 1.0,
+      "mean_top3_overlap": 0.75,
+      "must_not_top_violations": 0
+    },
+    {
+      "weights": [
+        0.95,
+        0.05,
+        0.0
+      ],
+      "mean_spearman": 0.8841,
+      "top1_accuracy": 1.0,
+      "mean_top3_overlap": 0.75,
+      "must_not_top_violations": 0
+    },
+    {
+      "weights": [
+        0.6,
+        0.4,
+        0.0
+      ],
+      "mean_spearman": 0.8829,
+      "top1_accuracy": 1.0,
+      "mean_top3_overlap": 0.75,
+      "must_not_top_violations": 0
+    },
+    {
+      "weights": [
+        0.9,
+        0.1,
+        0.0
+      ],
+      "mean_spearman": 0.8823,
+      "top1_accuracy": 1.0,
+      "mean_top3_overlap": 0.75,
+      "must_not_top_violations": 0
+    },
+    {
+      "weights": [
+        0.85,
+        0.15,
+        0.0
+      ],
+      "mean_spearman": 0.8788,
+      "top1_accuracy": 1.0,
+      "mean_top3_overlap": 0.75,
+      "must_not_top_violations": 0
+    },
+    {
+      "weights": [
+        0.5,
+        0.35,
+        0.15
+      ],
+      "mean_spearman": 0.8783,
+      "top1_accuracy": 1.0,
+      "mean_top3_overlap": 0.75,
+      "must_not_top_violations": 0
+    },
+    {
+      "weights": [
+        0.55,
+        0.45,
+        0.0
+      ],
+      "mean_spearman": 0.8777,
+      "top1_accuracy": 1.0,
+      "mean_top3_overlap": 0.6667,
+      "must_not_top_violations": 0
+    }
+  ]
+}
