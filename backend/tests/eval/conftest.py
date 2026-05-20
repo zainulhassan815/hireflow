@@ -312,3 +312,119 @@ def document_id_to_slug(
     seeded_fixtures: list[tuple[FixtureDoc, UUID]],
 ) -> dict[UUID, str]:
     return {doc_id: fixture.slug for fixture, doc_id in seeded_fixtures}
+
+
+# ---------------------------------------------------------------------------
+# F45.a — candidate-matching corpus
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+async def seeded_matching_corpus(
+    eval_owner_id: UUID,
+) -> tuple[dict[str, UUID], dict[str, UUID]]:
+    """Seed the matching corpus: candidate résumés (indexed in ChromaDB so
+    the vector signal is live), their ``Candidate`` rows, and the jobs.
+
+    Returns ``({candidate_slug: id}, {job_slug: id})``. Independent of
+    ``seeded_fixtures`` — separate slugs, so the search-quality eval's
+    baseline is unaffected.
+    """
+    from app.adapters.chroma_store import ChromaVectorStore
+    from app.adapters.contextualizers.registry import get_contextualizer
+    from app.adapters.embeddings.registry import get_embedding_provider
+    from app.core.config import settings
+    from app.core.db import SessionLocal
+    from app.models import (
+        Candidate,
+        Document,
+        DocumentElement,
+        DocumentStatus,
+        DocumentType,
+        Job,
+        JobStatus,
+    )
+    from app.services.chunking import chunk_elements
+    from app.services.embedding_service import EmbeddingService
+    from tests.eval.matching_dataset import MATCH_CANDIDATES, MATCH_JOBS
+
+    _assert_test_database(settings.database_url)
+
+    embedder_provider = get_embedding_provider(settings)
+    store = ChromaVectorStore(
+        host=settings.chroma_host,
+        port=settings.chroma_port,
+        embedder=embedder_provider,
+    )
+    embedder = EmbeddingService(store, embedder_provider, similarity_store=store)
+    contextualizer = get_contextualizer(settings)
+
+    candidate_ids: dict[str, UUID] = {}
+    job_ids: dict[str, UUID] = {}
+
+    async with SessionLocal() as session:
+        for fixture in MATCH_CANDIDATES:
+            doc = Document(
+                id=uuid4(),
+                owner_id=eval_owner_id,
+                filename=fixture.filename,
+                mime_type="application/pdf",
+                size_bytes=len(fixture.resume_text.encode()),
+                storage_key=f"eval-matching/{fixture.slug}",
+                status=DocumentStatus.READY,
+                document_type=DocumentType.RESUME,
+                extracted_text=fixture.resume_text,
+                metadata_={"_eval_slug": fixture.slug, "page_count": 1},
+            )
+            session.add(doc)
+            await session.flush()
+
+            elements = _synthesize_elements(fixture.resume_text)
+            for element in elements:
+                session.add(
+                    DocumentElement(
+                        document_id=doc.id,
+                        kind=element.kind,
+                        text=element.text,
+                        page_number=element.page_number,
+                        order_index=element.order,
+                        metadata_=element.metadata or None,
+                    )
+                )
+            await session.flush()
+
+            chunks = chunk_elements(elements)
+            chunks = contextualizer.contextualize(doc, chunks)
+            embedder.index_document(doc, chunks=chunks)
+
+            candidate = Candidate(
+                owner_id=eval_owner_id,
+                name=fixture.name,
+                skills=list(fixture.skills),
+                experience_years=fixture.experience_years,
+                source_document_id=doc.id,
+            )
+            session.add(candidate)
+            await session.flush()
+            candidate_ids[fixture.slug] = candidate.id
+
+        for job in MATCH_JOBS:
+            row = Job(
+                owner_id=eval_owner_id,
+                title=job.title,
+                description=job.description,
+                required_skills=list(job.required_skills),
+                preferred_skills=list(job.preferred_skills),
+                experience_min=job.experience_min,
+                experience_max=job.experience_max,
+                status=JobStatus.OPEN,
+            )
+            session.add(row)
+            await session.flush()
+            job_ids[job.slug] = row.id
+
+        await session.commit()
+
+    assert len(candidate_ids) == len(MATCH_CANDIDATES)
+    assert len(job_ids) == len(MATCH_JOBS)
+    return candidate_ids, job_ids

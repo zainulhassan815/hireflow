@@ -1,0 +1,77 @@
+{
+  "overall": {
+    "mean_spearman": 0.831,
+    "top1_accuracy": 1.0,
+    "mean_top3_overlap": 0.7503
+  },
+  "cases": [
+    {
+      "job": "job_senior_backend",
+      "spearman": 0.937,
+      "top1_hit": true,
+      "top3_overlap": 1.0,
+      "model_top3": [
+        "cand_backend_senior",
+        "cand_backend_mid",
+        "cand_generalist"
+      ],
+      "expected_top3": [
+        "cand_backend_senior",
+        "cand_generalist",
+        "cand_backend_mid"
+      ],
+      "must_not_top_violation": null
+    },
+    {
+      "job": "job_frontend",
+      "spearman": 0.599,
+      "top1_hit": true,
+      "top3_overlap": 0.667,
+      "model_top3": [
+        "cand_frontend_senior",
+        "cand_frontend_mid",
+        "cand_generalist"
+      ],
+      "expected_top3": [
+        "cand_frontend_senior",
+        "cand_frontend_mid",
+        "cand_frontend_junior"
+      ],
+      "must_not_top_violation": null
+    },
+    {
+      "job": "job_devops",
+      "spearman": 0.867,
+      "top1_hit": true,
+      "top3_overlap": 0.667,
+      "model_top3": [
+        "cand_devops_senior",
+        "cand_backend_senior",
+        "cand_devops_mid"
+      ],
+      "expected_top3": [
+        "cand_devops_senior",
+        "cand_devops_mid",
+        "cand_generalist"
+      ],
+      "must_not_top_violation": null
+    },
+    {
+      "job": "job_data_scientist",
+      "spearman": 0.921,
+      "top1_hit": true,
+      "top3_overlap": 0.667,
+      "model_top3": [
+        "cand_data_senior",
+        "cand_data_mid",
+        "cand_backend_junior"
+      ],
+      "expected_top3": [
+        "cand_data_senior",
+        "cand_data_mid",
+        "cand_generalist"
+      ],
+      "must_not_top_violation": null
+    }
+  ]
+}

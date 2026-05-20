@@ -374,7 +374,7 @@ validation for both features.
   preferred weighting, education hierarchy, etc.) and F46 (adds the
   credentials signal F45.b will tune); F45 is the **review pass**
   that produces a concrete priority list and a regression baseline.
-  - [ ] **F45.a** Eval harness: build `make eval-matching` analogous
+  - [x] **F45.a** Eval harness: build `make eval-matching` analogous
     to the RAG eval — seed a fixture corpus of (job, candidate,
     expected-rank) triples, run matching, emit ranked agreement
     metrics (Spearman, top-K agreement). Blocks tuning work so we
