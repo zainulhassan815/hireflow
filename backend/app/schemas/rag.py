@@ -34,7 +34,14 @@ class SourceCitation(BaseModel):
 
     document_id: UUID = Field(..., description="Source document ID")
     filename: str = Field(..., description="Source document filename")
-    chunk_index: int = Field(..., description="Chunk position in the document")
+    chunk_index: int | None = Field(
+        ...,
+        description=(
+            "Chunk position in the document. ``null`` for candidate-summary "
+            "citations (F104.a), which cite a whole recruiter brief rather "
+            "than one positioned chunk."
+        ),
+    )
     text: str = Field(..., description="Chunk text used as context")
     match_spans: list[tuple[int, int]] = Field(
         default_factory=list,
