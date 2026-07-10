@@ -209,6 +209,17 @@ function Body({
               />
             </div>
           )}
+          {app.breakdown?.explanation && (
+            <Typography variant="muted" className="mt-2 text-xs">
+              {app.breakdown.explanation}
+            </Typography>
+          )}
+          {app.breakdown?.unscored && (
+            <div className="border-warning/40 bg-warning/10 text-warning mt-2 rounded-md border px-2 py-1 text-xs">
+              No skills were extracted from this résumé — ranked on other
+              signals only. Check the file, then re-run the match.
+            </div>
+          )}
         </div>
 
         {c.skills && c.skills.length > 0 && (

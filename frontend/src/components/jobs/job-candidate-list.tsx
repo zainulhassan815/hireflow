@@ -671,6 +671,23 @@ function CandidateRow({
                   </TooltipContent>
                 </Tooltip>
               )}
+              {app.breakdown?.unscored && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Badge
+                        variant="outline"
+                        className="border-warning/50 text-warning h-5 shrink-0 px-1.5 text-[11px] font-normal"
+                      >
+                        Unscored
+                      </Badge>
+                    }
+                  />
+                  <TooltipContent>
+                    No skills extracted — ranked on other signals only.
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
             {c.skills && c.skills.length > 0 && (
               <div className="flex flex-wrap gap-1">
@@ -791,6 +808,14 @@ function MatchScoreBar({
             value={breakdown.credential_match}
             weight={0.1}
           />
+          {breakdown.explanation && (
+            <Typography
+              variant="muted"
+              className="border-t pt-2 text-xs leading-snug"
+            >
+              {breakdown.explanation}
+            </Typography>
+          )}
         </div>
       </HoverCardContent>
     </HoverCard>

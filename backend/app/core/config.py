@@ -188,6 +188,13 @@ class Settings(BaseSettings):
     rrf_weight_vector: float = 1.0
     rrf_weight_sql: float = 1.0
 
+    # Candidate matching: how a missing *required* skill is penalized.
+    # ``partial`` (default) keeps the overlap-fraction credit; ``zero``
+    # gates the whole skill signal to 0 on any required miss (hard
+    # requirement); ``halve`` scales it by 0.5. Global for now — per-job
+    # override is F45.g.
+    matching_required_skill_policy: str = "partial"
+
     # LLM
     llm_provider: str = "anthropic"
     llm_model: str = "claude-haiku-4-5-20251001"

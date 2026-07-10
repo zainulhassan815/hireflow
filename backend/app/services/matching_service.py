@@ -14,6 +14,7 @@ import logging
 from uuid import UUID
 
 from app.adapters.protocols import VectorStore
+from app.core.config import settings
 from app.models import Candidate, Job
 from app.models.candidate import CREDENTIAL_ROLES
 from app.repositories.candidate import ApplicationRepository, CandidateRepository
@@ -131,7 +132,17 @@ class MatchingService:
             len(preferred & candidate_skills) / len(preferred) if preferred else 0
         )
 
-        return 0.7 * required_match + 0.3 * preferred_match
+        base = 0.7 * required_match + 0.3 * preferred_match
+
+        # F45.d — required-skill floor. A required-skill miss can gate the
+        # whole skill signal depending on the configured policy.
+        if required and required_match < 1.0:
+            policy = settings.matching_required_skill_policy
+            if policy == "zero":
+                return 0.0
+            if policy == "halve":
+                return base * 0.5
+        return base
 
     @staticmethod
     def _credential_match(job: Job, candidate: Candidate) -> float:
@@ -217,9 +228,75 @@ class MatchingService:
         candidate: Candidate,
         vector_scores: dict[UUID, float],
     ) -> dict:
+        skill = round(self._skill_overlap(job, candidate), 3)
+        exp = round(self._experience_fit(job, candidate), 3)
+        vec = round(vector_scores.get(candidate.id, 0.0), 3)
+        cred = round(self._credential_match(job, candidate), 3)
         return {
-            "skill_match": round(self._skill_overlap(job, candidate), 3),
-            "experience_fit": round(self._experience_fit(job, candidate), 3),
-            "vector_similarity": round(vector_scores.get(candidate.id, 0.0), 3),
-            "credential_match": round(self._credential_match(job, candidate), 3),
+            "skill_match": skill,
+            "experience_fit": exp,
+            "vector_similarity": vec,
+            "credential_match": cred,
+            # F45.f — extraction produced no skills; the candidate is still
+            # scored (vector can rank), but flagged so the UI can separate
+            # them rather than bury them at the bottom.
+            "unscored": len(candidate.skills) == 0,
+            "explanation": self._explanation(
+                job, candidate, skill=skill, experience=exp, vector=vec, credential=cred
+            ),
         }
+
+    @staticmethod
+    def _explanation(
+        job: Job,
+        candidate: Candidate,
+        *,
+        skill: float,
+        experience: float,
+        vector: float,
+        credential: float,
+    ) -> str:
+        """A short, deterministic 'why this score' sentence (F45.e).
+
+        Rule-based on purpose — no LLM call at score time. Describes each
+        signal qualitatively plus the concrete skills / experience that
+        drove it.
+        """
+        parts: list[str] = []
+
+        candidate_skills = {s.lower() for s in candidate.skills}
+        required = list(job.required_skills)
+        if not candidate.skills:
+            parts.append("no skills extracted from the résumé")
+        elif required:
+            matched = [s for s in required if s.lower() in candidate_skills]
+            qual = "strong" if skill >= 0.75 else "partial" if skill >= 0.4 else "weak"
+            shown = ", ".join(matched[:3])
+            detail = f" ({shown})" if shown else ""
+            parts.append(
+                f"{qual} skills — {len(matched)}/{len(required)} required{detail}"
+            )
+
+        if candidate.experience_years is not None:
+            rng = (
+                f"{job.experience_min}–{job.experience_max}"
+                if job.experience_max is not None
+                else f"{job.experience_min}+"
+            )
+            fit = (
+                "fits"
+                if experience >= 0.9
+                else "near"
+                if experience >= 0.5
+                else "outside"
+            )
+            parts.append(f"{candidate.experience_years} yrs {fit} the {rng} range")
+
+        vqual = "high" if vector >= 0.6 else "moderate" if vector >= 0.3 else "low"
+        parts.append(f"{vqual} semantic similarity")
+
+        if credential > 0:
+            parts.append(f"credentials cover {round(credential * 100)}% of role skills")
+
+        sentence = "; ".join(parts)
+        return sentence[:1].upper() + sentence[1:] + "." if sentence else ""

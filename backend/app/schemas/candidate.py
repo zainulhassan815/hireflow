@@ -103,6 +103,27 @@ class MatchBreakdown(BaseModel):
             "the credential signal shipped — render as '—' until re-matched."
         ),
     )
+    unscored: bool = Field(
+        False,
+        description=(
+            "True when no skills were extracted from the résumé (weird "
+            "format / failed extraction). The candidate is still scored on "
+            "the other signals, but the UI should surface them separately "
+            "rather than as a low score."
+        ),
+    )
+    explanation: str | None = Field(
+        None,
+        description=(
+            "Human-readable one-line rationale for the score (skills, "
+            "experience, similarity, credentials). Null on applications "
+            "matched before this shipped."
+        ),
+        examples=[
+            "Strong skills — 3/4 required (Python, FastAPI, Postgres); "
+            "4 yrs fits the 3–7 range; high semantic similarity."
+        ],
+    )
 
 
 class AttachmentItem(BaseModel):
