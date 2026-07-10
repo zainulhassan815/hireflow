@@ -7,7 +7,13 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Application, ApplicationStatus, Candidate
+from app.models import (
+    Application,
+    ApplicationStatus,
+    AttachmentRole,
+    Candidate,
+    CandidateAttachment,
+)
 
 
 class CandidateRepository:
@@ -16,6 +22,47 @@ class CandidateRepository:
 
     async def get(self, candidate_id: UUID) -> Candidate | None:
         return await self._db.get(Candidate, candidate_id)
+
+    async def list_attachments(self, candidate_id: UUID) -> list[CandidateAttachment]:
+        result = await self._db.execute(
+            select(CandidateAttachment)
+            .where(CandidateAttachment.candidate_id == candidate_id)
+            .order_by(CandidateAttachment.created_at)
+        )
+        return list(result.scalars().all())
+
+    async def get_attachment(
+        self, candidate_id: UUID, document_id: UUID
+    ) -> CandidateAttachment | None:
+        result = await self._db.execute(
+            select(CandidateAttachment).where(
+                CandidateAttachment.candidate_id == candidate_id,
+                CandidateAttachment.document_id == document_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def add_attachments(
+        self, candidate: Candidate, items: list[tuple[UUID, AttachmentRole]]
+    ) -> list[CandidateAttachment]:
+        """Persist new attachments (and any pending changes on ``candidate``)
+        in a single commit so the resume-pointer invariant and the join
+        rows land atomically."""
+        created = [
+            CandidateAttachment(
+                candidate_id=candidate.id, document_id=document_id, role=role
+            )
+            for document_id, role in items
+        ]
+        self._db.add_all(created)
+        await self._db.commit()
+        for attachment in created:
+            await self._db.refresh(attachment)
+        return created
+
+    async def delete_attachment(self, attachment: CandidateAttachment) -> None:
+        await self._db.delete(attachment)
+        await self._db.commit()
 
     async def get_by_document(self, document_id: UUID) -> Candidate | None:
         result = await self._db.execute(

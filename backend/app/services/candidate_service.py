@@ -5,15 +5,18 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from app.domain.exceptions import Forbidden, NotFound
+from app.domain.exceptions import Forbidden, NotFound, ResumeAlreadyAttached
 from app.models import (
     Application,
     ApplicationStatus,
+    AttachmentRole,
     Candidate,
+    CandidateAttachment,
     Document,
     User,
     UserRole,
 )
+from app.models.candidate import CREDENTIAL_ROLES
 from app.repositories.candidate import ApplicationRepository, CandidateRepository
 from app.repositories.job import JobRepository
 
@@ -66,6 +69,95 @@ class CandidateService:
         return await self._candidates.list_by_owner(
             owner_id, limit=limit, offset=offset
         )
+
+    async def list_attachments(
+        self, candidate_id: UUID, *, actor: User
+    ) -> list[CandidateAttachment]:
+        candidate = await self.get(candidate_id, actor=actor)
+        return await self._candidates.list_attachments(candidate.id)
+
+    async def add_attachments(
+        self,
+        candidate_id: UUID,
+        items: list[tuple[Document, AttachmentRole]],
+        *,
+        actor: User,
+    ) -> list[CandidateAttachment]:
+        """Attach documents to a candidate atomically.
+
+        A candidate holds at most one ``role=resume`` attachment — a second
+        one (already present, or two in the same batch) is a 409. Attaching
+        a resume also repoints ``source_document_id`` so the pointer and the
+        join table stay in sync. Documents already attached are skipped
+        (idempotent). Credential-bearing files merge their skills into the
+        candidate profile on the way in.
+        """
+        candidate = await self.get(candidate_id, actor=actor)
+        existing = await self._candidates.list_attachments(candidate.id)
+        existing_doc_ids = {a.document_id for a in existing}
+        has_resume = any(a.role == AttachmentRole.RESUME for a in existing)
+
+        incoming_resumes = sum(1 for _, role in items if role == AttachmentRole.RESUME)
+        if incoming_resumes > 1 or (incoming_resumes == 1 and has_resume):
+            raise ResumeAlreadyAttached(
+                "This candidate already has a resume. Detach it before "
+                "attaching a new one."
+            )
+
+        to_add: list[tuple[UUID, AttachmentRole]] = []
+        resume_doc_id: UUID | None = None
+        seen: set[UUID] = set()
+        for document, role in items:
+            if document.id in existing_doc_ids or document.id in seen:
+                continue
+            seen.add(document.id)
+            to_add.append((document.id, role))
+            if role == AttachmentRole.RESUME:
+                resume_doc_id = document.id
+            self._merge_attachment_signals(candidate, document, role)
+
+        if resume_doc_id is not None:
+            candidate.source_document_id = resume_doc_id
+
+        return await self._candidates.add_attachments(candidate, to_add)
+
+    async def remove_attachment(
+        self, candidate_id: UUID, document_id: UUID, *, actor: User
+    ) -> None:
+        """Detach a document from a candidate. The underlying Document is
+        left intact (it keeps its own ownership per F22). Detaching the
+        resume clears the ``source_document_id`` pointer."""
+        candidate = await self.get(candidate_id, actor=actor)
+        attachment = await self._candidates.get_attachment(candidate.id, document_id)
+        if attachment is None:
+            raise NotFound("Attachment not found.")
+        if (
+            attachment.role == AttachmentRole.RESUME
+            and candidate.source_document_id == document_id
+        ):
+            candidate.source_document_id = None
+        await self._candidates.delete_attachment(attachment)
+
+    def _merge_attachment_signals(
+        self, candidate: Candidate, document: Document, role: AttachmentRole
+    ) -> None:
+        """Union credential-bearing skills / keywords into the candidate.
+
+        Idempotent (set union). Only credential roles enrich the profile —
+        the resume stays the source of truth for name / email / experience.
+        """
+        if role not in CREDENTIAL_ROLES:
+            return
+        meta = document.metadata_ or {}
+        doc_skills = meta.get("skills") or []
+        if doc_skills:
+            candidate.skills = sorted(set(candidate.skills) | set(doc_skills))
+        if role == AttachmentRole.PORTFOLIO:
+            keywords = meta.get("keywords") or []
+            if keywords:
+                candidate.supplementary_keywords = sorted(
+                    set(candidate.supplementary_keywords or []) | set(keywords)
+                )
 
     async def apply_to_job(
         self,

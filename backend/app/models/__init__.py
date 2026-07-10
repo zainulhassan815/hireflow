@@ -1,6 +1,12 @@
 from app.models.activity_log import ActivityAction, ActivityLog
 from app.models.base import Base
-from app.models.candidate import Application, ApplicationStatus, Candidate
+from app.models.candidate import (
+    Application,
+    ApplicationStatus,
+    AttachmentRole,
+    Candidate,
+    CandidateAttachment,
+)
 from app.models.document import AuthorSource, Document, DocumentStatus, DocumentType
 from app.models.document_element import DocumentElement
 from app.models.gmail_connection import GmailConnection
@@ -13,9 +19,11 @@ __all__ = [
     "ActivityLog",
     "Application",
     "ApplicationStatus",
+    "AttachmentRole",
     "AuthorSource",
     "Base",
     "Candidate",
+    "CandidateAttachment",
     "Document",
     "DocumentElement",
     "DocumentStatus",

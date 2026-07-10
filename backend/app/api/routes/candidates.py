@@ -5,16 +5,31 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 
 from app.api.deps import CandidateServiceDep, CurrentUser, DocumentServiceDep
-from app.models.candidate import ApplicationStatus
+from app.models.candidate import ApplicationStatus, CandidateAttachment
 from app.schemas.candidate import (
+    AddAttachmentsRequest,
     ApplicationResponse,
     BulkUpdateApplicationStatusRequest,
     BulkUpdateApplicationStatusResponse,
+    CandidateAttachmentResponse,
     CandidateResponse,
     UpdateApplicationStatusRequest,
 )
 
 router = APIRouter()
+
+
+def _attachment_response(
+    attachment: CandidateAttachment, document
+) -> CandidateAttachmentResponse:
+    return CandidateAttachmentResponse(
+        document_id=attachment.document_id,
+        role=attachment.role,
+        filename=document.filename,
+        document_type=document.document_type,
+        status=document.status,
+        created_at=attachment.created_at,
+    )
 
 
 @router.post(
@@ -78,6 +93,92 @@ async def get_candidate(
 ) -> CandidateResponse:
     candidate = await candidates.get(candidate_id, actor=current_user)
     return CandidateResponse.model_validate(candidate)
+
+
+@router.get(
+    "/{candidate_id}/attachments",
+    response_model=list[CandidateAttachmentResponse],
+    summary="List candidate attachments",
+    description=(
+        "Return the files attached to a candidate (resume, certificates, "
+        "portfolio, …), each with its role and processing status."
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not the candidate owner or an admin"},
+        404: {"description": "Candidate not found"},
+    },
+)
+async def list_candidate_attachments(
+    candidate_id: UUID,
+    current_user: CurrentUser,
+    candidates: CandidateServiceDep,
+) -> list[CandidateAttachmentResponse]:
+    attachments = await candidates.list_attachments(candidate_id, actor=current_user)
+    return [_attachment_response(a, a.document) for a in attachments]
+
+
+@router.post(
+    "/{candidate_id}/attachments",
+    response_model=list[CandidateAttachmentResponse],
+    status_code=201,
+    summary="Attach documents to a candidate",
+    description=(
+        "Attach one or more already-uploaded documents to a candidate, "
+        "each tagged with a role. Persisted atomically. A candidate may "
+        "hold only one resume — attaching a second returns 409. Documents "
+        "already attached are skipped. Credential files (certificate / "
+        "transcript / portfolio) merge their skills into the candidate "
+        "profile."
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not the candidate/document owner or an admin"},
+        404: {"description": "Candidate or a document not found"},
+        409: {"description": "Candidate already has a resume attached"},
+    },
+)
+async def add_candidate_attachments(
+    candidate_id: UUID,
+    request: AddAttachmentsRequest,
+    current_user: CurrentUser,
+    candidates: CandidateServiceDep,
+    documents: DocumentServiceDep,
+) -> list[CandidateAttachmentResponse]:
+    # Validate each document's existence + ownership before attaching so a
+    # cross-tenant or missing id fails loud (403 / 404), not silently.
+    items = []
+    docs_by_id = {}
+    for item in request.attachments:
+        doc = await documents.get(item.document_id, actor=current_user)
+        items.append((doc, item.role))
+        docs_by_id[doc.id] = doc
+    created = await candidates.add_attachments(candidate_id, items, actor=current_user)
+    return [_attachment_response(a, docs_by_id[a.document_id]) for a in created]
+
+
+@router.delete(
+    "/{candidate_id}/attachments/{document_id}",
+    status_code=204,
+    summary="Detach a document from a candidate",
+    description=(
+        "Remove the link between a candidate and a document. The document "
+        "itself is not deleted — it keeps its own ownership. Detaching the "
+        "resume clears the candidate's resume pointer."
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not the candidate owner or an admin"},
+        404: {"description": "Candidate or attachment not found"},
+    },
+)
+async def remove_candidate_attachment(
+    candidate_id: UUID,
+    document_id: UUID,
+    current_user: CurrentUser,
+    candidates: CandidateServiceDep,
+) -> None:
+    await candidates.remove_attachment(candidate_id, document_id, actor=current_user)
 
 
 @router.post(

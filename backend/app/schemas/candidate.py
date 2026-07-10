@@ -5,7 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.candidate import ApplicationStatus
+from app.models.candidate import ApplicationStatus, AttachmentRole
+from app.models.document import DocumentStatus, DocumentType
 
 
 class CandidateLite(BaseModel):
@@ -84,6 +85,54 @@ class MatchBreakdown(BaseModel):
     vector_similarity: float = Field(
         ..., ge=0, le=1, description="Semantic similarity from embeddings"
     )
+    credential_match: float | None = Field(
+        None,
+        ge=0,
+        le=1,
+        description=(
+            "Job-skill coverage from credential attachments (certificates, "
+            "transcripts, portfolios). Null on applications matched before "
+            "the credential signal shipped — render as '—' until re-matched."
+        ),
+    )
+
+
+class AttachmentItem(BaseModel):
+    """One (document, role) pair to attach to a candidate."""
+
+    document_id: UUID = Field(..., description="Document to attach")
+    role: AttachmentRole = Field(
+        ...,
+        description="Role this file plays in the candidate's submission",
+        examples=["resume", "certificate", "portfolio"],
+    )
+
+
+class AddAttachmentsRequest(BaseModel):
+    """Attach one or more documents to a candidate in a single request."""
+
+    attachments: list[AttachmentItem] = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="Documents to attach, each tagged with its role.",
+    )
+
+
+class CandidateAttachmentResponse(BaseModel):
+    """A document attached to a candidate, with the essentials to render
+    and preview it without a second document lookup."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    document_id: UUID = Field(..., description="Attached document ID")
+    role: AttachmentRole = Field(..., description="Role of this file")
+    filename: str = Field(..., description="Original filename")
+    document_type: DocumentType | None = Field(
+        None, description="Classified document type, if known"
+    )
+    status: DocumentStatus = Field(..., description="Document processing status")
+    created_at: datetime = Field(..., description="When the file was attached (UTC)")
 
 
 class ApplicationResponse(BaseModel):

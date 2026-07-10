@@ -81,6 +81,15 @@ class Forbidden(DomainError):
     """Caller is authenticated but not permitted to perform this action."""
 
 
+class ResumeAlreadyAttached(DomainError):
+    """A candidate may hold only one ``role=resume`` attachment.
+
+    Raised when attaching a second resume. HR must detach the existing
+    resume first so the ``Candidate.source_document_id`` pointer stays
+    coherent with the join table.
+    """
+
+
 class InvalidStatusTransition(DomainError):
     """Requested job status change is not a permitted lifecycle transition.
 

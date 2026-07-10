@@ -35,6 +35,7 @@ from app.domain.exceptions import (
     LlmTimeout,
     LlmUnavailable,
     NotFound,
+    ResumeAlreadyAttached,
     ServiceUnavailable,
     UnsupportedFileType,
 )
@@ -50,6 +51,7 @@ _STATUS: dict[type[DomainError], int] = {
     DocumentNotIndexed: 404,
     EmailAlreadyRegistered: 409,
     InvalidStatusTransition: 409,
+    ResumeAlreadyAttached: 409,
     FileTooLarge: 413,
     UnsupportedFileType: 415,
     LlmRateLimited: 429,

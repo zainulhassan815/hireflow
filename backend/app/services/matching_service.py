@@ -15,14 +15,19 @@ from uuid import UUID
 
 from app.adapters.protocols import VectorStore
 from app.models import Candidate, Job
+from app.models.candidate import CREDENTIAL_ROLES
 from app.repositories.candidate import ApplicationRepository, CandidateRepository
 from app.repositories.job import JobRepository
 
 logger = logging.getLogger(__name__)
 
-_WEIGHT_SKILLS = 0.45
+# Starting point for the four-signal blend (F46.d). Re-tuned by the
+# F45.b weight search once the eval fixture carries cert-bearing
+# candidates.
+_WEIGHT_SKILLS = 0.40
 _WEIGHT_EXPERIENCE = 0.20
-_WEIGHT_VECTOR = 0.35
+_WEIGHT_VECTOR = 0.30
+_WEIGHT_CREDENTIALS = 0.10
 
 
 class MatchingService:
@@ -100,11 +105,13 @@ class MatchingService:
         skill_score = self._skill_overlap(job, candidate)
         exp_score = self._experience_fit(job, candidate)
         vec_score = vector_scores.get(candidate.id, 0.0)
+        cred_score = self._credential_match(job, candidate)
 
         return round(
             _WEIGHT_SKILLS * skill_score
             + _WEIGHT_EXPERIENCE * exp_score
-            + _WEIGHT_VECTOR * vec_score,
+            + _WEIGHT_VECTOR * vec_score
+            + _WEIGHT_CREDENTIALS * cred_score,
             4,
         )
 
@@ -125,6 +132,35 @@ class MatchingService:
         )
 
         return 0.7 * required_match + 0.3 * preferred_match
+
+    @staticmethod
+    def _credential_match(job: Job, candidate: Candidate) -> float:
+        """Fraction of the job's skills covered by the candidate's
+        credential attachments (certificates / transcripts / portfolios).
+
+        Reads each credential document's extracted skills live, so a cert
+        covering a required skill the resume missed lifts the candidate.
+        Weighted separately (not folded into ``skill_overlap``) so a cert
+        that merely restates a resume skill can't inflate that signal past
+        its cap.
+        """
+        targets = {s.lower() for s in job.required_skills} | {
+            s.lower() for s in (job.preferred_skills or [])
+        }
+        if not targets:
+            return 0.0
+
+        credential_skills: set[str] = set()
+        for attachment in candidate.attachments:
+            if attachment.role not in CREDENTIAL_ROLES:
+                continue
+            meta = (attachment.document.metadata_ or {}) if attachment.document else {}
+            for skill in meta.get("skills") or []:
+                credential_skills.add(skill.lower())
+
+        if not credential_skills:
+            return 0.0
+        return len(credential_skills & targets) / len(targets)
 
     @staticmethod
     def _experience_fit(job: Job, candidate: Candidate) -> float:
@@ -185,4 +221,5 @@ class MatchingService:
             "skill_match": round(self._skill_overlap(job, candidate), 3),
             "experience_fit": round(self._experience_fit(job, candidate), 3),
             "vector_similarity": round(vector_scores.get(candidate.id, 0.0), 3),
+            "credential_match": round(self._credential_match(job, candidate), 3),
         }

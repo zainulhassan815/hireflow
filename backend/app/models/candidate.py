@@ -26,6 +26,23 @@ class ApplicationStatus(StrEnum):
     HIRED = "hired"
 
 
+class AttachmentRole(StrEnum):
+    RESUME = "resume"
+    CERTIFICATE = "certificate"
+    PORTFOLIO = "portfolio"
+    COVER_LETTER = "cover_letter"
+    TRANSCRIPT = "transcript"
+    OTHER = "other"
+
+
+# Roles whose extracted skills feed the credential_match scoring signal.
+# A resume/cover_letter doesn't count as a credential — those are the
+# baseline the credential boost is measured on top of.
+CREDENTIAL_ROLES = frozenset(
+    {AttachmentRole.CERTIFICATE, AttachmentRole.PORTFOLIO, AttachmentRole.TRANSCRIPT}
+)
+
+
 class Candidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """A candidate derived from a processed resume document."""
 
@@ -64,6 +81,12 @@ class Candidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     experience_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
     education: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
+    # Keywords merged from non-resume attachments (portfolio READMEs,
+    # case studies). Kept separate from ``skills`` — these are softer
+    # signal that should not masquerade as extracted resume skills.
+    supplementary_keywords: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String), nullable=True
+    )
 
     # F104.a — one-sentence recruiter brief used as the candidate-
     # summary retrieval anchor (separate Chroma collection, surfaced
@@ -104,6 +127,62 @@ class Candidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="authored_by",
         lazy="selectin",
     )
+    # The bundle of files submitted for this candidate (resume + certs +
+    # portfolio + …). The ``role=resume`` row mirrors ``source_document``;
+    # the service keeps the two in sync.
+    attachments: Mapped[list[CandidateAttachment]] = relationship(
+        back_populates="candidate",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        order_by="CandidateAttachment.created_at",
+    )
+
+
+class CandidateAttachment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One file attached to a candidate, tagged with the role it plays.
+
+    A candidate is a bundle, not a single resume: the join row carries the
+    ``role`` (resume / certificate / portfolio / …) so scoring can weight
+    credentials distinctly from the resume. Unique on
+    ``(candidate_id, document_id)`` — a file attaches to a candidate once —
+    but a single document may attach to several candidates (a shared
+    recruiting-event batch cert), so ``document_id`` alone is not unique.
+    """
+
+    __tablename__ = "candidate_attachments"
+    __table_args__ = (
+        Index(
+            "ix_candidate_attachments_candidate_document_unique",
+            "candidate_id",
+            "document_id",
+            unique=True,
+        ),
+    )
+
+    candidate_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("candidates.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[AttachmentRole] = mapped_column(
+        SAEnum(
+            AttachmentRole,
+            name="attachment_role",
+            native_enum=True,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        nullable=False,
+    )
+
+    candidate: Mapped[Candidate] = relationship(back_populates="attachments")
+    document: Mapped[Document] = relationship(lazy="selectin")
 
 
 class Application(UUIDPrimaryKeyMixin, TimestampMixin, Base):
