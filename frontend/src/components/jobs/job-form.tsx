@@ -16,20 +16,18 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Typography } from "@/components/ui/typography";
 
+// Mirrors the backend job contract (CreateJobRequest / UpdateJobRequest).
+// Status is deliberately absent — it's a validated lifecycle action on the
+// job detail page (PATCH /jobs/{id}/status), not a free-form form field.
 export type JobFormData = {
   title: string;
-  department: string;
   location: string;
-  employmentType: string;
   description: string;
   requiredSkills: string[];
   preferredSkills: string[];
   educationLevel: string;
   experienceMin: number;
   experienceMax: number;
-  salaryMin?: number;
-  salaryMax?: number;
-  status: "draft" | "active" | "closed";
 };
 
 interface JobFormProps {
@@ -42,16 +40,13 @@ interface JobFormProps {
 
 const defaultData: JobFormData = {
   title: "",
-  department: "",
   location: "",
-  employmentType: "full-time",
   description: "",
   requiredSkills: [],
   preferredSkills: [],
-  educationLevel: "bachelors",
+  educationLevel: "any",
   experienceMin: 0,
   experienceMax: 5,
-  status: "draft",
 };
 
 export function JobForm({
@@ -116,7 +111,6 @@ export function JobForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Basic Information */}
       <Card>
         <CardHeader>
           <Typography variant="h5">Basic Information</Typography>
@@ -135,56 +129,14 @@ export function JobForm({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="department">Department *</Label>
-              <Select
-                value={formData.department}
-                onValueChange={(v) => handleSelectChange("department", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="engineering">Engineering</SelectItem>
-                  <SelectItem value="design">Design</SelectItem>
-                  <SelectItem value="product">Product</SelectItem>
-                  <SelectItem value="marketing">Marketing</SelectItem>
-                  <SelectItem value="sales">Sales</SelectItem>
-                  <SelectItem value="hr">Human Resources</SelectItem>
-                  <SelectItem value="finance">Finance</SelectItem>
-                  <SelectItem value="operations">Operations</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="location">Location *</Label>
+              <Label htmlFor="location">Location</Label>
               <Input
                 id="location"
                 name="location"
                 value={formData.location}
                 onChange={handleChange}
                 placeholder="e.g. Remote, New York, NY"
-                required
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="employmentType">Employment Type *</Label>
-              <Select
-                value={formData.employmentType}
-                onValueChange={(v) => handleSelectChange("employmentType", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="full-time">Full-time</SelectItem>
-                  <SelectItem value="part-time">Part-time</SelectItem>
-                  <SelectItem value="contract">Contract</SelectItem>
-                  <SelectItem value="internship">Internship</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
 
@@ -203,7 +155,6 @@ export function JobForm({
         </CardContent>
       </Card>
 
-      {/* Skills */}
       <Card>
         <CardHeader>
           <Typography variant="h5">Skills & Requirements</Typography>
@@ -291,7 +242,7 @@ export function JobForm({
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label>Education Level *</Label>
+              <Label>Education Level</Label>
               <Select
                 value={formData.educationLevel}
                 onValueChange={(v) => handleSelectChange("educationLevel", v)}
@@ -335,61 +286,6 @@ export function JobForm({
         </CardContent>
       </Card>
 
-      {/* Compensation & Status */}
-      <Card>
-        <CardHeader>
-          <Typography variant="h5">Compensation & Status</Typography>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Salary Range (Optional)</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  placeholder="Min"
-                  value={formData.salaryMin || ""}
-                  onChange={(e) =>
-                    handleNumberChange("salaryMin", e.target.value)
-                  }
-                />
-                <span className="text-muted-foreground">-</span>
-                <Input
-                  type="number"
-                  placeholder="Max"
-                  value={formData.salaryMax || ""}
-                  onChange={(e) =>
-                    handleNumberChange("salaryMax", e.target.value)
-                  }
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Status *</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(v) =>
-                  handleSelectChange(
-                    "status",
-                    v as "draft" | "active" | "closed"
-                  )
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="closed">Closed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Actions */}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
