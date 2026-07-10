@@ -4,9 +4,19 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from app.domain.exceptions import Forbidden, NotFound
+from app.domain.exceptions import Forbidden, InvalidStatusTransition, NotFound
 from app.models import Job, JobStatus, User, UserRole
 from app.repositories.job import JobRepository
+
+# Archive is terminal ("use a new job"). Archiving is allowed from any live
+# state (shelve/abandon); a closed req can be reopened. Anything not listed
+# — notably any move back to draft — is rejected.
+_ALLOWED_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
+    JobStatus.DRAFT: {JobStatus.OPEN, JobStatus.ARCHIVED},
+    JobStatus.OPEN: {JobStatus.CLOSED, JobStatus.ARCHIVED},
+    JobStatus.CLOSED: {JobStatus.OPEN, JobStatus.ARCHIVED},
+    JobStatus.ARCHIVED: set(),
+}
 
 
 class JobService:
@@ -28,6 +38,19 @@ class JobService:
         for key, value in updates.items():
             if value is not None:
                 setattr(job, key, value)
+        return await self._jobs.save(job)
+
+    async def change_status(
+        self, job_id: UUID, *, actor: User, status: JobStatus
+    ) -> Job:
+        job = await self.get(job_id, actor=actor)
+        if status == job.status:
+            return job
+        if status not in _ALLOWED_TRANSITIONS[job.status]:
+            raise InvalidStatusTransition(
+                f"Cannot change status from '{job.status}' to '{status}'."
+            )
+        job.status = status
         return await self._jobs.save(job)
 
     async def delete(self, job_id: UUID, *, actor: User) -> None:

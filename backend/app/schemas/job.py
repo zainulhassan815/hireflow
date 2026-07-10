@@ -59,7 +59,21 @@ class UpdateJobRequest(BaseModel):
     experience_min: int | None = Field(None, ge=0, description="Min experience years")
     experience_max: int | None = Field(None, ge=0, description="Max experience years")
     location: str | None = Field(None, description="Location")
-    status: JobStatus | None = Field(None, description="Job status")
+
+
+class UpdateJobStatusRequest(BaseModel):
+    """Change a job's lifecycle status.
+
+    The transition must be legal (see the endpoint description). Status is
+    intentionally not editable via the general job update — this is the
+    single validated path so illegal transitions can't slip through.
+    """
+
+    status: JobStatus = Field(
+        ...,
+        description="Target lifecycle status",
+        examples=["open", "closed", "archived"],
+    )
 
 
 class JobResponse(BaseModel):

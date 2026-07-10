@@ -81,6 +81,16 @@ class Forbidden(DomainError):
     """Caller is authenticated but not permitted to perform this action."""
 
 
+class InvalidStatusTransition(DomainError):
+    """Requested job status change is not a permitted lifecycle transition.
+
+    Raised by ``JobService.change_status`` — e.g. reopening an archived job
+    (archive is terminal) or moving a job backwards to ``draft``. The
+    route surfaces the message so the UI can explain why the change was
+    refused.
+    """
+
+
 class ServiceUnavailable(DomainError):
     """A required downstream provider (LLM, vision, storage) is not configured or reachable."""
 

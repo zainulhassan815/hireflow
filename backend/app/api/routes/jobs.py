@@ -13,7 +13,12 @@ from app.schemas.candidate import (
     MatchResponse,
     MatchResultItem,
 )
-from app.schemas.job import CreateJobRequest, JobResponse, UpdateJobRequest
+from app.schemas.job import (
+    CreateJobRequest,
+    JobResponse,
+    UpdateJobRequest,
+    UpdateJobStatusRequest,
+)
 from app.services.export_service import export_candidates_to_csv
 
 router = APIRouter()
@@ -108,6 +113,35 @@ async def update_job(
 ) -> JobResponse:
     updates = request.model_dump(exclude_unset=True)
     job = await jobs.update(job_id, actor=current_user, **updates)
+    return JobResponse.model_validate(job)
+
+
+@router.patch(
+    "/{job_id}/status",
+    response_model=JobResponse,
+    summary="Change a job's status",
+    description=(
+        "Move a job through its lifecycle. Allowed transitions: "
+        "`draft → open`, `open → closed`, `closed → open` (reopen), and "
+        "`→ archived` from any live state. Archived is terminal and jobs "
+        "cannot return to `draft`. Setting the current status is a no-op. "
+        "An illegal transition returns 409."
+    ),
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not the job owner or an admin"},
+        404: {"description": "Job not found"},
+        409: {"description": "Illegal status transition"},
+        422: {"description": "Validation error"},
+    },
+)
+async def change_job_status(
+    job_id: UUID,
+    request: UpdateJobStatusRequest,
+    current_user: CurrentUser,
+    jobs: JobServiceDep,
+) -> JobResponse:
+    job = await jobs.change_status(job_id, actor=current_user, status=request.status)
     return JobResponse.model_validate(job)
 
 

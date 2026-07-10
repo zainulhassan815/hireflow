@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeftIcon,
   BriefcaseIcon,
+  ChevronDownIcon,
   LayoutGridIcon,
   ListIcon,
   Loader2Icon,
@@ -15,12 +16,17 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
+  changeJobStatusMutation,
   deleteJob,
   getJobOptions,
+  getJobQueryKey,
   listJobApplicationsOptions,
   listJobApplicationsQueryKey,
   matchCandidatesMutation,
   type ApplicationResponse,
+  type ErrorResponse,
+  type JobResponse,
+  type JobStatus,
 } from "@/api";
 import {
   CandidateFilterBar,
@@ -58,6 +64,23 @@ const statusDotClass: Record<string, string> = {
   draft: "bg-warning",
   closed: "bg-muted-foreground",
   archived: "bg-destructive",
+};
+
+// Mirrors the backend lifecycle rules (JobService._ALLOWED_TRANSITIONS) so
+// the menu only offers legal next states. The backend still validates —
+// this is a UX shortcut, not the source of truth. Archived is terminal.
+const jobStatusTransitions: Record<JobStatus, JobStatus[]> = {
+  draft: ["open", "archived"],
+  open: ["closed", "archived"],
+  closed: ["open", "archived"],
+  archived: [],
+};
+
+const statusLabel: Record<JobStatus, string> = {
+  draft: "Draft",
+  open: "Open",
+  closed: "Closed",
+  archived: "Archived",
 };
 
 export function JobDetailPage() {
@@ -177,19 +200,10 @@ export function JobDetailPage() {
         </Button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span
-              aria-hidden
-              className={cn(
-                "inline-block size-2 shrink-0 rounded-full",
-                statusDotClass[job.status] ?? "bg-muted-foreground"
-              )}
-            />
             <Typography variant="h3" className="truncate">
               {job.title}
             </Typography>
-            <Badge variant="outline" className="capitalize">
-              {job.status}
-            </Badge>
+            <JobStatusControl job={job} />
           </div>
           <Typography variant="muted" className="mt-1 text-sm">
             {job.location || "No location"} &middot; Min {job.experience_min}
@@ -316,6 +330,117 @@ export function JobDetailPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function JobStatusControl({ job }: { job: JobResponse }) {
+  const queryClient = useQueryClient();
+  const [pendingArchive, setPendingArchive] = React.useState(false);
+
+  const statusMut = useMutation({
+    ...changeJobStatusMutation(),
+    onSuccess: (updated) => {
+      toast.success(`Status set to ${statusLabel[updated.status]}`);
+      queryClient.invalidateQueries({
+        queryKey: getJobQueryKey({ path: { job_id: job.id } }),
+      });
+    },
+    onError: (error) => {
+      const message =
+        (error as ErrorResponse | undefined)?.error?.message ??
+        "Couldn't change status";
+      toast.error(message);
+    },
+  });
+
+  const change = (status: JobStatus) =>
+    statusMut.mutate({ path: { job_id: job.id }, body: { status } });
+
+  const actionLabel = (target: JobStatus) => {
+    if (target === "open")
+      return job.status === "closed" ? "Reopen job" : "Open job";
+    if (target === "closed") return "Close job";
+    if (target === "archived") return "Archive job";
+    return statusLabel[target];
+  };
+
+  const nextStates = jobStatusTransitions[job.status];
+
+  // Archived is terminal — nothing to transition to, so show a plain badge.
+  if (nextStates.length === 0) {
+    return (
+      <Badge variant="outline" className="capitalize">
+        {job.status}
+      </Badge>
+    );
+  }
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={statusMut.isPending}
+              className="h-7 gap-1.5 capitalize"
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  "inline-block size-2 rounded-full",
+                  statusDotClass[job.status] ?? "bg-muted-foreground"
+                )}
+              />
+              {job.status}
+              <ChevronDownIcon className="size-3.5 opacity-60" />
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="start">
+          {nextStates.map((target) => (
+            <DropdownMenuItem
+              key={target}
+              className={target === "archived" ? "text-destructive" : undefined}
+              onClick={() =>
+                target === "archived" ? setPendingArchive(true) : change(target)
+              }
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  "mr-2 inline-block size-2 rounded-full",
+                  statusDotClass[target] ?? "bg-muted-foreground"
+                )}
+              />
+              {actionLabel(target)}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <AlertDialog open={pendingArchive} onOpenChange={setPendingArchive}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive this job?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Archiving is permanent — an archived job can&apos;t be reopened.
+              Create a new job if you need to hire for this role again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground"
+              onClick={() => change("archived")}
+            >
+              Archive job
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
