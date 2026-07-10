@@ -15,9 +15,9 @@ AI-Powered HR Screening and Document Retrieval System using RAG. Built for HR pe
 backend/          FastAPI app (core, schemas, models, services, api/routes)
 frontend/        React app (pages, components, providers, hooks)
 docs/            Specs + conventions (authoritative, kebab-case filenames)
-  features.md    Main feature tracker — pick the next task from here
+  features.md    Frozen roadmap snapshot — live tracking is GitHub Issues
   architecture.md System architecture reference
-  dev/           Per-feature planning/review/summary docs (this workflow)
+  dev/           Archived per-feature docs (pre-Issues workflow; don't add new)
 docker-compose.yml
 scripts/
 ```
@@ -48,8 +48,9 @@ uv run pytest
 
 ## Authoritative docs — consult before coding
 
+- **GitHub Issues** — **the single source of truth for feature planning + history** (one issue per `FXX`, milestone per phase). Pick the next open issue; plan/reviews/summary live on it. See Workflow below.
 - `docs/architecture.md` — **system architecture: layers, pipelines, data model, auth, providers** (read first)
-- `docs/features.md` — ordered feature tracker (pick next `[ ]`)
+- `docs/features.md` — frozen roadmap snapshot / dependency ordering (live status lives in Issues, not the checkboxes)
 - `docs/conventions.md` — naming, FastAPI patterns, React composition rules, Tailwind v4
 - `docs/api-standards.md` — endpoint/tag/response conventions
 - `docs/openapi-standards.md` — **schema + route checklist for self-documenting OpenAPI**
@@ -63,24 +64,28 @@ uv run pytest
 
 ## Workflow (strict)
 
-Every feature follows this loop. Docs live in `docs/dev/<feature-id>/`:
+**GitHub Issues are the single source of truth.** Every feature is one issue (`FXX · name`, milestone = phase). Plan, reviews, manual-test notes, and the summary all live on the issue as comments — **no `docs/dev/<id>/` folders** (those are archived). The loop:
 
-1. **Pick** — choose the next `[ ]` item in `docs/features.md`. Mark it `[~]`.
-2. **Plan** → write `docs/dev/<id>/01-plan.md` (scope, files to touch, API/schema changes, tests, risks).
-3. **Plan review** → critique the plan in `02-plan-review.md`. Revise `01-plan.md` until approved.
+1. **Pick** — take the next open issue (lowest-phase milestone first; honor the dependency order in `docs/features.md`). Claim it and mark it active:
+   `gh issue edit <n> --add-label in-progress` (and `--add-assignee @me`).
+2. **Plan** — post the plan as an issue comment: scope, files to touch, API/schema changes, tests, risks. For a large feature, promote it into the issue body under a `## Plan` heading.
+   `gh issue comment <n> --body-file plan.md`
+3. **Plan review** — post a plan-review comment critiquing the plan. Revise the plan until approved.
 4. **Implement** — code the change. No doc step.
    - Final step before leaving this stage: run `uv run ruff check --fix && uv run ruff format` (backend) and `npm run lint && npm run format` (frontend) for anything touched. Don't defer.
-5. **Implementation review** → `03-implementation-review.md` — what was built vs plan, deviations, concerns. Note any ruff/lint findings.
-6. **Manual test** → `04-manual-test.md` — checklist of what was exercised in the browser / curl, results, any bugs found and fixed.
-7. **Commit** — single focused commit referencing the feature id (e.g. `F01: add User model + Alembic baseline`).
-8. **Summary** → `05-summary.md` — short postmortem: what shipped, links to PR/commit, follow-ups, lessons. Flip the tracker entry to `[x]`.
+5. **Implementation review** — post a comment: what was built vs plan, deviations, concerns, ruff/lint findings.
+6. **Manual test** — post a comment: checklist of what was exercised in the browser / curl, results, any bugs found and fixed.
+7. **Commit** — single focused commit referencing the issue (e.g. `F45: signal review (#27)`). Put `Closes #<n>` in the commit body or PR so merge auto-closes the issue.
+8. **Summary + close** — post a summary comment (what shipped, commit/PR links, follow-ups, lessons), remove `in-progress`, and close the issue: `gh issue close <n> --reason completed`.
 
-### Conventions for dev docs
+Sub-slices (`F45.c`, `F81.a–j`) are checklist items in the parent issue body — tick them as they land. Only split one into its own issue if it grows large enough to warrant a separate plan.
 
-- Feature id = the `FXX` code from `features.md` (e.g. `F01`, `F22`).
-- Folder name: `F01-database-layer/` (id + short slug).
-- Keep docs short. Bullets > prose. Link code by `path:line`.
-- Don't skip steps. If a step is trivial, write one line and move on — but leave a record.
+### Conventions for issue tracking
+
+- One issue per top-level feature; title `FXX · short name`; milestone = phase; labels `phase:N` (+ `in-progress` while active).
+- Keep comments short. Bullets > prose. Link code by `path:line`, commits by sha.
+- Don't skip steps. If a step is trivial, one line on the issue is fine — but leave the record.
+- `docs/dev/<id>/` is retired: historical folders stay as an archive; don't create new ones.
 
 ## House rules for Claude
 
@@ -94,5 +99,5 @@ Every feature follows this loop. Docs live in `docs/dev/<feature-id>/`:
 - **Comments earn their place.** Code is self-documenting by default; a comment only survives if it explains something the code cannot.
   - **Do write:** a non-obvious *why* — hidden constraint, subtle invariant, vendor/browser quirk, workaround with a link, security/correctness warning, ordering requirement, perf trick that isn't visible in the code.
   - **Don't write:** restatements of the next line, section banners (`# ---- Foo ----`, `/* ---- UI ---- */`), JSX labels (`{/* Header */}`, `{/* Status + actions */}`), docstrings that just re-say the function/class name, speculative TODOs ("lift to URL later"), refactor history ("Previously this lived in X; moved here"), or persona/user narrative ("Priya does Y daily").
-  - **No feature-id tags** (`F44.b — …`, `(F93.e)`, `F89.c` prefixes) in code or docstrings. The commit message + `docs/dev/<id>/` are the durable record; source-tree tags rot. Pydantic field/class docstrings and FastAPI route `summary`/`description` are still required per `docs/openapi-standards.md` — write them as plain contracts, without the `FXX —` prefix.
+  - **No feature-id tags** (`F44.b — …`, `(F93.e)`, `F89.c` prefixes) in code or docstrings. The commit message + the tracking issue (`#NN`) are the durable record; source-tree tags rot. Pydantic field/class docstrings and FastAPI route `summary`/`description` are still required per `docs/openapi-standards.md` — write them as plain contracts, without the `FXX —` prefix.
   - **Rule of thumb:** if deleting the comment would not confuse a future reader, delete it. If it *would*, keep it and make the *why* explicit.

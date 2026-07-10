@@ -1,8 +1,12 @@
-# Hireflow Feature Tracker
+# Hireflow Feature Tracker (ARCHIVED)
 
-Main implementation tracker. Features are ordered by dependency — each assumes the previous ones are in place. Pick the next unchecked item.
+> **Live tracking has moved to GitHub Issues.** Each `FXX` is an issue (milestone = phase); plan, reviews, and history live on the issue. See the Workflow in `CLAUDE.md`.
+>
+> This file is a **frozen snapshot** kept for its dependency ordering and roadmap narrative. **Do not flip the checkboxes** — they no longer reflect status; the issue state does.
 
-Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
+Features are ordered by dependency — each assumes the previous ones are in place.
+
+Status legend (as of archive): `[ ]` todo · `[~]` in progress · `[x]` done
 
 ---
 
@@ -24,21 +28,21 @@ They compose. Good first slice: **F96.a–e** (DB + API + streaming endpoint + U
 
 ## Phase 0 — Foundation
 
-- [x] **F00 · Environment & config hardening**
+- [x] **F00 · Environment & config hardening** [#1](https://github.com/zainulhassan815/hireflow/issues/1)
   SRS: infra · Depends on: —
   - Enforce `JWT_SECRET_KEY` (no default; fail-fast on startup)
   - Drive CORS origins from env (`ALLOWED_ORIGINS`)
   - Real `.env.example` for Postgres, Redis, Chroma, JWT, Gmail OAuth, LLM provider
   - `backend/app/core/config.py` split: settings validated at import
 
-- [x] **F01 · Database layer (Postgres + SQLAlchemy + Alembic)**
+- [x] **F01 · Database layer (Postgres + SQLAlchemy + Alembic)** [#2](https://github.com/zainulhassan815/hireflow/issues/2)
   SRS: infra · Depends on: F00
   - Async SQLAlchemy 2.x engine + session dependency
   - Alembic initialized with autogenerate
   - Base `User` model (id, email, hashed_password, role, timestamps)
   - First migration committed
 
-- [x] **F02 · Generated API client & frontend wiring**
+- [x] **F02 · Generated API client & frontend wiring** [#3](https://github.com/zainulhassan815/hireflow/issues/3)
   SRS: infra · Depends on: F00
   - `openapi-ts` generation script wired into frontend build
   - Shared `apiClient` with base URL from env, auth header injection
@@ -48,42 +52,42 @@ They compose. Good first slice: **F96.a–e** (DB + API + streaming endpoint + U
 
 ## Phase 1 — Authentication (FR01–FR03, UC-01, UC-02)
 
-- [x] **F10 · Backend auth: register + login + JWT**
+- [x] **F10 · Backend auth: register + login + JWT** [#4](https://github.com/zainulhassan815/hireflow/issues/4)
   SRS: FR01, FR03 · Depends on: F01
   - `POST /auth/register`, `POST /auth/login` return access + refresh tokens
   - Bcrypt/argon2 password hashing
   - `get_current_user` dependency; protect all non-public routes
   - Rate limit login attempts (address UC-01 open issue: account lock)
 
-- [x] **F11 · Token refresh + logout**
+- [x] **F11 · Token refresh + logout** [#5](https://github.com/zainulhassan815/hireflow/issues/5)
   SRS: FR01 · Depends on: F10
   - `POST /auth/refresh`, `POST /auth/logout` (refresh-token revocation list in Redis)
 
-- [x] **F12 · Password reset flow**
+- [x] **F12 · Password reset flow** [#6](https://github.com/zainulhassan815/hireflow/issues/6)
   SRS: FR02, UC-02 · Depends on: F10
   - `POST /auth/forgot-password` issues one-time reset token (email delivery stubbable)
   - `POST /auth/reset-password` validates token + sets new password
   - Password policy shared between FE/BE
 
-- [x] **F13 · Frontend auth integration**
+- [x] **F13 · Frontend auth integration** [#7](https://github.com/zainulhassan815/hireflow/issues/7)
   SRS: FR01–FR03 · Depends on: F10–F12, F02
   - Replace `auth-provider.tsx` mock with real API calls
   - Secure token storage (httpOnly cookie preferred; else memory + refresh)
   - Route guards; 401 → auto-refresh → logout on failure
 
-- [x] **F14 · RBAC scaffolding**
+- [x] **F14 · RBAC scaffolding** [#8](https://github.com/zainulhassan815/hireflow/issues/8)
   SRS: §Privacy and Security · Depends on: F10
   - Role enum (`hr`, `admin`); route-level role checks
   - Seed script for initial admin
 
-- [x] **F15 · Layered refactor: domain / adapters / repositories / services**
+- [x] **F15 · Layered refactor: domain / adapters / repositories / services** [#9](https://github.com/zainulhassan815/hireflow/issues/9)
   Not user-facing. Moves auth/session/reset code behind `Protocol`s, adds
   `domain/exceptions.py` + an error-handler, introduces `repositories/`,
   formalises `Authorizer`. Routes become minimal HTTP wrappers. All F10–F14
   HTTP contracts preserved and re-exercised.
   Depends on: F14
 
-- [x] **F20 · Document model + storage (MinIO)**
+- [x] **F20 · Document model + storage (MinIO)** [#10](https://github.com/zainulhassan815/hireflow/issues/10)
   Depends on: F15
   - Add MinIO to `docker-compose.yml` + one-shot bucket init
   - `Document` table (id, owner, filename, mime, size, storage_key, status, metadata JSONB, timestamps)
@@ -93,19 +97,19 @@ They compose. Good first slice: **F96.a–e** (DB + API + streaming endpoint + U
 
 ## Phase 2 — Documents (FR04–FR06, UC-03)
 
-- [x] **F21 · Upload endpoint + frontend uploader**
+- [x] **F21 · Upload endpoint + frontend uploader** [#11](https://github.com/zainulhassan815/hireflow/issues/11)
   SRS: FR04 · Depends on: F20, F13
   - `POST /documents` multipart, size/MIME validation (PDF, DOCX, images)
   - Drag-and-drop + batch upload on `documents.tsx` wired to real API
   - List/preview/download/delete endpoints
 
-- [x] **F22 · Text extraction pipeline (Celery + OCR + PDF/DOCX)**
+- [x] **F22 · Text extraction pipeline (Celery + OCR + PDF/DOCX)** [#12](https://github.com/zainulhassan815/hireflow/issues/12)
   SRS: FR05, FR06 · Depends on: F21
   - Background worker (Redis + RQ/Arq or FastAPI `BackgroundTasks` initially)
   - PyMuPDF for PDFs, python-docx for Word, Tesseract for images/scanned PDFs
   - Persist extracted text + status transitions (`pending → processing → ready/failed`)
 
-- [x] **F23 · Classification + metadata extraction**
+- [x] **F23 · Classification + metadata extraction** [#13](https://github.com/zainulhassan815/hireflow/issues/13)
   SRS: FR20, UC-11 · Depends on: F22
   - Classifier (rule-based first, LLM fallback): resume / report / contract / letter
   - Extract resume metadata (skills, experience years, education) into JSONB
@@ -115,23 +119,23 @@ They compose. Good first slice: **F96.a–e** (DB + API + streaming endpoint + U
 
 ## Phase 3 — Search & RAG (FR07–FR10, UC-03, UC-04)
 
-- [x] **F30 · Embeddings + ChromaDB ingestion**
+- [x] **F30 · Embeddings + ChromaDB ingestion** [#14](https://github.com/zainulhassan815/hireflow/issues/14)
   Depends on: F22
   - Chunk + embed extracted text (sentence-transformers or OpenAI embeddings, configurable)
   - Write to Chroma with `document_id` + metadata
   - Re-index on document update/delete
 
-- [x] **F31 · Hybrid search endpoint (vector + metadata)**
+- [x] **F31 · Hybrid search endpoint (vector + metadata)** [#15](https://github.com/zainulhassan815/hireflow/issues/15)
   SRS: FR07, FR09 · Depends on: F30
   - `POST /search` — natural-language query → ranked chunks + parent docs
   - Return snippets with highlights
 
-- [x] **F32 · Filters (skills / role / date / type)**
+- [x] **F32 · Filters (skills / role / date / type)** [#16](https://github.com/zainulhassan815/hireflow/issues/16)
   SRS: FR08, FR10, UC-04 · Depends on: F31, F23
   - Hybrid filter: SQL metadata filter + vector similarity
   - Frontend `search.tsx` + `documents.tsx` filter UI wired
 
-- [x] **F33 · RAG chat (Q&A over documents)**
+- [x] **F33 · RAG chat (Q&A over documents)** [#17](https://github.com/zainulhassan815/hireflow/issues/17)
   SRS: §RAG System · Depends on: F31
   - `POST /rag/query` streams answer + citations
   - LLM provider abstraction (Anthropic / OpenAI / local)
@@ -144,23 +148,23 @@ They compose. Good first slice: **F96.a–e** (DB + API + streaming endpoint + U
 Wire existing frontend pages to the real backend API. All pages must follow
 `docs/frontend-api-rules.md`: SDK types only, no mock data, no custom types.
 
-- [x] **F25 · Documents page**
+- [x] **F25 · Documents page** [#18](https://github.com/zainulhassan815/hireflow/issues/18)
   Depends on: F21
   - Upload via `documentsUploadDocument`, list via `documentsListDocuments`
   - Download, delete, metadata view against real API
   - Loading/empty/error states
 
-- [x] **F26 · Search page**
+- [x] **F26 · Search page** [#19](https://github.com/zainulhassan815/hireflow/issues/19)
   Depends on: F31
   - Wire to `searchSearchDocuments` with filter controls
   - Display ranked results with highlights and metadata
 
-- [x] **F27 · RAG chat page**
+- [x] **F27 · RAG chat page** [#20](https://github.com/zainulhassan815/hireflow/issues/20)
   Depends on: F33
   - Integrated as tab in search page with `ragQueryDocuments`
   - Show answer + source citations with model info
 
-- [x] **F28 · Dashboard**
+- [x] **F28 · Dashboard** [#21](https://github.com/zainulhassan815/hireflow/issues/21)
   Depends on: F25
   - Real counts (documents, recent uploads)
   - Replace all mock data with API calls
@@ -169,29 +173,29 @@ Wire existing frontend pages to the real backend API. All pages must follow
 
 ## Phase 4 — Jobs & Candidates (FR11–FR16, UC-06, UC-07, UC-12)
 
-- [x] **F40 · Jobs CRUD**
+- [x] **F40 · Jobs CRUD** [#22](https://github.com/zainulhassan815/hireflow/issues/22)
   SRS: FR11, FR12 · Depends on: F14
   - `Job` model (title, description, required_skills[], experience_min, education, status)
   - `GET/POST/PATCH/DELETE /jobs`
   - Frontend `jobs` pages wired
 
-- [x] **F41 · Candidate model + resume linking**
+- [x] **F41 · Candidate model + resume linking** [#23](https://github.com/zainulhassan815/hireflow/issues/23)
   Depends on: F23, F40
   - `Candidate` (derived from processed resumes: name, email, skills[], experience, source_document_id)
   - `Application` join table (candidate ↔ job, status: new/shortlisted/rejected, score)
 
-- [x] **F42 · Resume ↔ job matching & ranking**
+- [x] **F42 · Resume ↔ job matching & ranking** [#24](https://github.com/zainulhassan815/hireflow/issues/24)
   SRS: FR13, FR14 · Depends on: F41, F30
   - Score candidates per job (embedding similarity + skill overlap + heuristics)
   - `GET /jobs/{id}/candidates` sorted by score
   - Shortlist / reject actions (FR14, FR15)
 
-- [x] **F43 · CSV export**
+- [x] **F43 · CSV export** [#25](https://github.com/zainulhassan815/hireflow/issues/25)
   SRS: FR16, UC-05 · Depends on: F42
   - `GET /jobs/{id}/candidates/export` → CSV (stdlib, no deps)
   - Frontend export buttons on candidates + search pages
 
-- [x] **F44 · Candidate shortlisting (minimal)** — F42 marked "Shortlist /
+- [x] **F44 · Candidate shortlisting (minimal)** [#26](https://github.com/zainulhassan815/hireflow/issues/26) — F42 marked "Shortlist /
   reject actions" done, but it was only half-built: the `Application`
   model + `PATCH /applications/{id}/status` endpoint exist, and the
   orphan `resume-viewer.tsx` component has `onShortlist` / `onReject`
@@ -364,7 +368,7 @@ F46.d (credential signal) → F45.b (weight tuning) → F46.e/f
 (UI + tests) → F48 (productionize). F45.a gates tuning and
 validation for both features.
 
-- [ ] **F45 · Shortlisting algorithm review + improvements** —
+- [ ] **F45 · Shortlisting algorithm review + improvements** [#27](https://github.com/zainulhassan815/hireflow/issues/27) —
   `MatchingService._compute_score` is currently a fixed 45/20/35
   weighted sum (skills / experience / vector) with no tuning
   evidence behind the weights and no explainability. F44 just
@@ -415,7 +419,7 @@ validation for both features.
     signal — per-job tuning without credentials is the narrower
     problem we already decided to skip.
 
-- [ ] **F46 · Multi-file candidate submissions** — today a candidate
+- [ ] **F46 · Multi-file candidate submissions** [#28](https://github.com/zainulhassan815/hireflow/issues/28) — today a candidate
   is one resume: `Candidate.source_document_id` is a single FK and
   both the drawer and scoring pipeline assume that one doc is the
   whole story. Real submissions are a bundle — resume + certificates
@@ -495,7 +499,7 @@ validation for both features.
     (F45.a) with cert-bearing candidates to confirm the new signal
     lifts the right ranks without regressing the cert-less baseline.
 
-- [ ] **F47 · Customizable exports** — F43 shipped a one-shot CSV
+- [ ] **F47 · Customizable exports** [#29](https://github.com/zainulhassan815/hireflow/issues/29) — F43 shipped a one-shot CSV
   export for a job's candidates (fixed columns, no filter awareness,
   stdlib only). HR actually asks for more: "just the shortlisted
   ones in Excel with these columns, grouped by score tier." This
@@ -572,7 +576,7 @@ validation for both features.
     (mojibake guard), scope×filter×selection matrix, owner-scope
     enforcement, async-path handoff.
 
-- [ ] **F48 · Shortlisting productionization** — F44 shipped the
+- [ ] **F48 · Shortlisting productionization** [#30](https://github.com/zainulhassan815/hireflow/issues/30) — F44 shipped the
   triage flow, F45 tunes the algorithm, F46 adds the credentials
   signal. F48 is the hardening pass that takes the combined
   pipeline from "works for our fixture" to "trusted by HR on real
@@ -653,7 +657,7 @@ validation for both features.
     land the run in CI as a nightly. Anything slower than the SLA
     is a regression.
 
-- [ ] **F49 · Job status lifecycle** — `JobStatus` enum exists
+- [ ] **F49 · Job status lifecycle** [#31](https://github.com/zainulhassan815/hireflow/issues/31) — `JobStatus` enum exists
   (`draft / open / closed / archived`, defaults to `draft`) and the
   list endpoint accepts a `status` filter, but there's no way to
   actually change a job's status: no PATCH endpoint, no UI control.
@@ -692,24 +696,24 @@ validation for both features.
 
 ## Phase 5 — Gmail Integration (FR17, FR18, UC-08, UC-09)
 
-- [x] **F50 · Gmail OAuth connect**
+- [x] **F50 · Gmail OAuth connect** [#32](https://github.com/zainulhassan815/hireflow/issues/32)
   SRS: FR17 · Depends on: F14
   - OAuth 2.0 initiation + callback endpoints
   - Store refresh token encrypted per user
   - Settings page: connect/disconnect Gmail
 
-- [x] **F51 · Resume sync worker**
+- [x] **F51 · Resume sync worker** [#33](https://github.com/zainulhassan815/hireflow/issues/33)
   SRS: FR18, UC-08, UC-09 · Depends on: F50, F22
   - Scheduled poll (or push via Pub/Sub later) fetches new emails with attachments
   - Dedup by message-id + attachment hash
   - Ingest attachments through the existing document pipeline
 
-- [ ] **F52 · Follow-up email sending**
+- [ ] **F52 · Follow-up email sending** [#34](https://github.com/zainulhassan815/hireflow/issues/34)
   SRS: §Resume Screening · Depends on: F50
   - Template-based follow-ups from candidate detail view
   - Send via Gmail API; log in activity trail
 
-- [x] **F53 · Multiple Gmail accounts per user** — today one HR user can
+- [x] **F53 · Multiple Gmail accounts per user** [#35](https://github.com/zainulhassan815/hireflow/issues/35) — today one HR user can
   connect exactly one Gmail mailbox (the `gmail_connections` table has a
   `UNIQUE (user_id)` constraint; re-authorizing overwrites the token).
   HR teams run a recruiting inbox *and* personal inboxes that receive
@@ -741,21 +745,21 @@ validation for both features.
 
 ## Phase 6 — Observability & Admin (FR19, FR20, UC-10, UC-11)
 
-- [x] **F60 · Activity log / audit trail**
+- [x] **F60 · Activity log / audit trail** [#36](https://github.com/zainulhassan815/hireflow/issues/36)
   SRS: FR19, UC-10, §Privacy and Security · Depends on: F14
   - `ActivityLog` table (actor, action, resource, at, ip)
   - Middleware captures auth + document + job + email events
   - `GET /logs` with filters; `logs.tsx` wired
 
-- [x] **F61 · Settings & profile**
+- [x] **F61 · Settings & profile** [#37](https://github.com/zainulhassan815/hireflow/issues/37)
   Depends on: F13
   - Profile edit, password change, Gmail connection status, LLM/embedding provider selection
 
-- [x] **F62 · Dashboard metrics**
+- [x] **F62 · Dashboard metrics** [#38](https://github.com/zainulhassan815/hireflow/issues/38)
   Depends on: F20, F40, F41
   - Real counts (documents, jobs, candidates, recent activity) replacing mocks
 
-- [x] **F63 · Dev-mode logging config**
+- [x] **F63 · Dev-mode logging config** [#39](https://github.com/zainulhassan815/hireflow/issues/39)
   Depends on: —
   - Today the project has no root logging handler, so `logger.info(...)` from `app.*` gets dropped in dev runs (SQLAlchemy shows up because it configures its own handler; our modules don't).
   - Add a `DEBUG`-guarded `logging.basicConfig(level=INFO)` in `app/main.py` so dev runs surface observability lines like F81.b/c's `rag context: ...` without a custom log config.
@@ -766,21 +770,21 @@ validation for both features.
 
 ## Phase 7 — Hardening & Deploy
 
-- [x] **F70 · Error handling & API error shape**
+- [x] **F70 · Error handling & API error shape** [#40](https://github.com/zainulhassan815/hireflow/issues/40)
   Depends on: F10
   - Consistent error envelope; frontend toast integration; Sentry hook (optional)
 
-- [x] **F71 · Tests**
+- [x] **F71 · Tests** [#41](https://github.com/zainulhassan815/hireflow/issues/41)
   Depends on: F10+
   - pytest: auth, documents, search, ranking
   - Playwright: login → upload → search happy path
 
-- [x] **F72 · Dockerfile + production compose**
+- [x] **F72 · Dockerfile + production compose** [#42](https://github.com/zainulhassan815/hireflow/issues/42)
   Depends on: F00
   - Backend + frontend Dockerfiles; reverse proxy (Caddy/Nginx); HTTPS
   - Separate `docker-compose.prod.yml`
 
-- [x] **F73 · Encryption at rest for sensitive fields**
+- [x] **F73 · Encryption at rest for sensitive fields** [#43](https://github.com/zainulhassan815/hireflow/issues/43)
   SRS: §Privacy and Security · Depends on: F50
   - OAuth refresh tokens + any PII columns encrypted (app-level or pgcrypto)
 
@@ -790,7 +794,7 @@ validation for both features.
 
 Improve accuracy, relevance, and usefulness of core AI features.
 
-- [x] **F80 · Search relevance tuning**
+- [x] **F80 · Search relevance tuning** [#44](https://github.com/zainulhassan815/hireflow/issues/44)
   - Minimum similarity threshold — discard vector hits above cosine distance threshold (default 0.6) instead of returning everything
   - SQL metadata path only contributes when structured filters are present (no more "recent documents for any query")
   - Drop max-score normalization lie; expose a confidence band (`high`/`medium`/`low`) instead
@@ -798,12 +802,12 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - Eval harness: 15-20 curated queries against fixture docs, precision@5 + MRR baseline via `make eval`
   - Deferred to F80.5 (below): query expansion, RRF recency boost, faceted results
 
-- [x] **F80.5 · Cross-encoder reranker** — `Reranker` protocol + `CrossEncoderReranker` (BAAI/bge-reranker-base, local sentence-transformers) + `NullReranker` + registry. Wired into `SearchService` with `reranker_top_k=20`. Default `reranker_provider=local` after F85.c weighted RRF lands — the candidate set is filename-biased before reranking, so the reranker reshuffles within an already-correct window. Eval: MRR held at 0.859 with the combined stack.
+- [x] **F80.5 · Cross-encoder reranker** [#45](https://github.com/zainulhassan815/hireflow/issues/45) — `Reranker` protocol + `CrossEncoderReranker` (BAAI/bge-reranker-base, local sentence-transformers) + `NullReranker` + registry. Wired into `SearchService` with `reranker_top_k=20`. Default `reranker_provider=local` after F85.c weighted RRF lands — the candidate set is filename-biased before reranking, so the reranker reshuffles within an already-correct window. Eval: MRR held at 0.859 with the combined stack.
   - Rerank top-20 vector candidates with a local cross-encoder (e.g. `cross-encoder/ms-marco-MiniLM-L-6-v2`)
   - Toggle via `SEARCH_RERANKER_ENABLED` env var for A/B
   - Eval harness measures precision@5 before/after to justify the `sentence-transformers` dep weight
 
-- [ ] **F81 · RAG answer quality** — all user-facing (changes how the answer looks, feels, or what it knows). Proposed sub-slices:
+- [ ] **F81 · RAG answer quality** [#46](https://github.com/zainulhassan815/hireflow/issues/46) — all user-facing (changes how the answer looks, feels, or what it knows). Proposed sub-slices:
   - [x] **F81.a** Streaming answers via SSE — `LlmProvider.stream` protocol method (async-native, no thread bridge) + `AsyncAnthropic.messages.stream` / `httpx.AsyncClient.stream` for Ollama. `RagService._build_context` shared between `query` and new `stream_query`. `POST /rag/stream` emits typed `StreamEvent` discriminated union (citations → delta\* → done, or error) as SSE frames via `StreamingResponse` + 5-line `_sse_frame` helper (no `sse-starlette`). Frontend consumes via a ~100-line `fetch` + `ReadableStream` parser in `src/api/rag-stream.ts` (no new deps). Chat UI swapped to Claude-style full-viewport layout with pinned input and per-message streaming cursor.
   - [x] **F81.b** Distance filter in `RagService._build_context`: drops hits above `rag_context_max_distance` (None → embedder threshold, same shape as F85.d search). When every hit fails the cutoff, returns `None` → existing no-hits sentinel fires without an LLM call. Live: irrelevant queries (`quantum mechanics`) now short-circuit in ~20ms instead of paying ~1400ms for the LLM to reason its way to "Not in the provided documents". No retrieval-pipeline change (still vector-only); F81.k tracks RAG adopting the full SearchService path.
   - [x] **F81.c** Token-budget pass in `_build_context`: walks hits in retrieval order, accumulates via a 4-chars-per-token heuristic (`_estimate_tokens`, no `tiktoken`), stops when the next chunk would push over `rag_context_token_budget` (default 4000 tokens — headroom for Ollama 8k, trivial for Claude 200k). Oversized top chunk kept with WARN (preserves answer capability). Observability: one INFO line per query `rag context: N/M chunks kept, ~K tokens (cutoff=X, budget=Y)`. Live with budget=500: 10-chunk request truncated to 7.
@@ -816,7 +820,7 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - [x] **F81.j** Inline `[filename.pdf]` markers (Claude already emits them via F81.d) now render as clickable shadcn-Tooltip chips in the assistant bubble. `parseSegments` walks the streamed content, matching brackets exactly against `SourceCitation.filename` (case-insensitive fallback); unknown brackets render as plain text so there are no false-positive chips. Streaming-safe — regex only matches complete `[...]`, so incomplete markers stay as plain text until the next delta closes them. Tooltip shows filename + section heading + 3-line snippet; click scrolls to the source card (pairs with F81.h).
   - [x] **F81.k** RAG retrieval adopts the full `SearchService` pipeline (FTS + RRF + reranker). Today `RagService` retrieves vector-only via `vector_store.query`, missing F87 multi-field weighted FTS, F88 acronym expansion + typo tolerance, and F80.5 cross-encoder reranker scores. Architectural change — needs owner-scope threading (SearchService takes `owner_id`; RAG today doesn't), composition-root edits, and a decision on whether to share retrieval ordering with the displayed search results. Follow-up surfaced from F81.b/c where "rank chunks by reranker score" was scope-fenced out. **User sees:** RAG answers using retrieval-quality parity with the search page (no "but I searched for that and it was there" mismatches).
 
-- [~] **F82 · Chunking strategy improvements** — mixed-doc corpus, not just resumes
+- [~] **F82 · Chunking strategy improvements** [#47](https://github.com/zainulhassan815/hireflow/issues/47) — mixed-doc corpus, not just resumes
   - [ ] **F82.a** (skipped — went straight to F82.d layout-aware extraction instead)
   - [ ] **F82.b** Whole-document chunk: one extra vector per doc with `chunk_kind="document"` holding a concatenated extract (first paragraph + headings + skills list). Helps broad "find me a [persona]" queries that need doc-level signal rather than any single chunk.
   - [x] **F82.d** Layout-aware extraction via `unstructured.partition` (hi_res strategy, GPU-accelerated via local RTX 5050). Persists typed elements (`Title`, `NarrativeText`, `ListItem`, `Table`, …) to `document_elements` + version columns on `documents` (`extraction_version`, `chunking_version`, `embedding_model_version`).
@@ -825,7 +829,7 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - [ ] **F82.f** (later) Multi-granularity chunks: sentence + paragraph + section levels with parent-child retrieval. Enables retrieve-small-return-big.
   - Re-index required on any chunk strategy change — `scripts/reindex_embeddings.py` handles it.
 
-- [ ] **F83 · Candidate matching accuracy**
+- [ ] **F83 · Candidate matching accuracy** [#48](https://github.com/zainulhassan815/hireflow/issues/48)
   - Skill normalization: "JS" = "JavaScript", "k8s" = "Kubernetes", "ML" = "Machine Learning"
   - Weighted skill matching: required skills matter more than preferred, exact match > partial
   - Experience range scoring refinement: penalize overqualified less than underqualified
@@ -833,14 +837,14 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - Location matching: remote preference, city proximity
   - Match explanation: human-readable sentence explaining why a score is high/low
 
-- [ ] **F84 · Document classification accuracy**
+- [ ] **F84 · Document classification accuracy** [#49](https://github.com/zainulhassan815/hireflow/issues/49)
   - Training data: curated examples per document type for the rule-based classifier
   - Confidence calibration: rule-based confidence should reflect actual accuracy
   - Multi-label support: a document can be both "resume" and "letter" (cover letter + CV combo)
   - Classification audit: log classified vs actual type, track accuracy over time
   - User correction: let HR override the classified type, feed back into the system
 
-- [~] **F85 · Embedding quality** (F85.b/e still open — gated on real-corpus scale)
+- [~] **F85 · Embedding quality** [#50](https://github.com/zainulhassan815/hireflow/issues/50) (F85.b/e still open — gated on real-corpus scale)
   - [x] **F85.a** Model-agnostic `EmbeddingProvider` protocol + `SentenceTransformerEmbedder` POC with `BAAI/bge-small-en-v1.5`. ChromaVectorStore takes pre-computed vectors; per-model collection naming; `scripts/reindex_embeddings.py`. Eval: P@5 0.253→0.252 (tied), R@5 0.974→**1.000**, MRR 0.870→0.841.
   - [ ] **F85.b** Model exploration — the single biggest unexplored retrieval lever. bge-small-en-v1.5 is a reasonable default but MTEB shows meaningful lift is available on small/base models that still fit on CPU. Candidates to A/B in rough priority order:
     - `intfloat/e5-base-v2` / `intfloat/e5-small-v2` — task-instructed, unlocks F85.e prefixes
@@ -856,26 +860,26 @@ Improve accuracy, relevance, and usefulness of core AI features.
   - [x] Hybrid retrieval: Postgres FTS (`ts_rank_cd`) folded into RRF — eval P@5 0.175→0.238 (+36%), `edge` bucket 0.0→0.4
   - [x] **F85.f** Embedding versioning + startup integrity log. Per-chunk `embedding_model_version` stamped at index time ✅. `ChromaVectorStore._log_startup_integrity` logs `collection=<name> model=<name> chunks=<N>` on construction and warns when the Chroma collection's `embedding_model` metadata drifts from the configured embedder (pointing operators to `scripts/reindex_embeddings.py`). Non-fatal — wrapped in try/except so diagnostics can't crash boot.
 
-- [x] **F86 · Search correctness (P0)** — see `docs/search-hardening.md` §3
+- [x] **F86 · Search correctness (P0)** [#51](https://github.com/zainulhassan815/hireflow/issues/51) — see `docs/search-hardening.md` §3
   - [x] Per-user ownership scoping (admin bypass) wired into vector `where`, FTS, and SQL metadata paths
   - [x] Status filter on vector path: non-READY docs with stale chunks no longer surface
   - [x] **F86.c** Drop orphan vector hits (Chroma chunks for deleted Postgres docs) before RRF — was poisoning ranking by giving high vector scores to nonexistent docs and pushing real lexical hits out of top-K
   - Tenancy decision: per-user with admin bypass, matches `DocumentService._ensure_access`
 
-- [x] **F87 · Multi-field weighted FTS (P1)** — see `docs/search-hardening.md` §4
+- [x] **F87 · Multi-field weighted FTS (P1)** [#52](https://github.com/zainulhassan815/hireflow/issues/52) — see `docs/search-hardening.md` §4
   - [x] Replaced `extracted_text_tsv` with weighted `search_tsv`: filename (A, regexp-tokenized for `_-./` separators), `metadata.skills` (B), `extracted_text` (C)
   - [x] `document_type` deliberately not indexed — `enum::text` is non-IMMUTABLE in Postgres; structured filter handles those 5 values better
   - [x] No `SearchService` changes; `ts_rank_cd` does the weighting automatically
   - Eval lift on top of F86: **P@5 0.238→0.253, R@5 0.906→0.974, MRR 0.781→0.868 (+11%)**; new `filename` bucket MRR=1.0; live `menu analyzer` query now ranks Menu Analyzer Portfolio Doc.pdf at #1
 
-- [x] **F88 · Query syntax & understanding (P1 + P2)** — see `docs/search-hardening.md` §3
+- [x] **F88 · Query syntax & understanding (P1 + P2)** [#53](https://github.com/zainulhassan815/hireflow/issues/53) — see `docs/search-hardening.md` §3
   - [x] **F88.a** Switch `plainto_tsquery` → `websearch_to_tsquery` (phrase/OR/NOT), empty/whitespace short-circuit at service edge, query length cap (1024 chars) — same eval baseline (additive syntax)
   - [x] **F88.b** Canonical acronym expansion (one-directional: `k8s → kubernetes`, `ml → machine learning`, `js → javascript`, ~25 entries; ambiguous like `cv`/`tf` omitted). Applied to FTS only; vector handles equivalence semantically.
   - [x] **F88.c** Typo tolerance: `pg_trgm` `word_similarity` fallback over filename **and body** (`GREATEST` of both) when FTS returns 0; threshold 0.25. Body fallback was added after a real user-reported case (`pyhton` returned 0 because no filename had `python`).
   - [x] **F88.d** Special-token preservation (`C++`/`C#`/`F#`/`.NET`/`Node.js`/`Objective-C`): mirrored substitution at index time (Postgres `normalize_tech_tokens` SQL function) and query time (Python helper)
   - Known limitations: negation (`-term`) only constrains the FTS path; vector RRF can still surface negated docs. Highlight tokenizer (F92.1) doesn't see normalized tokens — non-issue today since query/snippet share the raw input, but worth flagging if highlighting ever consumes the normalized form.
 
-- [ ] **F89 · Search polish (P2 + P3)** — see `docs/search-hardening.md` §3
+- [ ] **F89 · Search polish (P2 + P3)** [#54](https://github.com/zainulhassan815/hireflow/issues/54) — see `docs/search-hardening.md` §3
   - Recency tie-breaking: stable `created_at desc` when RRF scores tie
   - Pagination: add `offset` to `SearchRequest`
   - Mixed-language fallback: try `simple` analyzer when `english` produces empty tsvector
@@ -896,7 +900,7 @@ Improve accuracy, relevance, and usefulness of core AI features.
 
 Production-grade interface with attention to detail, accessibility, and delight.
 
-- [x] **F90 · Design revamp + system baseline** — full visual-identity pass.
+- [x] **F90 · Design revamp + system baseline** [#55](https://github.com/zainulhassan815/hireflow/issues/55) — full visual-identity pass.
   Kills AI-slop defaults and establishes tokens that F91–F96 inherit.
   Driven by the `/impeccable:critique` findings in
   `docs/dev/F90-design-revamp/01-critique.md` (baseline heuristic score
@@ -933,7 +937,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - loading skeletons → F90.f
   - transition animations → F90.e + F90.g
 
-- [~] **F91 · Documents page polish**
+- [~] **F91 · Documents page polish** [#56](https://github.com/zainulhassan815/hireflow/issues/56)
   - [x] Drag-and-drop upload zone on the main page (not just in dialog)
     — page-level overlay, drop anywhere on /documents
   - [ ] Upload progress with real percentage (needs XHR/axios
@@ -946,7 +950,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     confirm-gated bulk delete. Export + "create candidates" still
     deferred (needs backend batch endpoints).
 
-- [~] **F92 · Search & RAG UX** — frontend polish. Backend answer-quality lives in F81.
+- [~] **F92 · Search & RAG UX** [#57](https://github.com/zainulhassan815/hireflow/issues/57) — frontend polish. Backend answer-quality lives in F81.
   - Search page:
     - Search-as-you-type with debounce
     - Filter pills: visual chips for active filters, one-click remove
@@ -966,7 +970,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     - [ ] **F92.10** Keyboard shortcuts: ⌘+Enter to send (already works), ⌘+N new chat, ⌘+K focus search, Escape to stop generation, ↑ to edit last message.
     - [ ] **F92.11** Error / empty-state UX: network down, LLM rate-limited, no retrieval hits — clear messaging + "retry" affordance. Pairs with F81.i backend.
 
-- [~] **F93 · Kanban board view for applications** — reached after
+- [~] **F93 · Kanban board view for applications** [#58](https://github.com/zainulhassan815/hireflow/issues/58) — reached after
   F44 surfaced the list-mode triage flow; Kanban is the same data
   visualized as columns you drag between. F44's view-toggle button
   has been waiting for this renderer since F44.d.3.
@@ -1022,7 +1026,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     an empty result the parent renders `<EmptyFiltersState>`
     with a "Clear filters" link instead of either view.
 
-- [ ] **F94 · Dashboard & navigation**
+- [ ] **F94 · Dashboard & navigation** [#59](https://github.com/zainulhassan815/hireflow/issues/59)
   - Activity feed: recent actions as a timeline (not just table)
   - Quick actions: upload, create job, search from dashboard
   - Keyboard shortcuts: ⌘K for search, ⌘U for upload
@@ -1030,7 +1034,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - Empty states with illustrations, not just icons
   - Toast notifications: success/error/info with consistent styling
 
-- [ ] **F95 · Accessibility & performance**
+- [ ] **F95 · Accessibility & performance** [#60](https://github.com/zainulhassan815/hireflow/issues/60)
   - ARIA labels on all interactive elements
   - Keyboard navigation: tab order, focus rings, escape to close modals
   - Screen reader testing on core flows (login, upload, search)
@@ -1038,7 +1042,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - Bundle analysis: lazy-load heavy pages (search, RAG chat)
   - Image optimization: proper formats, lazy loading
 
-- [ ] **F96 · Persistent conversations (ChatGPT-style)** — *deferred — revisit after F103.b / F92.2 land; not a major-feature priority right now.* Replaces today's
+- [ ] **F96 · Persistent conversations (ChatGPT-style)** [#61](https://github.com/zainulhassan815/hireflow/issues/61) — *deferred — revisit after F103.b / F92.2 land; not a major-feature priority right now.* Replaces today's
   in-memory chat state in `SearchPage` with proper multi-conversation chat:
   sidebar, history, URL-per-conversation, survives page reload. Compose
   with F81.f (prompt-injected memory) and F92.9 (UI sidebar) — F96 is the
@@ -1078,7 +1082,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - Retention policy — auto-archive conversations with no activity in N
     days? Default: no auto-archive until we have data to tune on.
 
-- [ ] **F97 · First-use onboarding** — first-visit Priya lands on an empty
+- [ ] **F97 · First-use onboarding** [#62](https://github.com/zainulhassan815/hireflow/issues/62) — first-visit Priya lands on an empty
   Dashboard with an "Upload documents" CTA but no guided moment showing
   the full workflow (upload → process → search → shortlist). Post-F90
   critique scored Heuristic 10 (Help & Documentation) at 2/4 for exactly
@@ -1095,7 +1099,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     the way a person reads. / Keep the shortlist you can defend." is the
     starting point — each sentence maps to one onboarding step).
 
-- [ ] **F98 · Confirmation hardening** — F90.f added AlertDialog confirms
+- [ ] **F98 · Confirmation hardening** [#63](https://github.com/zainulhassan815/hireflow/issues/63) — F90.f added AlertDialog confirms
   on single-item delete, but high-stakes paths still need more friction.
   Post-F90 critique flagged this as a P3.
   - [ ] **F98.a** Type-to-confirm on cascading deletes: deleting a Job
@@ -1109,7 +1113,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     toast shows "Undo" for 5s; undo clears the flag. Applies first to
     Documents, later to Jobs.
 
-- [ ] **F99 · Design system documentation** — F90 landed a coherent design
+- [ ] **F99 · Design system documentation** [#64](https://github.com/zainulhassan815/hireflow/issues/64) — F90 landed a coherent design
   system (tokens, typography, color, radius, primitive patterns) but no
   doc exists for future contributors. Without it, the next Claude session
   or new engineer won't know why `asChild` is banned, why blue is
@@ -1126,7 +1130,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     rounded interactive, cat-1..5 vs semantic hues, display face vs
     sans, mono vs proportional.
 
-- [ ] **F100 · RAG confidence label at source** — F90.f rewrote the UI
+- [ ] **F100 · RAG confidence label at source** [#65](https://github.com/zainulhassan815/hireflow/issues/65) — F90.f rewrote the UI
   badges (`high / medium / low` → `Strong match / Partial match / Weak
   match`) via a frontend map. The backend still emits the old enum. If
   any other consumer (logs dashboard, admin tooling, CSV export) reads
@@ -1138,7 +1142,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - [ ] **F100.c** Contract test: search + RAG response snapshots
     updated to match new labels.
 
-- [ ] **F102 · Keyboard-first command palette** — Linear-style command
+- [ ] **F102 · Keyboard-first command palette** [#66](https://github.com/zainulhassan815/hireflow/issues/66) — Linear-style command
   palette as the single global shortcut. Phase A (this feature) ships
   `⌘K` to open a searchable palette with Navigate / Create / Account
   groups. Phase B (full Linear parity — sequence shortcuts, help
@@ -1162,7 +1166,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
   - [ ] **F102.g (deferred, Phase B)** Shortcut hint badges (`<Kbd>`)
     inline in buttons, menus, and tooltips.
 
-- [x] **F103 · RAG indirect-evidence reasoning** — surfaced by a
+- [x] **F103 · RAG indirect-evidence reasoning** [#67](https://github.com/zainulhassan815/hireflow/issues/67) — surfaced by a
   real-world query: *"do we have any candidate with stripe
   experience?"* Retrieval correctly returned a project case study
   documenting a Stripe integration; the LLM answered "Not in the
@@ -1228,7 +1232,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     `authored_by_source ENUM('email_match', 'manual')` column
     so filter UIs can distinguish inferred from operator-set.
 
-- [ ] **F104 · RAG + search moonshots** — menu of improvements,
+- [ ] **F104 · RAG + search moonshots** [#68](https://github.com/zainulhassan815/hireflow/issues/68) — menu of improvements,
   each independently shippable, each individually meaningful.
   None locked-in as scoped; we'll revisit after F103 lands and
   pick based on where quality still feels thin. Ordered by
@@ -1300,7 +1304,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     transparency about why the system ranked someone where it
     did. Trust multiplier.
 
-- [ ] **F101 · Document thumbnails** — generate a small preview image
+- [ ] **F101 · Document thumbnails** [#69](https://github.com/zainulhassan815/hireflow/issues/69) — generate a small preview image
   per document during processing so the Documents grid view, preview
   dialog, and similar-docs list render the first page instead of a
   generic type icon. Pairs with F90.d's visual-grid instinct and
@@ -1337,7 +1341,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     PyMuPDF (`pymupdf`) is pure Python wheel. Prefer PyMuPDF for the
     thinner install.
 
-- [x] **F105 · Hybrid document viewer (factory pattern)** (a–e all shipped) — today a
+- [x] **F105 · Hybrid document viewer (factory pattern)** [#70](https://github.com/zainulhassan815/hireflow/issues/70) (a–e all shipped) — today a
   document preview shows metadata + similar docs (F89.c.1) but no
   actual content. We want one entry point (`<DocumentViewer>`) that
   renders anything the corpus holds — PDFs, images, office files,
@@ -1418,7 +1422,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     "Open" item alongside "Preview" (dialog stays for quick
     peeks; the page is for focused reading).
 
-- [x] **F106 · Logo, branding & PWA** — brand mark + installable app
+- [x] **F106 · Logo, branding & PWA** [#71](https://github.com/zainulhassan815/hireflow/issues/71) — brand mark + installable app
   - [x] **F106.a** Logo: ascending 4-bar ranking chart (amber → pink
     → violet → blue, tallest bar tilted) as `logo.svg` / `favicon.svg`
     and reusable `<Logo />` component. Wired into sidebar header and
@@ -1442,7 +1446,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     `devOptions: { enabled: true }` so install criteria are met on
     localhost without a prod build.
 
-- [x] **F107 · Color & theme pass** — the F90 palette existed but
+- [x] **F107 · Color & theme pass** [#72](https://github.com/zainulhassan815/hireflow/issues/72) — the F90 palette existed but
   lived almost exclusively on small outline badges; the rest of the
   chrome was gray. F107 pushes hue into the content (hero, icons,
   metrics, empty states, skill chips) and ships the missing
@@ -1480,7 +1484,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     bindings and theme is a set-once preference; the palette
     path costs three keystrokes and zero collisions.
 
-- [x] **F108 · Document detail page polish** — F105.e landed a
+- [x] **F108 · Document detail page polish** [#73](https://github.com/zainulhassan815/hireflow/issues/73) — F105.e landed a
   dedicated `/documents/:id` page in parallel with an in-flight
   Sheet-based preview redesign. Two paths to the same "view a
   doc" intent is worse than one polished path, so F108 deletes
@@ -1540,7 +1544,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     isn't duplicated by the component's internal heading.
     Rail trimmed `22rem` → `20rem`.
 
-- [ ] **F109 · Candidate extraction quality** — HR's current state:
+- [ ] **F109 · Candidate extraction quality** [#74](https://github.com/zainulhassan815/hireflow/issues/74) — HR's current state:
   *no candidate has a name.* The extraction pipeline (F22 text
   extraction → F23 metadata extraction) technically writes a
   `name` field to `document.metadata_`, but in practice real
@@ -1635,7 +1639,7 @@ Production-grade interface with attention to detail, accessibility, and delight.
     affordance (`name` is just a column) but nothing in the UI
     lets HR set it. Half-day job once the extractor is solid.
 
-- [ ] **F110 · Reports & analytics** — distinct from F47's raw
+- [ ] **F110 · Reports & analytics** [#75](https://github.com/zainulhassan815/hireflow/issues/75) — distinct from F47's raw
   exports. Reports are **aggregated + narrative + periodic**
   artifacts for decision-makers (hiring managers, HR leadership,
   compliance). Exports answer "give me the data"; reports answer
@@ -1739,7 +1743,7 @@ Features that take Hireflow from "works for one HR user" to
 by customer-blocker weight; F111 + F114 + F119 + F121 are the
 can't-ship-without set.
 
-- [ ] **F111 · Team collaboration (multi-user workspaces)** —
+- [ ] **F111 · Team collaboration (multi-user workspaces)** [#76](https://github.com/zainulhassan815/hireflow/issues/76) —
   today `Job.owner_id` and `Candidate.owner_id` make everything
   single-owner, so "our HR team of three shares this requisition"
   is impossible. Introduces workspaces (teams) as the primary
@@ -1775,7 +1779,7 @@ can't-ship-without set.
     404 / 403 before any data read), role-gate tests (viewer
     can't edit, member can't delete workspace).
 
-- [ ] **F112 · Interview feedback, scorecards & notes** — pipeline
+- [ ] **F112 · Interview feedback, scorecards & notes** [#77](https://github.com/zainulhassan815/hireflow/issues/77) — pipeline
   has an `interviewed` status but nothing *inside* the interview
   step: no interviewer assignment, no structured feedback, no
   notes. Shortlisting without an interview loop ships half the
@@ -1814,7 +1818,7 @@ can't-ship-without set.
   - [ ] **F112.g** Tests: blind-feedback enforcement, scorecard
     template CRUD, aggregation math, notes authorization.
 
-- [ ] **F113 · Candidate-facing portal & public job board** —
+- [ ] **F113 · Candidate-facing portal & public job board** [#78](https://github.com/zainulhassan815/hireflow/issues/78) —
   today everything is HR-uploaded or Gmail-synced; no way for an
   external person to submit an application. This unlocks inbound
   via "share this job link" which is the default expectation.
@@ -1850,7 +1854,7 @@ can't-ship-without set.
     404s, apply form validation, dedup on same email+job,
     CAPTCHA path, rate-limit enforcement.
 
-- [ ] **F114 · Custom pipeline stages** — `ApplicationStatus`
+- [ ] **F114 · Custom pipeline stages** [#79](https://github.com/zainulhassan815/hireflow/issues/79) — `ApplicationStatus`
   enum is hardcoded (`new / shortlisted / interviewed / hired /
   rejected`). Real orgs want `applied / phone_screen /
   tech_interview / onsite / offer / hired / rejected`. Or
@@ -1879,7 +1883,7 @@ can't-ship-without set.
     per-workspace isolation (deleting stage in workspace A
     doesn't affect B), dynamic-column rendering.
 
-- [ ] **F115 · Candidate deduplication & merge** — F90.h added a
+- [ ] **F115 · Candidate deduplication & merge** [#80](https://github.com/zainulhassan815/hireflow/issues/80) — F90.h added a
   per-owner unique `(owner_id, email)` constraint, so clear
   dupes can't be created via the same owner. Real dupes still
   slip through: candidate applies with different emails, same
@@ -1907,7 +1911,7 @@ can't-ship-without set.
     vector-similarity threshold tuning, not-a-duplicate
     persistence (once dismissed, don't re-surface the pair).
 
-- [ ] **F116 · AI-generated-resume detection** — 2026 reality:
+- [ ] **F116 · AI-generated-resume detection** [#81](https://github.com/zainulhassan815/hireflow/issues/81) — 2026 reality:
   GPT-authored resumes are common. HR wants a confidence label
   to weight judgment accordingly. Not a block (AI-assisted ≠
   fraudulent), a signal.
@@ -1931,7 +1935,7 @@ can't-ship-without set.
   - [ ] **F116.e** Tests: deterministic signal on fixture,
     confidence round-trip, threshold calibration script.
 
-- [ ] **F117 · In-app notifications & email digests** — no
+- [ ] **F117 · In-app notifications & email digests** [#82](https://github.com/zainulhassan815/hireflow/issues/82) — no
   real-time "new candidate applied" alert, no "3 candidates
   awaiting review" digest. F110.e sketches weekly reports;
   F117 is the event-driven notification layer.
@@ -1956,7 +1960,7 @@ can't-ship-without set.
   - [ ] **F117.f** Tests: event emission coverage, SSE
     reconnection, preference enforcement, coalesce window.
 
-- [ ] **F118 · Rate limiting** — no per-user / per-IP throttling
+- [ ] **F118 · Rate limiting** [#83](https://github.com/zainulhassan815/hireflow/issues/83) — no per-user / per-IP throttling
   on any endpoint today. Public portal (F113) + API (F122) need
   it as a ship condition; internal endpoints benefit from it too.
 
@@ -1975,7 +1979,7 @@ can't-ship-without set.
     correctness, Redis-down fallback (fail-open, log warning —
     better than locking everyone out).
 
-- [ ] **F119 · Self-hosted error tracking** — F70 mentioned a
+- [ ] **F119 · Self-hosted error tracking** [#84](https://github.com/zainulhassan815/hireflow/issues/84) — F70 mentioned a
   Sentry hook as optional and it never shipped, so there's no
   error aggregation in prod. Constraint: on-premise, privacy-
   focused — no SaaS Sentry. Recommendation: **GlitchTip** (open-
@@ -2005,7 +2009,7 @@ can't-ship-without set.
     GlitchTip (smoke test in CI), PII scrubber catches email /
     resume fragments.
 
-- [ ] **F120 · Data retention & cleanup** — Documents never
+- [ ] **F120 · Data retention & cleanup** [#85](https://github.com/zainulhassan815/hireflow/issues/85) — Documents never
   expire. MinIO fills forever. No per-workspace retention
   policy. Both cost risk (unbounded storage) and compliance
   risk (GDPR data minimization).
@@ -2032,7 +2036,7 @@ can't-ship-without set.
     age_days), legal_hold exclusion, cascade on hard-delete
     matches F48.h's deletion cascade.
 
-- [ ] **F121 · Healthcheck & migration safety** — no `/healthz`
+- [ ] **F121 · Healthcheck & migration safety** [#86](https://github.com/zainulhassan815/hireflow/issues/86) — no `/healthz`
   endpoint (load balancers can't verify liveness), no
   documented zero-downtime migration protocol. Both are ops-
   maturity table stakes.
@@ -2059,7 +2063,7 @@ can't-ship-without set.
   - [ ] **F121.f** Tests: smoke test against `/healthz` +
     `/readyz` (mocked deps down → 503 for readyz, 200 for healthz).
 
-- [ ] **F122 · Webhooks & public API** — no way for a customer
+- [ ] **F122 · Webhooks & public API** [#87](https://github.com/zainulhassan815/hireflow/issues/87) — no way for a customer
   to pipe events into Slack, Zapier, their ATS, or their own
   dashboard. Ships after F117 (reuses the event taxonomy) and
   F118 (rate-limits protect the outbound path).
@@ -2086,7 +2090,7 @@ can't-ship-without set.
   - [ ] **F122.f** Tests: signature verification, replay path,
     failure escalation, scope enforcement on API keys.
 
-- [ ] **F123 · GDPR consent at collection** — F48.h covers
+- [ ] **F123 · GDPR consent at collection** [#88](https://github.com/zainulhassan815/hireflow/issues/88) — F48.h covers
   right-to-deletion; collection-time consent (retention period
   acknowledgement, purpose-of-processing disclosure) isn't
   captured anywhere. EU / California applicants are blocked
@@ -2114,7 +2118,7 @@ can't-ship-without set.
     revocation cascade into retention, immutability (attempts
     to UPDATE the row → 500 by design; unit-tested).
 
-- [ ] **F124 · Referral tracking** — who referred this
+- [ ] **F124 · Referral tracking** [#89](https://github.com/zainulhassan815/hireflow/issues/89) — who referred this
   candidate? Attribution matters for internal referral programs
   and for source-of-hire reports.
 
