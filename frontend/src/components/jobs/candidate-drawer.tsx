@@ -11,7 +11,7 @@ import {
   type ApplicationResponse,
   type ApplicationStatus,
 } from "@/api";
-import { DocumentViewer } from "@/components/documents/document-viewer";
+import { CandidateAttachments } from "@/components/jobs/candidate-attachments";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -186,11 +186,11 @@ function Body({
             </span>
           </div>
           {app.breakdown && (
-            <div className="mt-3 grid grid-cols-3 gap-3">
+            <div className="mt-3 grid grid-cols-2 gap-3">
               <Signal
                 label="Skills"
                 value={app.breakdown.skill_match}
-                weight={0.45}
+                weight={0.4}
               />
               <Signal
                 label="Experience"
@@ -200,7 +200,12 @@ function Body({
               <Signal
                 label="Similarity"
                 value={app.breakdown.vector_similarity}
-                weight={0.35}
+                weight={0.3}
+              />
+              <Signal
+                label="Credentials"
+                value={app.breakdown.credential_match}
+                weight={0.1}
               />
             </div>
           )}
@@ -230,27 +235,7 @@ function Body({
 
         <Separator className="my-4" />
 
-        <div>
-          <div className="mb-2">
-            <Typography
-              variant="small"
-              className="text-muted-foreground text-xs font-medium tracking-wide uppercase"
-            >
-              Resume
-            </Typography>
-          </div>
-          {c.source_document_id ? (
-            <div className="min-h-[400px]">
-              <DocumentViewer documentId={c.source_document_id} />
-            </div>
-          ) : (
-            <div className="bg-muted/40 flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-              <Typography variant="muted" className="text-sm">
-                No resume on file for this candidate.
-              </Typography>
-            </div>
-          )}
-        </div>
+        <CandidateAttachments candidateId={c.id} jobId={app.job_id} />
       </div>
     </div>
   );
@@ -262,9 +247,27 @@ function Signal({
   weight,
 }: {
   label: string;
-  value: number;
+  value: number | null | undefined;
   weight: number;
 }) {
+  // Null credential_match = application matched before the signal shipped.
+  // Show a dash rather than a misleading 0%.
+  if (value == null) {
+    return (
+      <div className="bg-muted/30 rounded-md border p-2">
+        <Typography
+          variant="muted"
+          className="block text-[10px] font-medium tracking-wide uppercase"
+        >
+          {label}
+        </Typography>
+        <div className="text-muted-foreground mt-0.5 text-sm font-semibold">
+          —
+        </div>
+        <div className="bg-muted mt-1 h-1 w-full overflow-hidden rounded-full" />
+      </div>
+    );
+  }
   const pct = Math.round(value * 100);
   const contribution = Math.round(value * weight * 100);
   return (
