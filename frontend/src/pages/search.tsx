@@ -56,28 +56,25 @@ export function SearchPage() {
   const [queryTimeMs, setQueryTimeMs] = React.useState<number | null>(null);
   const [hasSearched, setHasSearched] = React.useState(false);
 
-  const runSearch = React.useCallback(
-    async (q: string, f: FilterState) => {
-      if (!q.trim()) return;
-      setIsSearching(true);
-      setHasSearched(true);
+  const runSearch = React.useCallback(async (q: string, f: FilterState) => {
+    if (!q.trim()) return;
+    setIsSearching(true);
+    setHasSearched(true);
 
-      const { data, error } = await searchDocuments({
-        body: { query: q, ...toApiFilters(f) },
-      });
+    const { data, error } = await searchDocuments({
+      body: { query: q, ...toApiFilters(f) },
+    });
 
-      if (error) {
-        toast.error(extractApiError(error).message);
-        setIsSearching(false);
-        return;
-      }
-
-      setSearchResults(data?.results ?? []);
-      setQueryTimeMs(data?.query_time_ms ?? null);
+    if (error) {
+      toast.error(extractApiError(error).message);
       setIsSearching(false);
-    },
-    []
-  );
+      return;
+    }
+
+    setSearchResults(data?.results ?? []);
+    setQueryTimeMs(data?.query_time_ms ?? null);
+    setIsSearching(false);
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,7 +136,11 @@ export function SearchPage() {
 
           <div className="space-y-3">
             {searchResults.map((result) => (
-              <Card key={result.document_id}>
+              <Card
+                key={result.document_id}
+                className="cursor-pointer transition-shadow hover:shadow-md"
+                onClick={() => navigate(`/documents/${result.document_id}`)}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3">
