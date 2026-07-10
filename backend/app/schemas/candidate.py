@@ -53,6 +53,14 @@ class CandidateResponse(BaseModel):
     skills: list[str] = Field(..., description="Extracted skills")
     experience_years: int | None = Field(None, description="Years of experience")
     education: list[str] | None = Field(None, description="Education qualifications")
+    attachment_count: int = Field(
+        0,
+        description=(
+            "Number of files attached to this candidate (resume + "
+            "certificates + portfolio + …). 1 for a resume-only candidate; "
+            ">1 signals a bundle."
+        ),
+    )
     # F104.a — LLM-generated one-sentence recruiter brief (e.g.,
     # "Alice Ng — backend engineer, 5+ yrs Python, FastAPI +
     # Postgres heavy"). Populated at ingestion or via the

@@ -137,6 +137,12 @@ class Candidate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         order_by="CandidateAttachment.created_at",
     )
 
+    @property
+    def attachment_count(self) -> int:
+        # ``attachments`` is selectin-loaded, so this reads the already-
+        # loaded collection without emitting a lazy query.
+        return len(self.attachments)
+
 
 class CandidateAttachment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """One file attached to a candidate, tagged with the role it plays.

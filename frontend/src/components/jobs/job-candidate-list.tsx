@@ -5,6 +5,7 @@ import {
   ArrowUpIcon,
   CheckIcon,
   ChevronRightIcon,
+  PaperclipIcon,
   UndoIcon,
   XIcon,
 } from "lucide-react";
@@ -655,6 +656,21 @@ function CandidateRow({
                   {c.email}
                 </span>
               )}
+              {c.attachment_count > 1 && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span className="text-muted-foreground inline-flex shrink-0 items-center gap-0.5 text-xs tabular-nums">
+                        <PaperclipIcon className="size-3" />
+                        {c.attachment_count}
+                      </span>
+                    }
+                  />
+                  <TooltipContent>
+                    {c.attachment_count} files attached (resume + credentials)
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
             {c.skills && c.skills.length > 0 && (
               <div className="flex flex-wrap gap-1">
@@ -751,13 +767,14 @@ function MatchScoreBar({
               Match breakdown
             </Typography>
             <Typography variant="muted" className="mt-0.5 text-xs">
-              Weighted: skills 45% · experience 20% · similarity 35%
+              Weighted: skills 40% · experience 20% · similarity 30% ·
+              credentials 10%
             </Typography>
           </div>
           <BreakdownRow
             label="Skill overlap"
             value={breakdown.skill_match}
-            weight={0.45}
+            weight={0.4}
           />
           <BreakdownRow
             label="Experience fit"
@@ -767,7 +784,12 @@ function MatchScoreBar({
           <BreakdownRow
             label="Vector similarity"
             value={breakdown.vector_similarity}
-            weight={0.35}
+            weight={0.3}
+          />
+          <BreakdownRow
+            label="Credentials"
+            value={breakdown.credential_match}
+            weight={0.1}
           />
         </div>
       </HoverCardContent>
@@ -781,9 +803,20 @@ function BreakdownRow({
   weight,
 }: {
   label: string;
-  value: number;
+  value: number | null | undefined;
   weight: number;
 }) {
+  // Null credential_match = matched before the signal shipped; show "—".
+  if (value == null) {
+    return (
+      <div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-foreground font-medium">{label}</span>
+          <span className="text-muted-foreground">—</span>
+        </div>
+      </div>
+    );
+  }
   const pct = Math.round(value * 100);
   const contribution = Math.round(value * weight * 100);
   return (
