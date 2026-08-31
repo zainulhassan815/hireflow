@@ -347,7 +347,7 @@ function JobStatusControl({ job }: { job: JobResponse }) {
     },
     onError: (error) => {
       const message =
-        (error as ErrorResponse | undefined)?.error?.message ??
+        (error as unknown as ErrorResponse | undefined)?.error?.message ??
         "Couldn't change status";
       toast.error(message);
     },

@@ -656,7 +656,7 @@ function CandidateRow({
                   {c.email}
                 </span>
               )}
-              {c.attachment_count > 1 && (
+              {(c.attachment_count ?? 0) > 1 && (
                 <Tooltip>
                   <TooltipTrigger
                     render={

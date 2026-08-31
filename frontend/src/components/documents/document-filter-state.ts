@@ -46,15 +46,18 @@ export function toApiFilters(state: FilterState): {
   document_type?: DocumentType;
   skills?: string[];
   min_experience_years?: number;
-  date_from?: string;
-  date_to?: string;
+  // The generated client types date fields as Date (openapi-ts maps
+  // datetime schemas that way), so build Dates here rather than making
+  // every call site convert.
+  date_from?: Date;
+  date_to?: Date;
 } {
   const out: ReturnType<typeof toApiFilters> = {};
   if (state.document_type) out.document_type = state.document_type;
   if (state.skills.length > 0) out.skills = state.skills;
   if (state.min_experience_years !== null)
     out.min_experience_years = state.min_experience_years;
-  if (state.date_from) out.date_from = `${state.date_from}T00:00:00Z`;
-  if (state.date_to) out.date_to = `${state.date_to}T23:59:59Z`;
+  if (state.date_from) out.date_from = new Date(`${state.date_from}T00:00:00Z`);
+  if (state.date_to) out.date_to = new Date(`${state.date_to}T23:59:59Z`);
   return out;
 }
