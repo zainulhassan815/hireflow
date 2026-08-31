@@ -1,6 +1,8 @@
+import { useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircleIcon,
+  HistoryIcon,
   MailIcon,
   PlusIcon,
   RefreshCwIcon,
@@ -10,6 +12,7 @@ import { toast } from "sonner";
 
 import {
   gmailAuthorizeMutation,
+  gmailBackfillMutation,
   gmailDisconnectMutation,
   gmailSyncNowMutation,
   listGmailConnectionsOptions,
@@ -19,6 +22,17 @@ import type { GmailConnection } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Typography } from "@/components/ui/typography";
 
@@ -144,6 +158,12 @@ function ConnectionRow({
   const lastSyncedAt = connection.last_synced_at
     ? new Date(connection.last_synced_at)
     : null;
+  const backfillBefore = connection.backfill_before
+    ? new Date(connection.backfill_before)
+    : null;
+  const backfillUntil = connection.backfill_until
+    ? new Date(connection.backfill_until)
+    : null;
 
   return (
     <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
@@ -167,6 +187,12 @@ function ConnectionRow({
               ? ` · Last synced ${lastSyncedAt.toLocaleString()}`
               : " · Never synced"}
           </Typography>
+          {backfillBefore ? (
+            <Typography variant="muted" className="text-sm">
+              {`Backfilling — reached ${backfillBefore.toLocaleDateString()}`}
+              {backfillUntil ? ` of ${backfillUntil.toLocaleDateString()}` : ""}
+            </Typography>
+          ) : null}
         </div>
       </div>
       <div className="flex shrink-0 gap-2">
@@ -184,6 +210,11 @@ function ConnectionRow({
           />
           {syncNow.isPending ? "Syncing..." : "Sync now"}
         </Button>
+        <BackfillDialog
+          connection={connection}
+          isRunning={backfillBefore !== null}
+          onAfterMutate={onAfterMutate}
+        />
         <Button
           variant="ghost"
           size="sm"
@@ -198,5 +229,94 @@ function ConnectionRow({
         </Button>
       </div>
     </div>
+  );
+}
+
+function BackfillDialog({
+  connection,
+  isRunning,
+  onAfterMutate,
+}: {
+  connection: GmailConnection;
+  isRunning: boolean;
+  onAfterMutate: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [until, setUntil] = useState("");
+  const untilId = useId();
+
+  const backfill = useMutation({
+    ...gmailBackfillMutation(),
+    onSuccess: () => {
+      toast.success(
+        `Backfill started for ${connection.gmail_email} — older resumes arrive a batch at a time`
+      );
+      setOpen(false);
+      onAfterMutate();
+    },
+    onError: () =>
+      toast.error("Could not start the backfill. Pick a past date."),
+  });
+
+  // Native max: the API rejects today or later, so don't offer it.
+  // Lazy state rather than a render-body call — reading the clock during
+  // render is impure and the value only needs to be right on mount.
+  const [yesterday] = useState(() =>
+    new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(true)}
+        disabled={isRunning}
+      >
+        <HistoryIcon className="size-4" data-icon="inline-start" />
+        {isRunning ? "Backfilling..." : "Backfill"}
+      </Button>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Backfill older mail</DialogTitle>
+          <DialogDescription>
+            Pull resume attachments from {connection.gmail_email} going back to
+            the date you choose. Hireflow works backwards a batch at a time on
+            the regular sync schedule, so new mail keeps arriving meanwhile.
+          </DialogDescription>
+        </DialogHeader>
+        <Field>
+          <FieldLabel htmlFor={untilId}>Go back to</FieldLabel>
+          <Input
+            id={untilId}
+            type="date"
+            max={yesterday}
+            value={until}
+            onChange={(e) => setUntil(e.target.value)}
+          />
+        </Field>
+        <DialogFooter>
+          <DialogClose
+            render={
+              <Button variant="ghost" size="sm">
+                Cancel
+              </Button>
+            }
+          />
+          <Button
+            size="sm"
+            disabled={!until || backfill.isPending}
+            onClick={() =>
+              backfill.mutate({
+                path: { connection_id: connection.id },
+                body: { until },
+              })
+            }
+          >
+            {backfill.isPending ? "Starting..." : "Start backfill"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

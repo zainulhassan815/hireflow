@@ -96,3 +96,19 @@ class GmailConnectionRepository:
     async def touch_sync(self, conn: GmailConnection) -> None:
         conn.last_synced_at = datetime.now(UTC)
         await self._db.commit()
+
+    async def start_backfill(
+        self, conn: GmailConnection, *, before: datetime, until: datetime
+    ) -> None:
+        conn.backfill_before = before
+        conn.backfill_until = until
+        await self._db.commit()
+
+    async def advance_backfill(self, conn: GmailConnection, before: datetime) -> None:
+        conn.backfill_before = before
+        await self._db.commit()
+
+    async def finish_backfill(self, conn: GmailConnection) -> None:
+        conn.backfill_before = None
+        conn.backfill_until = None
+        await self._db.commit()

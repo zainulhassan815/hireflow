@@ -25,11 +25,13 @@ from __future__ import annotations
 
 import logging
 import secrets
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
 from redis.asyncio import Redis
 
 from app.adapters.protocols import GmailOAuth
+from app.core.config import settings
 from app.domain.exceptions import GmailAuthError, NotFound
 from app.models import ActivityAction, GmailConnection
 from app.repositories.gmail_connection import GmailConnectionRepository
@@ -125,6 +127,32 @@ class GmailService:
             detail=gmail_email,
             ip_address=ip_address,
         )
+
+    async def start_backfill(
+        self, user_id: UUID, connection_id: UUID, *, until: date
+    ) -> GmailConnection:
+        """Arm a connection to walk backwards through its mail history.
+
+        The walk starts at the far edge of the window incremental sync
+        already covers, not at now — re-treading those days would just
+        burn runs on dedup skips.
+        """
+        connection = await self._connections.get_for_user(user_id, connection_id)
+        if connection is None:
+            raise NotFound("Gmail connection not found.")
+
+        before = datetime.now(UTC) - timedelta(
+            days=settings.gmail_sync_initial_window_days
+        )
+        floor = datetime.combine(until, time.min, tzinfo=UTC)
+        await self._connections.start_backfill(connection, before=before, until=floor)
+        logger.info(
+            "backfill armed for %s: %s -> %s",
+            connection.gmail_email,
+            before.date(),
+            until,
+        )
+        return connection
 
     async def list_connections(self, user_id: UUID) -> list[GmailConnection]:
         return await self._connections.list_by_user(user_id)

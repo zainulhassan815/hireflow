@@ -38,3 +38,15 @@ class GmailConnection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    # Historical backfill walks backwards in time, one batch per sync run.
+    # ``backfill_before`` is the exclusive upper bound of the next batch and
+    # doubles as the "is backfilling" flag; ``backfill_until`` is the floor
+    # the walk stops at. Both null means no backfill in progress.
+    backfill_before: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    backfill_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+

@@ -78,3 +78,33 @@ def attachment_response(payload_bytes: bytes) -> dict[str, str]:
     """Gmail wraps attachment bytes in base64url + a ``data`` key."""
     data = base64.urlsafe_b64encode(payload_bytes).decode("ascii").rstrip("=")
     return {"data": data, "size": len(payload_bytes)}
+
+
+def list_response(*message_ids: str, next_page_token: str | None = None) -> dict:
+    """``messages.list`` body for an arbitrary set of message ids."""
+    body: dict = {
+        "messages": [{"id": mid, "threadId": f"thread-{mid}"} for mid in message_ids],
+        "resultSizeEstimate": len(message_ids),
+    }
+    if next_page_token:
+        body["nextPageToken"] = next_page_token
+    return body
+
+
+def message_response(message_id: str, *, internal_date_ms: int) -> dict:
+    """``messages.get`` body carrying one eligible PDF attachment."""
+    return {
+        "id": message_id,
+        "threadId": f"thread-{message_id}",
+        "internalDate": str(internal_date_ms),
+        "payload": {
+            "mimeType": "multipart/mixed",
+            "parts": [
+                {
+                    "mimeType": "application/pdf",
+                    "filename": f"{message_id}.pdf",
+                    "body": {"attachmentId": f"att-{message_id}", "size": 1024},
+                }
+            ],
+        },
+    }

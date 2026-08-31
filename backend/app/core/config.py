@@ -120,6 +120,10 @@ class Settings(BaseSettings):
     gmail_sync_max_messages_per_run: int = 100
     gmail_sync_initial_window_days: int = 7
     gmail_sync_claim_timeout_minutes: int = 15
+    # Bounds how far a single run pages looking for unprocessed messages.
+    # Only messages we actually fetch spend the message budget, so a
+    # backfill walking already-ingested history needs a page bound too.
+    gmail_sync_max_pages_per_run: int = 50
 
     # Vision OCR provider: claude | ollama | tesseract | none
     vision_provider: str = "tesseract"

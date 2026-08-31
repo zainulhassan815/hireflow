@@ -9,12 +9,14 @@ auth different address, owner scoping on disconnect/sync.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
 import respx
 
+from tests.factories import make_gmail_connection
 from tests.gmail_responses import EXCHANGE_RESPONSE, USERINFO_RESPONSE
 
 pytestmark = pytest.mark.asyncio
@@ -411,6 +413,85 @@ async def test_sync_other_users_connection_404(
 
     response = await client.post(
         f"/api/auth/gmail/connections/{other_conn_id}/sync",
+        headers=auth_headers(admin_token),
+    )
+    assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Backfill trigger
+# ---------------------------------------------------------------------------
+
+
+async def test_backfill_arms_the_connection(
+    client, admin_user, admin_token, auth_headers, enqueued_tasks
+) -> None:
+    from app.core.db import SessionLocal
+
+    async with SessionLocal() as session:
+        connection = await make_gmail_connection(session, user_id=admin_user.id)
+
+    response = await client.post(
+        f"/api/auth/gmail/connections/{connection.id}/backfill",
+        json={"until": "2024-01-01"},
+        headers=auth_headers(admin_token),
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["connection_id"] == str(connection.id)
+    assert body["backfill_until"].startswith("2024-01-01")
+    # The walk starts at the far edge of the incremental window, never at
+    # now — re-treading days incremental sync already covers wastes runs.
+    assert body["backfill_before"] < datetime.now(UTC).isoformat()
+    assert len(enqueued_tasks.for_task("sync_gmail_connection")) == 1
+
+
+async def test_backfill_rejects_a_future_date(
+    client, admin_user, admin_token, auth_headers
+) -> None:
+    from app.core.db import SessionLocal
+
+    async with SessionLocal() as session:
+        connection = await make_gmail_connection(session, user_id=admin_user.id)
+
+    response = await client.post(
+        f"/api/auth/gmail/connections/{connection.id}/backfill",
+        json={"until": "2099-01-01"},
+        headers=auth_headers(admin_token),
+    )
+    assert response.status_code == 422
+
+
+async def test_backfill_other_users_connection_404(
+    client, admin_token, auth_headers
+) -> None:
+    from uuid import uuid4
+
+    from app.core.db import SessionLocal
+    from app.models import User, UserRole
+    from app.repositories.gmail_connection import GmailConnectionRepository
+
+    async with SessionLocal() as session:
+        other = User(
+            email=f"other-{uuid4()}@example.com",
+            hashed_password="$argon2id$v=19$not-a-real-hash",
+            role=UserRole.HR,
+            is_active=True,
+        )
+        session.add(other)
+        await session.commit()
+        await session.refresh(other)
+        connection = await GmailConnectionRepository(session).upsert(
+            user_id=other.id,
+            gmail_email="theirs@example.com",
+            refresh_token="rt-theirs",
+            scopes=["openid", "email"],
+        )
+
+    response = await client.post(
+        f"/api/auth/gmail/connections/{connection.id}/backfill",
+        json={"until": "2024-01-01"},
         headers=auth_headers(admin_token),
     )
     assert response.status_code == 404
