@@ -70,8 +70,37 @@ export async function streamRagAnswer(
   request: RagRequest,
   handlers: RagStreamHandlers
 ): Promise<void> {
+  return streamSse("/api/rag/stream", request, handlers);
+}
+
+/**
+ * POST to a conversation and dispatch its SSE events.
+ *
+ * Same wire format as `/rag/stream` — the server deliberately reuses the
+ * event vocabulary — so this shares the parser. The difference is
+ * server-side: prior turns are loaded from the conversation, used to
+ * resolve follow-up references before retrieval, and both sides of the
+ * exchange are persisted.
+ */
+export async function streamConversationAnswer(
+  conversationId: string,
+  request: { question: string; document_ids?: string[]; max_chunks?: number },
+  handlers: RagStreamHandlers
+): Promise<void> {
+  return streamSse(
+    `/api/conversations/${conversationId}/messages`,
+    request,
+    handlers
+  );
+}
+
+async function streamSse(
+  path: string,
+  request: unknown,
+  handlers: RagStreamHandlers
+): Promise<void> {
   const token = getAccessToken();
-  const response = await fetch(`${baseUrl}/api/rag/stream`, {
+  const response = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     signal: handlers.signal,
     credentials: "include",

@@ -194,7 +194,7 @@ export function DashboardPage() {
             <SearchIcon className="size-4" data-icon="inline-start" />
             Search
           </Button>
-          <Button variant="outline" onClick={() => navigate("/qa")}>
+          <Button variant="outline" onClick={() => navigate("/chat")}>
             <MessageCircleIcon className="size-4" data-icon="inline-start" />
             Ask
           </Button>

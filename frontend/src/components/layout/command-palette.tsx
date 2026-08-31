@@ -66,7 +66,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             Search
           </CommandItem>
           <CommandItem
-            onSelect={() => run(() => navigate("/qa"))}
+            onSelect={() => run(() => navigate("/chat"))}
             keywords={["ask", "chat", "qa", "question"]}
           >
             <MessageCircleIcon className="mr-2 size-4" />

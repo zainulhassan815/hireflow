@@ -84,7 +84,7 @@ const primaryNav: NavEntry[] = [
   },
   {
     title: "Ask",
-    href: "/qa",
+    href: "/chat",
     icon: MessageCircleIcon,
     description: "Chat with your library",
   },

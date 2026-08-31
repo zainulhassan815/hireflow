@@ -200,6 +200,16 @@ class Settings(BaseSettings):
     matching_required_skill_policy: str = "partial"
 
     # LLM
+    # Conversation memory (F81.f). History gets its own budget so a long
+    # chat can never crowd out the evidence chunks the context gate
+    # selected — the two compete for prompt space otherwise.
+    rag_history_token_budget: int = 800
+    # Turns injected into the answer prompt.
+    rag_history_max_turns: int = 10
+    # Turns shown to the condenser. Pronouns resolve against recent turns;
+    # feeding it the whole thread costs latency for no accuracy.
+    rag_condense_max_turns: int = 6
+
     llm_provider: str = "anthropic"
     llm_model: str = "claude-haiku-4-5-20251001"
     anthropic_api_key: SecretStr | None = None

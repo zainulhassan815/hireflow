@@ -317,3 +317,57 @@ def _check_format_rules_exhaustive() -> None:
 
 
 _check_format_rules_exhaustive()
+
+
+# ---------- Conversation memory (F81.f) ----------
+
+CONDENSE_SYSTEM = """\
+You rewrite a follow-up question into a standalone one.
+
+The rewritten question is used for document retrieval, not shown to \
+anyone. Resolve pronouns and implicit references ("she", "that role", \
+"the second one") against the conversation so the question stands alone \
+with no prior context.
+
+Rules:
+- Output only the rewritten question. No preamble, no quotes.
+- Keep the user's own terminology, especially names and job titles.
+- If the question already stands alone, return it unchanged.
+- Never answer the question."""
+
+
+def build_condense_prompt(question: str, history: list[tuple[str, str]]) -> str:
+    """User-side prompt for the condense call.
+
+    ``history`` is ``(role, content)`` oldest-first. Assistant turns are
+    truncated hard: resolving a pronoun needs the entities a previous
+    answer named, not the whole answer, and a long transcript here costs
+    latency on every follow-up.
+    """
+    lines: list[str] = []
+    for role, content in history:
+        body = content if role == "user" else content[:400]
+        lines.append(f"{role.capitalize()}: {body}")
+    lines.append(f"\nFollow-up question: {question}")
+    lines.append("\nStandalone question:")
+    return "\n".join(lines)
+
+
+def build_history_block(history: list[tuple[str, str]], char_budget: int) -> str:
+    """Render prior turns for the answer prompt, newest-first under budget.
+
+    Walks backwards so the turns nearest the question survive, then
+    restores chronological order. Returns "" when nothing fits, so the
+    caller can omit the section entirely rather than emit an empty header.
+    """
+    kept: list[str] = []
+    used = 0
+    for role, content in reversed(history):
+        line = f"{role.capitalize()}: {content}"
+        if used + len(line) > char_budget:
+            break
+        kept.append(line)
+        used += len(line)
+    if not kept:
+        return ""
+    return "Conversation so far:\n" + "\n".join(reversed(kept))
