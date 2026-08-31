@@ -154,6 +154,31 @@ class GmailService:
         )
         return connection
 
+    async def set_mirror_deletions(
+        self, user_id: UUID, connection_id: UUID, *, enabled: bool
+    ) -> GmailConnection:
+        """Turn deletion mirroring on or off for one connection.
+
+        Always audited: this is the switch that lets Gmail destroy
+        documents, so who flipped it and when has to be answerable.
+        """
+        connection = await self._connections.get_for_user(user_id, connection_id)
+        if connection is None:
+            raise NotFound("Gmail connection not found.")
+
+        await self._connections.set_mirror_deletions(connection, enabled)
+        await self._activity.log(
+            actor_id=user_id,
+            action=ActivityAction.GMAIL_SETTINGS_UPDATE,
+            resource_type="gmail_connection",
+            resource_id=str(connection.id),
+            detail=(
+                f"{connection.gmail_email} deletion mirroring "
+                f"{'enabled' if enabled else 'disabled'}"
+            ),
+        )
+        return connection
+
     async def list_connections(self, user_id: UUID) -> list[GmailConnection]:
         return await self._connections.list_by_user(user_id)
 

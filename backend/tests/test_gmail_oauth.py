@@ -495,3 +495,104 @@ async def test_backfill_other_users_connection_404(
         headers=auth_headers(admin_token),
     )
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Deletion-mirroring opt-in
+# ---------------------------------------------------------------------------
+
+
+async def test_mirror_deletions_defaults_off_and_toggles(
+    client, admin_user, admin_token, auth_headers
+) -> None:
+    from app.core.db import SessionLocal
+
+    async with SessionLocal() as session:
+        connection = await make_gmail_connection(session, user_id=admin_user.id)
+
+    listed = await client.get(
+        "/api/auth/gmail/connections", headers=auth_headers(admin_token)
+    )
+    assert listed.json()[0]["mirror_deletions"] is False
+
+    enabled = await client.patch(
+        f"/api/auth/gmail/connections/{connection.id}",
+        json={"mirror_deletions": True},
+        headers=auth_headers(admin_token),
+    )
+    assert enabled.status_code == 200
+    assert enabled.json()["mirror_deletions"] is True
+
+    disabled = await client.patch(
+        f"/api/auth/gmail/connections/{connection.id}",
+        json={"mirror_deletions": False},
+        headers=auth_headers(admin_token),
+    )
+    assert disabled.json()["mirror_deletions"] is False
+
+
+async def test_mirror_deletions_toggle_is_audited(
+    client, admin_user, admin_token, auth_headers
+) -> None:
+    from sqlalchemy import select
+
+    from app.core.db import SessionLocal
+    from app.models import ActivityAction, ActivityLog
+
+    async with SessionLocal() as session:
+        connection = await make_gmail_connection(session, user_id=admin_user.id)
+
+    await client.patch(
+        f"/api/auth/gmail/connections/{connection.id}",
+        json={"mirror_deletions": True},
+        headers=auth_headers(admin_token),
+    )
+
+    async with SessionLocal() as session:
+        logs = (
+            (
+                await session.execute(
+                    select(ActivityLog).where(
+                        ActivityLog.action == ActivityAction.GMAIL_SETTINGS_UPDATE
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(logs) == 1
+    assert "enabled" in logs[0].detail
+
+
+async def test_mirror_deletions_other_users_connection_404(
+    client, admin_token, auth_headers
+) -> None:
+    from uuid import uuid4
+
+    from app.core.db import SessionLocal
+    from app.models import User, UserRole
+    from app.repositories.gmail_connection import GmailConnectionRepository
+
+    async with SessionLocal() as session:
+        other = User(
+            email=f"other-{uuid4()}@example.com",
+            hashed_password="$argon2id$v=19$not-a-real-hash",
+            role=UserRole.HR,
+            is_active=True,
+        )
+        session.add(other)
+        await session.commit()
+        await session.refresh(other)
+        connection = await GmailConnectionRepository(session).upsert(
+            user_id=other.id,
+            gmail_email="theirs@example.com",
+            refresh_token="rt-theirs",
+            scopes=["openid", "email"],
+        )
+
+    response = await client.patch(
+        f"/api/auth/gmail/connections/{connection.id}",
+        json={"mirror_deletions": True},
+        headers=auth_headers(admin_token),
+    )
+    assert response.status_code == 404

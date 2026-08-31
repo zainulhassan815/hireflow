@@ -23,6 +23,7 @@ from app.schemas.gmail import (
     GmailBackfillRequest,
     GmailBackfillResponse,
     GmailConnection,
+    GmailConnectionUpdate,
     GmailSyncTriggerResponse,
 )
 
@@ -127,6 +128,7 @@ async def list_gmail_connections(
             scopes=c.scopes,
             backfill_before=c.backfill_before,
             backfill_until=c.backfill_until,
+            mirror_deletions=c.mirror_deletions,
         )
         for c in connections
     ]
@@ -165,6 +167,54 @@ async def gmail_sync_now(
 
     sync_gmail_connection.delay(str(connection.id))
     return GmailSyncTriggerResponse(connection_id=connection.id)
+
+
+@router.patch(
+    "/connections/{connection_id}",
+    response_model=GmailConnection,
+    summary="Update connection settings",
+    description=(
+        "Changes settings on one connection. Currently just deletion "
+        "mirroring.\n\n"
+        "**Enabling ``mirror_deletions`` is destructive and cannot be "
+        "undone.** With it on, a message Gmail reports as *permanently* "
+        "deleted — emptied from Trash, whether by the user or by Gmail's "
+        "own 30-day Trash purge — deletes every document Hireflow "
+        "ingested from it, along with the stored file, its search index "
+        "entries, and its link to any candidate. Re-syncing does not "
+        "bring them back.\n\n"
+        "Moving mail to Trash never deletes anything: it is reversible, "
+        "so Hireflow only marks the source as deleted and clears the mark "
+        "if the message is restored. Detection runs regardless of this "
+        "setting; only the destructive response is opt-in."
+    ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        404: {
+            "model": ErrorResponse,
+            "description": "Connection not found or not owned by the current user",
+        },
+    },
+)
+async def update_gmail_connection(
+    connection_id: UUID,
+    body: GmailConnectionUpdate,
+    current_user: CurrentUser,
+    gmail: GmailServiceDep,
+) -> GmailConnection:
+    connection = await gmail.set_mirror_deletions(
+        current_user.id, connection_id, enabled=body.mirror_deletions
+    )
+    return GmailConnection(
+        id=connection.id,
+        gmail_email=connection.gmail_email,
+        connected_at=connection.created_at,
+        last_synced_at=connection.last_synced_at,
+        scopes=connection.scopes,
+        backfill_before=connection.backfill_before,
+        backfill_until=connection.backfill_until,
+        mirror_deletions=connection.mirror_deletions,
+    )
 
 
 @router.post(
