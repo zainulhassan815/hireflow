@@ -41,7 +41,7 @@ from app.adapters.reset_token_store import RedisResetTokenStore
 from app.adapters.revocation_store import RedisRevocationStore
 from app.adapters.viewers import ViewerRegistry, build_default_registry
 from app.core.config import settings
-from app.core.db import get_db
+from app.core.db import SessionLocal, get_db
 from app.core.redis import get_redis
 from app.domain.exceptions import Forbidden, InvalidToken
 from app.models import User, UserRole
@@ -54,6 +54,7 @@ from app.repositories.user import UserRepository
 from app.services.activity_service import ActivityService
 from app.services.auth_service import AuthService
 from app.services.candidate_service import CandidateService
+from app.services.chat_service import ChatService
 from app.services.document_service import DocumentService
 from app.services.gmail_service import GmailService
 from app.services.job_service import JobService
@@ -350,6 +351,30 @@ def get_search_service(documents: DocumentRepositoryDep) -> SearchService:
     )
 
 
+def get_chat_service(db: DbSession, documents: DocumentRepositoryDep) -> ChatService:
+    """ChatService needs a working RAG stack — without one there is
+    nothing to answer with, so this fails the same way ``/rag/*`` does."""
+    from app.domain.exceptions import ServiceUnavailable
+    from app.repositories.conversation import ConversationRepository
+
+    rag = get_rag_service(documents)
+    if rag is None or _llm_provider is None:
+        raise ServiceUnavailable(
+            "Chat is not available. Configure an LLM provider "
+            "(ANTHROPIC_API_KEY or Ollama) and ensure ChromaDB is running."
+        )
+    return ChatService(
+        conversations=ConversationRepository(db),
+        rag=rag,
+        llm=_llm_provider,
+        # A sessionmaker, not the request session: the streaming turn
+        # writes after generation finishes and must not pin this
+        # request's pooled connection for the whole LLM call.
+        session_factory=SessionLocal,
+        history_max_turns=settings.rag_history_max_turns,
+    )
+
+
 def get_rag_service(documents: DocumentRepositoryDep) -> RagService | None:
     if _vector_store is None or _llm_provider is None or _intent_classifier is None:
         return None
@@ -428,6 +453,7 @@ UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 DocumentServiceDep = Annotated[DocumentService, Depends(get_document_service)]
 SearchServiceDep = Annotated[SearchService, Depends(get_search_service)]
 RagServiceDep = Annotated[RagService | None, Depends(get_rag_service)]
+ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
 JobServiceDep = Annotated[JobService, Depends(get_job_service)]
 CandidateServiceDep = Annotated[CandidateService, Depends(get_candidate_service)]
 MatchingServiceDep = Annotated[MatchingService, Depends(get_matching_service)]

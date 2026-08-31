@@ -30,7 +30,13 @@ from app.schemas.rag import (
 )
 from app.services.highlight import extract_query_terms, find_match_spans
 from app.services.intent_canonicals import Intent
-from app.services.rag_prompts import PROMPT_VERSION, build_system_prompt
+from app.services.rag_prompts import (
+    CONDENSE_SYSTEM,
+    PROMPT_VERSION,
+    build_condense_prompt,
+    build_history_block,
+    build_system_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +109,19 @@ class RagResult:
     intent_confidence: float = 0.0
 
 
+@dataclass(frozen=True, slots=True)
+class ChatTurn:
+    """One prior turn, as RagService sees it.
+
+    Deliberately not the ORM row — RagService owns no persistence and
+    must stay callable from the stateless /rag/* routes, which have no
+    conversation at all.
+    """
+
+    role: str
+    content: str
+
+
 @dataclass
 class _RagContext:
     """Shared output of the retrieval + prompt-assembly stage.
@@ -139,6 +158,7 @@ class RagService:
         question: str,
         document_ids: list[UUID] | None = None,
         max_chunks: int = 5,
+        history: list[ChatTurn] | None = None,
     ) -> RagResult:
         start = time.monotonic()
         ctx = await self._build_context(
@@ -146,6 +166,7 @@ class RagService:
             question=question,
             document_ids=document_ids,
             max_chunks=max_chunks,
+            history=history,
         )
         if ctx is None:
             return RagResult(
@@ -182,6 +203,7 @@ class RagService:
         question: str,
         document_ids: list[UUID] | None = None,
         max_chunks: int = 5,
+        history: list[ChatTurn] | None = None,
     ) -> AsyncIterator[CitationsEvent | DeltaEvent | DoneEvent | ErrorEvent]:
         """Yield SSE events for a single RAG query.
 
@@ -196,6 +218,7 @@ class RagService:
             question=question,
             document_ids=document_ids,
             max_chunks=max_chunks,
+            history=history,
         )
 
         if ctx is None:
@@ -273,6 +296,7 @@ class RagService:
         question: str,
         document_ids: list[UUID] | None,
         max_chunks: int,
+        history: list[ChatTurn] | None = None,
     ) -> _RagContext | None:
         """Retrieve chunks via ChunkRetriever, build prompt + citations.
 
@@ -285,9 +309,17 @@ class RagService:
         Returns ``None`` if retrieval produced no usable chunks — the
         no-hits sentinel path in callers handles the fallback.
         """
+        # Retrieval must run against a question that stands on its own.
+        # "What about her Python experience?" embedded as written matches
+        # nothing useful — "her" resolves to no one — so a follow-up would
+        # retrieve unrelated chunks and the model would answer confidently
+        # over them. Injecting history into the prompt cannot fix that:
+        # retrieval happens here, before any prompt exists.
+        search_query = await self._condense(question, history)
+
         chunks = await self._retriever.retrieve_chunks(
             actor=actor,
-            query=question,
+            query=search_query,
             document_ids=document_ids,
             limit=max_chunks,
         )
@@ -302,7 +334,7 @@ class RagService:
         if document_ids is None:
             candidates = await self._retriever.retrieve_candidate_summaries(
                 actor=actor,
-                query=question,
+                query=search_query,
                 limit=settings.rag_max_candidate_hits,
             )
 
@@ -324,12 +356,12 @@ class RagService:
         # F81.g — classify intent, compose an intent-specific system
         # prompt. Classifier is CPU-bound and fast (single embed_query
         # call + cosine comparisons); no ``to_thread`` hop needed.
-        intent_result = self._classifier.classify(question)
+        intent_result = self._classifier.classify(search_query)
         system_prompt = build_system_prompt(intent_result.intent)
 
         context_parts: list[str] = []
         citations: list[dict[str, Any]] = []
-        terms = extract_query_terms(question)
+        terms = extract_query_terms(search_query)
 
         # F104.a — candidate hits render *before* document chunks so
         # the LLM has the recruiter-shape anchor available before
@@ -398,7 +430,21 @@ class RagService:
             )
 
         context = "\n".join(context_parts)
-        user_prompt = f"Context:\n{context}\n\nQuestion: {question}"
+
+        # The user's own wording is what the model is asked to answer —
+        # only retrieval saw the rewrite, so a bad condense degrades
+        # recall rather than silently changing the question.
+        history_block = ""
+        if history:
+            history_block = build_history_block(
+                [(t.role, t.content) for t in history],
+                settings.rag_history_token_budget * _CHARS_PER_TOKEN,
+            )
+        prompt_parts = [f"Context:\n{context}"]
+        if history_block:
+            prompt_parts.append(history_block)
+        prompt_parts.append(f"Question: {question}")
+        user_prompt = "\n\n".join(prompt_parts)
 
         # Single observability line per query — same grep-able format
         # across F81.b/c (chunks + tokens) and F81.g (intent + prompt
@@ -407,7 +453,7 @@ class RagService:
         logger.info(
             "rag context: %d/%d chunks kept, ~%d tokens "
             "(cutoff=%s, budget=%d) | intent=%s conf=%.2f runner=%s "
-            "prompt=%s system_prompt_chars=%d",
+            "prompt=%s system_prompt_chars=%d history_turns=%d condensed=%s",
             len(kept),
             len(chunks),
             tokens_used,
@@ -418,6 +464,8 @@ class RagService:
             intent_result.runner_up or "-",
             PROMPT_VERSION,
             len(system_prompt),
+            len(history or []),
+            "yes" if search_query != question else "no",
         )
 
         # F104.a — confidence is derived from the strongest signal
@@ -450,6 +498,37 @@ class RagService:
             intent=intent_result.intent,
             intent_confidence=intent_result.confidence,
         )
+
+    async def _condense(self, question: str, history: list[ChatTurn] | None) -> str:
+        """Rewrite a follow-up into a standalone question for retrieval.
+
+        Runs whenever there is history — no "does this look like a
+        follow-up" heuristic, because the questions that need it most
+        ("and the other one?") are exactly the ones a heuristic misreads.
+        One short call on the configured model; the first turn of a
+        conversation costs nothing extra.
+
+        Never raises: a condense failure falls back to the raw question,
+        which is no worse than not having the feature.
+        """
+        if not history:
+            return question
+        recent = history[-settings.rag_condense_max_turns :]
+        try:
+            rewritten = await asyncio.to_thread(
+                self._llm.complete,
+                CONDENSE_SYSTEM,
+                build_condense_prompt(question, [(t.role, t.content) for t in recent]),
+            )
+        except Exception:
+            logger.warning("condense failed; retrieving on the raw question")
+            return question
+        rewritten = rewritten.strip()
+        if not rewritten:
+            return question
+        if rewritten != question:
+            logger.info("condensed %r -> %r", question, rewritten)
+        return rewritten
 
     @staticmethod
     def _apply_context_gate(

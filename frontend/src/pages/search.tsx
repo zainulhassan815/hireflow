@@ -98,7 +98,7 @@ export function SearchPage() {
             Semantic search across your document library.
           </Typography>
         </div>
-        <Button variant="outline" onClick={() => navigate("/qa")}>
+        <Button variant="outline" onClick={() => navigate("/chat")}>
           <SparklesIcon className="size-4" data-icon="inline-start" />
           Ask a question instead
         </Button>
@@ -240,7 +240,7 @@ export function SearchPage() {
           </Typography>
           <Button
             variant="outline"
-            onClick={() => navigate("/qa")}
+            onClick={() => navigate("/chat")}
             className="mt-4"
           >
             <SparklesIcon className="size-4" data-icon="inline-start" />

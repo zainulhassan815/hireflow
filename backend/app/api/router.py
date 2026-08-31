@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     auth,
     candidates,
+    chat,
     documents,
     gmail,
     health,
@@ -21,6 +22,7 @@ api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(rag.router, prefix="/rag", tags=["rag"])
+api_router.include_router(chat.router, prefix="/conversations", tags=["conversations"])
 
 api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 api_router.include_router(candidates.router, prefix="/candidates", tags=["candidates"])

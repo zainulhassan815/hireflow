@@ -12,7 +12,7 @@ import { CandidatesPage } from "@/pages/candidates";
 import { DocumentsPage } from "@/pages/documents";
 import { DocumentDetailPage } from "@/pages/documents/detail";
 import { SearchPage } from "@/pages/search";
-import { QaPage } from "@/pages/qa";
+import { ChatPage } from "@/pages/chat";
 import { LogsPage } from "@/pages/logs";
 import { SettingsPage } from "@/pages/settings";
 
@@ -108,9 +108,20 @@ export const router = createBrowserRouter([
         handle: { title: "Search" },
       },
       {
-        path: "qa",
-        element: <QaPage />,
+        path: "chat",
+        element: <ChatPage />,
         handle: { title: "Ask" },
+      },
+      {
+        path: "chat/:id",
+        element: <ChatPage />,
+        handle: { title: "Ask" },
+      },
+      // Superseded by /chat, which persists threads. Redirect rather
+      // than delete so existing links and bookmarks keep working.
+      {
+        path: "qa",
+        element: <Navigate to="/chat" replace />,
       },
       {
         path: "logs",

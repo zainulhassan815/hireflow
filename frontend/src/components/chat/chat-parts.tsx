@@ -1,17 +1,24 @@
+/**
+ * Presentational pieces of the chat thread.
+ *
+ * Moved verbatim out of `pages/qa.tsx` when chat gained persistence
+ * (F96) so both the legacy Q&A view and the new ChatPage render turns
+ * identically. No behaviour changed in the move — citation parsing,
+ * source panel, and composer are the same components.
+ */
+
 import * as React from "react";
 import {
   ArrowUpIcon,
   ChevronDownIcon,
-  PlusIcon,
   SparklesIcon,
   SquareIcon,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { toast } from "sonner";
 
 import type { SourceCitation } from "@/api";
-import { streamRagAnswer, type Intent } from "@/api/rag-stream";
+import { type Intent } from "@/api/rag-stream";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HighlightedText } from "@/components/highlighted-text";
@@ -64,7 +71,7 @@ const SUGGESTED_PROMPTS = [
   },
 ];
 
-interface ChatMessage {
+export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
@@ -276,7 +283,7 @@ function AssistantMarkdown({
   );
 }
 
-function ThinkingDots() {
+export function ThinkingDots() {
   return (
     <div
       aria-label="Assistant is thinking"
@@ -381,7 +388,7 @@ function MessageMeta({ message }: { message: ChatMessage }) {
   );
 }
 
-function UserMessage({ content }: { content: string }) {
+export function UserMessage({ content }: { content: string }) {
   return (
     <div className="flex justify-end">
       <div className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] whitespace-pre-wrap">
@@ -391,7 +398,7 @@ function UserMessage({ content }: { content: string }) {
   );
 }
 
-function AssistantMessage({
+export function AssistantMessage({
   message,
   isStreaming,
 }: {
@@ -422,7 +429,7 @@ function AssistantMessage({
   );
 }
 
-function Composer({
+export function Composer({
   value,
   onChange,
   onSubmit,
@@ -503,7 +510,7 @@ function Composer({
   );
 }
 
-function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
+export function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
   return (
     <div className="mx-auto flex max-w-2xl flex-col items-center justify-center gap-6 px-4 py-16 text-center">
       <div className="bg-primary/10 text-primary flex size-14 items-center justify-center rounded-2xl">
@@ -537,177 +544,6 @@ function EmptyState({ onPick }: { onPick: (prompt: string) => void }) {
             </div>
           </button>
         ))}
-      </div>
-    </div>
-  );
-}
-
-export function QaPage() {
-  const [messages, setMessages] = React.useState<ChatMessage[]>([]);
-  const [input, setInput] = React.useState("");
-  const [isSending, setIsSending] = React.useState(false);
-  const [streamingMessageId, setStreamingMessageId] = React.useState<
-    string | null
-  >(null);
-  const abortRef = React.useRef<AbortController | null>(null);
-  const bottomRef = React.useRef<HTMLDivElement>(null);
-  const isEmpty = messages.length === 0;
-
-  const scrollToBottom = React.useCallback(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, []);
-
-  React.useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
-
-  React.useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, []);
-
-  const ask = async (question: string) => {
-    const trimmed = question.trim();
-    if (!trimmed || isSending) return;
-
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: trimmed,
-    };
-    const assistantId = crypto.randomUUID();
-    const assistantPlaceholder: ChatMessage = {
-      id: assistantId,
-      role: "assistant",
-      content: "",
-      sources: [],
-    };
-
-    setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
-    setInput("");
-    setIsSending(true);
-    setStreamingMessageId(assistantId);
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const updateAssistant = (patch: (m: ChatMessage) => ChatMessage) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? patch(m) : m))
-      );
-    };
-
-    try {
-      await streamRagAnswer(
-        { question: trimmed, max_chunks: 5 },
-        {
-          signal: controller.signal,
-          onEvent: (event) => {
-            switch (event.event) {
-              case "citations":
-                updateAssistant((m) => ({ ...m, sources: event.data }));
-                break;
-              case "delta":
-                updateAssistant((m) => ({
-                  ...m,
-                  content: m.content + event.data,
-                }));
-                break;
-              case "done":
-                updateAssistant((m) => ({
-                  ...m,
-                  model: event.data.model,
-                  queryTimeMs: event.data.query_time_ms,
-                  confidence: event.data.confidence,
-                  intent: event.data.intent,
-                }));
-                break;
-              case "error":
-                toast.error(event.data.message);
-                break;
-            }
-          },
-        }
-      );
-    } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        updateAssistant((m) => ({
-          ...m,
-          content: m.content || "_Stopped._",
-        }));
-      } else {
-        toast.error(err instanceof Error ? err.message : "Streaming failed");
-      }
-    } finally {
-      setIsSending(false);
-      setStreamingMessageId(null);
-      abortRef.current = null;
-    }
-  };
-
-  const stop = () => {
-    abortRef.current?.abort();
-  };
-
-  const newChat = () => {
-    if (isSending) abortRef.current?.abort();
-    setMessages([]);
-    setInput("");
-  };
-
-  return (
-    <div className="flex h-full flex-col overflow-hidden rounded-lg border">
-      <header className="flex items-center justify-between gap-3 border-b px-6 py-3">
-        <div className="min-w-0">
-          <Typography variant="h5" className="font-display truncate">
-            Ask Hireflow
-          </Typography>
-          <Typography variant="muted" className="truncate text-xs">
-            Conversational Q&amp;A grounded in your library.
-          </Typography>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={newChat}
-          disabled={isEmpty && !isSending}
-        >
-          <PlusIcon className="size-4" data-icon="inline-start" />
-          New chat
-        </Button>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {isEmpty ? (
-          <div className="flex h-full items-center justify-center">
-            <EmptyState onPick={(p) => ask(p)} />
-          </div>
-        ) : (
-          <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-8 sm:px-6">
-            {messages.map((message) =>
-              message.role === "user" ? (
-                <UserMessage key={message.id} content={message.content} />
-              ) : (
-                <AssistantMessage
-                  key={message.id}
-                  message={message}
-                  isStreaming={message.id === streamingMessageId}
-                />
-              )
-            )}
-            <div ref={bottomRef} />
-          </div>
-        )}
-      </div>
-
-      <div className="bg-muted/20 border-t">
-        <Composer
-          value={input}
-          onChange={setInput}
-          onSubmit={() => ask(input)}
-          onStop={stop}
-          isSending={isSending}
-          disabled={false}
-        />
       </div>
     </div>
   );

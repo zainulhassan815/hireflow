@@ -7,6 +7,7 @@ from app.models.candidate import (
     Candidate,
     CandidateAttachment,
 )
+from app.models.conversation import ChatMessage, ChatRole, Conversation
 from app.models.document import AuthorSource, Document, DocumentStatus, DocumentType
 from app.models.document_element import DocumentElement
 from app.models.gmail_connection import GmailConnection
@@ -30,6 +31,9 @@ __all__ = [
     "DocumentType",
     "GmailConnection",
     "GmailIngestStatus",
+    "ChatMessage",
+    "ChatRole",
+    "Conversation",
     "GmailIngestedMessage",
     "Job",
     "JobStatus",
