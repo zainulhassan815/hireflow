@@ -383,7 +383,8 @@ function MirrorDeletionsToggle({
           }
         />
         <label htmlFor={switchId} className="text-muted-foreground text-sm">
-          Delete documents when their email is permanently deleted
+          Delete documents when their email is permanently deleted (emptied from
+          Trash) — moving mail to Trash alone never deletes anything
         </label>
       </div>
 
@@ -392,13 +393,15 @@ function MirrorDeletionsToggle({
           <AlertDialogHeader>
             <AlertDialogTitle>Mirror deletions from Gmail?</AlertDialogTitle>
             <AlertDialogDescription>
-              When someone permanently deletes an email in{" "}
-              {connection.gmail_email} — emptying it from Trash, or letting
-              Gmail purge Trash automatically after 30 days — Hireflow will
-              delete every document it took from that email, along with the
-              stored file, its search results, and its link to any candidate.
-              This cannot be undone, and re-syncing will not bring them back.
-              Moving mail to Trash is reversible and never deletes anything.
+              Moving an email to Trash will <strong>not</strong> delete anything
+              — Hireflow only marks it, and unmarks it if you restore the
+              message. Deletion happens only when the email is{" "}
+              <strong>permanently</strong> gone from {connection.gmail_email}:
+              emptied from Trash by hand, or purged automatically by Gmail after
+              30 days. At that point Hireflow deletes every document it took
+              from that email, along with the stored file, its search results,
+              and its link to any candidate. That cannot be undone, and
+              re-syncing will not bring them back.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

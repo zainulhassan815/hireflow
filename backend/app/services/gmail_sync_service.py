@@ -88,7 +88,8 @@ class SyncReport:
     backfilled: int = 0
     backfill_cursor: datetime | None = None
     backfill_finished: bool = False
-    source_deleted: int = 0
+    source_trashed: int = 0
+    source_purged: int = 0
     source_restored: int = 0
     documents_deleted: int = 0
 
@@ -120,8 +121,18 @@ class SyncReport:
                 f"{name}:{count}" for name, count in self.errors_by_type.most_common(3)
             )
             parts.append(f"error_types={top}")
-        if self.source_deleted or self.source_restored or self.documents_deleted:
-            parts.append(f"source_deleted={self.source_deleted}")
+        if (
+            self.source_trashed
+            or self.source_purged
+            or self.source_restored
+            or self.documents_deleted
+        ):
+            # Trashed and purged are reported apart on purpose: a trash is
+            # reversible and never deletes, a purge is what actually can.
+            # A single "source_deleted" counter made a trashed message look
+            # like a mirroring failure when docs_deleted stayed 0.
+            parts.append(f"source_trashed={self.source_trashed}")
+            parts.append(f"source_purged={self.source_purged}")
             parts.append(f"source_restored={self.source_restored}")
             parts.append(f"docs_deleted={self.documents_deleted}")
         if self.backfilled or self.backfill_cursor or self.backfill_finished:
@@ -332,14 +343,31 @@ class GmailSyncService:
             return
 
         await self._ingested.set_source_deleted(row, datetime.now(UTC))
-        report.source_deleted += 1
 
-        # Trashing is reversible, so it never destroys anything. Only a
-        # message Gmail reports as permanently gone does, and only on a
-        # connection whose owner opted in.
-        if event is GmailHistoryEvent.DELETED and connection.mirror_deletions:
-            await self._mirror_deletion(
-                connection=connection, owner=owner, row=row, report=report
+        # Trashing is reversible, so it never destroys anything — not even
+        # on an opted-in connection. Only a message Gmail reports as
+        # permanently gone (Trash emptied, by the user or by Gmail's own
+        # 30-day purge) can take documents with it.
+        if event is GmailHistoryEvent.DELETED:
+            report.source_purged += 1
+            if connection.mirror_deletions:
+                await self._mirror_deletion(
+                    connection=connection, owner=owner, row=row, report=report
+                )
+            else:
+                logger.info(
+                    "message %s purged in Gmail; %s has mirror_deletions off, "
+                    "keeping %d document(s)",
+                    message_id,
+                    connection.gmail_email,
+                    len(row.document_ids),
+                )
+        else:
+            report.source_trashed += 1
+            logger.info(
+                "message %s moved to Trash in Gmail; marking source as deleted. "
+                "Documents are kept until the message is permanently deleted.",
+                message_id,
             )
 
     async def _mirror_deletion(

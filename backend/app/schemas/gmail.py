@@ -66,10 +66,13 @@ class GmailConnection(BaseModel):
     mirror_deletions: bool = Field(
         False,
         description=(
-            "When true, a message Gmail reports as permanently deleted "
+            "When true, a message Gmail reports as *permanently* deleted "
             "takes the documents it produced down with it. Off unless the "
-            "owner turned it on. Moving mail to Trash never deletes "
-            "anything — only emptying Trash does, and that is "
+            "owner turned it on.\n\n"
+            "Moving mail to Trash never deletes anything, even with this "
+            "on — a trashed message is only marked, and the mark is "
+            "cleared if it is restored. Deletion happens when Trash is "
+            "emptied, by hand or by Gmail's own 30-day purge, and is "
             "irreversible."
         ),
         examples=[False],
@@ -150,10 +153,13 @@ class GmailConnectionUpdate(BaseModel):
         ...,
         description=(
             "Enable or disable deletion mirroring. Enabling means a "
-            "permanently deleted email will delete the documents Hireflow "
+            "*permanently* deleted email — emptied from Trash, by hand or "
+            "by Gmail's 30-day purge — will delete the documents Hireflow "
             "ingested from it, including their stored file and search "
             "index entries, and unlink them from any candidate. This "
-            "cannot be undone and re-syncing will not bring them back."
+            "cannot be undone and re-syncing will not bring them back.\n\n"
+            "Moving mail to Trash is reversible and never deletes "
+            "anything; it only marks the source."
         ),
         examples=[True],
     )
