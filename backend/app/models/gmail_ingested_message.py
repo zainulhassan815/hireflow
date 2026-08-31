@@ -66,3 +66,15 @@ class GmailIngestedMessage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    # When Gmail last reported the source message as trashed or deleted.
+    # Cleared if the user pulls it back out of Trash. Recorded regardless
+    # of ``GmailConnection.mirror_deletions`` — detection is always on,
+    # only the destructive response is opt-in.
+    #
+    # ``document_ids`` above is deliberately left intact after a mirrored
+    # deletion: it is the audit record of what was ingested and then
+    # removed, so readers must tolerate ids that no longer resolve.
+    source_deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

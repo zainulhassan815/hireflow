@@ -118,6 +118,24 @@ class GmailIngestedMessageRepository:
         await self._db.refresh(claim)
         return claim
 
+    async def get_by_message_id(
+        self, connection_id: UUID, gmail_message_id: str
+    ) -> GmailIngestedMessage | None:
+        result = await self._db.execute(
+            select(GmailIngestedMessage).where(
+                GmailIngestedMessage.connection_id == connection_id,
+                GmailIngestedMessage.gmail_message_id == gmail_message_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def set_source_deleted(
+        self, row: GmailIngestedMessage, deleted_at: datetime | None
+    ) -> None:
+        """Stamp or clear the source-deleted marker. ``None`` = restored."""
+        row.source_deleted_at = deleted_at
+        await self._db.commit()
+
     async def get(self, row_id: UUID) -> GmailIngestedMessage | None:
         return await self._db.get(GmailIngestedMessage, row_id)
 

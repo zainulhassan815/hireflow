@@ -108,6 +108,16 @@ class GmailConnectionRepository:
         conn.backfill_before = before
         await self._db.commit()
 
+    async def set_history_id(
+        self, conn: GmailConnection, history_id: str | None
+    ) -> None:
+        conn.last_history_id = history_id
+        await self._db.commit()
+
+    async def set_mirror_deletions(self, conn: GmailConnection, enabled: bool) -> None:
+        conn.mirror_deletions = enabled
+        await self._db.commit()
+
     async def finish_backfill(self, conn: GmailConnection) -> None:
         conn.backfill_before = None
         conn.backfill_until = None

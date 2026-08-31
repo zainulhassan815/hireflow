@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -50,3 +50,16 @@ class GmailConnection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Cursor into Gmail's history feed. Null means "not seeded yet" —
+    # either a fresh connection or a cursor Google aged out (history
+    # survives roughly a week, sometimes only hours), in which case the
+    # next run re-seeds and the changes inside the gap are lost.
+    last_history_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    # Opt-in: when true, a message Gmail reports as *permanently* deleted
+    # takes its ingested documents down with it. Off by default and never
+    # enabled implicitly — deletion drops blobs and embeddings, cascades
+    # through candidate_attachments, and cannot be undone.
+    mirror_deletions: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"), default=False
+    )

@@ -26,9 +26,13 @@ import httpx
 
 from app.adapters.protocols import (
     GmailAttachmentRef,
+    GmailHistoryEvent,
+    GmailHistoryPage,
     GmailMessage,
     GmailMessagePage,
     GmailMessageSummary,
+    GmailProfile,
+    HistoryExpired,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,6 +91,52 @@ class GoogleGmailApi:
             attachments=attachments,
         )
 
+    async def get_profile(self, access_token: str) -> GmailProfile:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.get(
+                f"{_BASE}/profile", headers=_auth_header(access_token)
+            )
+        _raise_for_status(response, "get_profile")
+        payload = response.json()
+        return GmailProfile(
+            email_address=payload["emailAddress"],
+            history_id=str(payload["historyId"]),
+        )
+
+    async def list_history(
+        self,
+        access_token: str,
+        *,
+        start_history_id: str,
+        page_token: str | None = None,
+    ) -> GmailHistoryPage:
+        params: dict[str, str | int] = {
+            "startHistoryId": start_history_id,
+            "maxResults": _LIST_PAGE_SIZE,
+        }
+        if page_token:
+            params["pageToken"] = page_token
+
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.get(
+                f"{_BASE}/history",
+                params=params,
+                headers=_auth_header(access_token),
+            )
+        # A 404 here means the cursor aged out, not that the mailbox is
+        # missing. Distinguish it before the generic raise so the caller
+        # can re-seed instead of retrying forever.
+        if response.status_code == 404:
+            raise HistoryExpired(f"startHistoryId {start_history_id} is too old")
+        _raise_for_status(response, "list_history")
+
+        payload = response.json()
+        return GmailHistoryPage(
+            events=list(_walk_history(payload.get("history", []))),
+            history_id=str(payload["historyId"]) if payload.get("historyId") else None,
+            next_page_token=payload.get("nextPageToken"),
+        )
+
     async def download_attachment(
         self, access_token: str, message_id: str, attachment_id: str
     ) -> bytes:
@@ -112,6 +162,30 @@ def _raise_for_status(response: httpx.Response, operation: str) -> None:
     # details; keep the log tidy and leak-free.
     logger.warning("gmail api %s returned %s", operation, response.status_code)
     response.raise_for_status()
+
+
+_HIDDEN_LABELS = frozenset({"TRASH", "SPAM"})
+
+
+def _walk_history(records: list[dict]) -> Iterable[tuple[str, GmailHistoryEvent]]:
+    """Flatten Gmail history records into ordered (message_id, event) pairs.
+
+    Order is load-bearing: Gmail returns records ascending, and a message
+    trashed then restored inside one page must end up restored. Callers
+    replay the sequence rather than folding it into sets.
+
+    Only Trash/Spam label moves count — an ordinary label change (a user
+    filing mail under 'Candidates') says nothing about deletion.
+    """
+    for record in records:
+        for entry in record.get("labelsAdded") or []:
+            if _HIDDEN_LABELS.intersection(entry.get("labelIds") or []):
+                yield entry["message"]["id"], GmailHistoryEvent.TRASHED
+        for entry in record.get("labelsRemoved") or []:
+            if _HIDDEN_LABELS.intersection(entry.get("labelIds") or []):
+                yield entry["message"]["id"], GmailHistoryEvent.RESTORED
+        for entry in record.get("messagesDeleted") or []:
+            yield entry["message"]["id"], GmailHistoryEvent.DELETED
 
 
 def _walk_attachments(part: dict) -> Iterable[GmailAttachmentRef]:

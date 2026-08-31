@@ -17,8 +17,19 @@ import {
   gmailSyncNowMutation,
   listGmailConnectionsOptions,
   listGmailConnectionsQueryKey,
+  updateGmailConnectionMutation,
 } from "@/api";
 import type { GmailConnection } from "@/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -34,6 +45,7 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { Typography } from "@/components/ui/typography";
 
 export function EmailConnection() {
@@ -193,6 +205,10 @@ function ConnectionRow({
               {backfillUntil ? ` of ${backfillUntil.toLocaleDateString()}` : ""}
             </Typography>
           ) : null}
+          <MirrorDeletionsToggle
+            connection={connection}
+            onAfterMutate={onAfterMutate}
+          />
         </div>
       </div>
       <div className="flex shrink-0 gap-2">
@@ -318,5 +334,85 @@ function BackfillDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function MirrorDeletionsToggle({
+  connection,
+  onAfterMutate,
+}: {
+  connection: GmailConnection;
+  onAfterMutate: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const switchId = useId();
+
+  const update = useMutation({
+    ...updateGmailConnectionMutation(),
+    onSuccess: (updated) => {
+      toast.success(
+        updated.mirror_deletions
+          ? `Deletions from ${connection.gmail_email} will now remove matching documents`
+          : `Deletion mirroring off for ${connection.gmail_email}`
+      );
+      setConfirming(false);
+      onAfterMutate();
+    },
+    onError: () => toast.error("Could not change the setting."),
+  });
+
+  const apply = (mirror_deletions: boolean) =>
+    update.mutate({
+      path: { connection_id: connection.id },
+      body: { mirror_deletions },
+    });
+
+  return (
+    <>
+      <div className="mt-2 flex items-center gap-2">
+        <Switch
+          id={switchId}
+          checked={connection.mirror_deletions}
+          disabled={update.isPending}
+          // Turning it on is destructive, so it asks first. Turning it
+          // off is safe and applies immediately.
+          onCheckedChange={(next) =>
+            next ? setConfirming(true) : apply(false)
+          }
+        />
+        <label htmlFor={switchId} className="text-muted-foreground text-sm">
+          Delete documents when their email is permanently deleted
+        </label>
+      </div>
+
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mirror deletions from Gmail?</AlertDialogTitle>
+            <AlertDialogDescription>
+              When someone permanently deletes an email in{" "}
+              {connection.gmail_email} — emptying it from Trash, or letting
+              Gmail purge Trash automatically after 30 days — Hireflow will
+              delete every document it took from that email, along with the
+              stored file, its search results, and its link to any candidate.
+              This cannot be undone, and re-syncing will not bring them back.
+              Moving mail to Trash is reversible and never deletes anything.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel render={<Button variant="ghost" size="sm" />}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              render={<Button variant="destructive" size="sm" />}
+              onClick={() => apply(true)}
+              disabled={update.isPending}
+            >
+              {update.isPending ? "Enabling..." : "Enable"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

@@ -689,3 +689,282 @@ async def test_incremental_keeps_priority_over_backfill(
     assert report.ingested == 1
     assert report.backfilled == 0
     assert (await _reload(connection)).backfill_before == cursor
+
+
+# ---------------------------------------------------------------------------
+# Change detection (history feed)
+# ---------------------------------------------------------------------------
+
+_PROFILE_URL = "https://gmail.googleapis.com/gmail/v1/users/me/profile"
+_HISTORY_URL = "https://gmail.googleapis.com/gmail/v1/users/me/history"
+
+
+def _mount_quiet_mailbox(respx_mock) -> None:
+    """Token refresh plus an inbox with nothing new to ingest."""
+    _mount_token(respx_mock)
+    respx_mock.get(_GMAIL_LIST).mock(
+        return_value=httpx.Response(200, json=LIST_MESSAGES_EMPTY)
+    )
+
+
+def _mount_history(respx_mock, records: list[dict], *, history_id: str = "999") -> None:
+    respx_mock.get(_HISTORY_URL).mock(
+        return_value=httpx.Response(
+            200, json={"history": records, "historyId": history_id}
+        )
+    )
+
+
+def _trashed(message_id: str) -> dict:
+    return {"labelsAdded": [{"message": {"id": message_id}, "labelIds": ["TRASH"]}]}
+
+
+def _restored(message_id: str) -> dict:
+    return {"labelsRemoved": [{"message": {"id": message_id}, "labelIds": ["TRASH"]}]}
+
+
+def _purged(message_id: str) -> dict:
+    return {"messagesDeleted": [{"message": {"id": message_id}}]}
+
+
+async def _seed_cursor(connection, history_id: str = "100"):
+    from app.core.db import SessionLocal
+    from app.repositories.gmail_connection import GmailConnectionRepository
+
+    async with SessionLocal() as session:
+        repo = GmailConnectionRepository(session)
+        conn = await repo.get_by_id(connection.id)
+        await repo.set_history_id(conn, history_id)
+
+
+async def _set_mirror(connection, enabled: bool):
+    from app.core.db import SessionLocal
+    from app.repositories.gmail_connection import GmailConnectionRepository
+
+    async with SessionLocal() as session:
+        repo = GmailConnectionRepository(session)
+        conn = await repo.get_by_id(connection.id)
+        await repo.set_mirror_deletions(conn, enabled)
+
+
+async def _ingested_row(connection, message_id: str):
+    from app.core.db import SessionLocal
+    from app.repositories.gmail_ingested_message import (
+        GmailIngestedMessageRepository,
+    )
+
+    async with SessionLocal() as session:
+        return await GmailIngestedMessageRepository(session).get_by_message_id(
+            connection.id, message_id
+        )
+
+
+async def _ingest_one(connection, admin_user, message_id: str):
+    """Put a real Document + ledger row in place, as a sync run would."""
+    from app.core.db import SessionLocal
+    from app.models import Document, DocumentStatus, GmailIngestStatus
+    from app.repositories.gmail_ingested_message import (
+        GmailIngestedMessageRepository,
+    )
+
+    async with SessionLocal() as session:
+        doc = Document(
+            owner_id=admin_user.id,
+            filename=f"{message_id}.pdf",
+            mime_type="application/pdf",
+            size_bytes=1024,
+            storage_key=f"test/{message_id}.pdf",
+            status=DocumentStatus.PENDING,
+        )
+        session.add(doc)
+        await session.commit()
+        await session.refresh(doc)
+
+        repo = GmailIngestedMessageRepository(session)
+        claim = await repo.claim_or_skip(connection.id, message_id)
+        await repo.mark_completed(claim, attachment_count=1, document_ids=[doc.id])
+        assert claim.ingest_status == GmailIngestStatus.COMPLETED
+        return doc.id
+
+
+async def _document_exists(document_id) -> bool:
+    from app.core.db import SessionLocal
+    from app.models import Document
+
+    async with SessionLocal() as session:
+        return await session.get(Document, document_id) is not None
+
+
+@respx.mock
+async def test_first_run_seeds_history_cursor_and_changes_nothing(
+    connection, admin_user, enqueued_tasks
+) -> None:
+    doc_id = await _ingest_one(connection, admin_user, "msg-a")
+    _mount_quiet_mailbox(respx.mock)
+    respx.mock.get(_PROFILE_URL).mock(
+        return_value=httpx.Response(
+            200, json={"emailAddress": "hr@example.com", "historyId": "4242"}
+        )
+    )
+
+    from app.worker.tasks import _run_sync
+
+    await _run_sync(connection.id)
+
+    assert (await _reload(connection)).last_history_id == "4242"
+    assert await _document_exists(doc_id)
+    assert (await _ingested_row(connection, "msg-a")).source_deleted_at is None
+
+
+@respx.mock
+async def test_trashing_marks_but_never_deletes(
+    connection, admin_user, enqueued_tasks
+) -> None:
+    """Trash is reversible, so it must not destroy anything — even opted in."""
+    doc_id = await _ingest_one(connection, admin_user, "msg-trash")
+    await _seed_cursor(connection)
+    await _set_mirror(connection, True)
+
+    _mount_quiet_mailbox(respx.mock)
+    _mount_history(respx.mock, [_trashed("msg-trash")])
+
+    from app.worker.tasks import _run_sync
+
+    report = await _run_sync(connection.id)
+
+    assert report.source_deleted == 1
+    assert report.documents_deleted == 0
+    assert (await _ingested_row(connection, "msg-trash")).source_deleted_at is not None
+    assert await _document_exists(doc_id)
+
+
+@respx.mock
+async def test_restore_clears_the_mark(connection, admin_user, enqueued_tasks) -> None:
+    await _ingest_one(connection, admin_user, "msg-back")
+    await _seed_cursor(connection)
+
+    _mount_quiet_mailbox(respx.mock)
+    # Trashed then pulled back inside one page: the last event wins.
+    _mount_history(respx.mock, [_trashed("msg-back"), _restored("msg-back")])
+
+    from app.worker.tasks import _run_sync
+
+    report = await _run_sync(connection.id)
+
+    assert report.source_deleted == 0
+    assert (await _ingested_row(connection, "msg-back")).source_deleted_at is None
+
+
+@respx.mock
+async def test_permanent_delete_without_optin_keeps_the_document(
+    connection, admin_user, enqueued_tasks
+) -> None:
+    doc_id = await _ingest_one(connection, admin_user, "msg-gone")
+    await _seed_cursor(connection)
+    await _set_mirror(connection, False)
+
+    _mount_quiet_mailbox(respx.mock)
+    _mount_history(respx.mock, [_purged("msg-gone")])
+
+    from app.worker.tasks import _run_sync
+
+    report = await _run_sync(connection.id)
+
+    assert report.source_deleted == 1
+    assert report.documents_deleted == 0
+    assert await _document_exists(doc_id)
+
+
+@respx.mock
+async def test_permanent_delete_with_optin_removes_the_document(
+    connection, admin_user, enqueued_tasks
+) -> None:
+    from sqlalchemy import select
+
+    from app.core.db import SessionLocal
+    from app.models import ActivityAction, ActivityLog
+
+    doc_id = await _ingest_one(connection, admin_user, "msg-purged")
+    await _seed_cursor(connection)
+    await _set_mirror(connection, True)
+
+    _mount_quiet_mailbox(respx.mock)
+    _mount_history(respx.mock, [_purged("msg-purged")])
+
+    from app.worker.tasks import _run_sync
+
+    report = await _run_sync(connection.id)
+
+    assert report.documents_deleted == 1
+    assert not await _document_exists(doc_id)
+
+    async with SessionLocal() as session:
+        logs = (
+            (
+                await session.execute(
+                    select(ActivityLog).where(
+                        ActivityLog.action == ActivityAction.DOCUMENT_DELETE
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(logs) == 1
+    assert "msg-purged" in logs[0].detail
+
+
+@respx.mock
+async def test_history_for_unknown_message_is_ignored(
+    connection, enqueued_tasks
+) -> None:
+    await _seed_cursor(connection)
+    _mount_quiet_mailbox(respx.mock)
+    _mount_history(respx.mock, [_purged("never-ingested")])
+
+    from app.worker.tasks import _run_sync
+
+    report = await _run_sync(connection.id)
+
+    assert report.source_deleted == 0
+    assert (await _reload(connection)).last_history_id == "999"
+
+
+@respx.mock
+async def test_expired_history_reseeds_and_sync_still_runs(
+    connection, admin_user, enqueued_tasks
+) -> None:
+    doc_id = await _ingest_one(connection, admin_user, "msg-keep")
+    await _seed_cursor(connection, "1")
+
+    _mount_token(respx.mock)
+    respx.mock.get(_HISTORY_URL).mock(return_value=httpx.Response(404))
+    _mount_list_for(respx.mock, _incremental_query(), list_response("brand-new"))
+    _mount_message(respx.mock, "brand-new", at=datetime(2026, 8, 30, tzinfo=UTC))
+
+    from app.worker.tasks import _run_sync
+
+    report = await _run_sync(connection.id)
+
+    # Cursor cleared for re-seeding, and the run still ingested new mail.
+    assert (await _reload(connection)).last_history_id is None
+    assert report.ingested == 1
+    assert await _document_exists(doc_id)
+
+
+@respx.mock
+async def test_history_failure_does_not_block_ingestion(
+    connection, enqueued_tasks
+) -> None:
+    await _seed_cursor(connection)
+
+    _mount_token(respx.mock)
+    respx.mock.get(_HISTORY_URL).mock(return_value=httpx.Response(500))
+    _mount_list_for(respx.mock, _incremental_query(), list_response("still-works"))
+    _mount_message(respx.mock, "still-works", at=datetime(2026, 8, 30, tzinfo=UTC))
+
+    from app.worker.tasks import _run_sync
+
+    report = await _run_sync(connection.id)
+
+    assert report.ingested == 1

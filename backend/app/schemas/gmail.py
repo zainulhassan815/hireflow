@@ -63,6 +63,17 @@ class GmailConnection(BaseModel):
         ),
         examples=["2024-01-01T00:00:00Z"],
     )
+    mirror_deletions: bool = Field(
+        False,
+        description=(
+            "When true, a message Gmail reports as permanently deleted "
+            "takes the documents it produced down with it. Off unless the "
+            "owner turned it on. Moving mail to Trash never deletes "
+            "anything — only emptying Trash does, and that is "
+            "irreversible."
+        ),
+        examples=[False],
+    )
 
 
 class GmailSyncTriggerResponse(BaseModel):
@@ -129,4 +140,20 @@ class GmailBackfillResponse(BaseModel):
             "Watch ``backfill_before`` on the list endpoint to follow "
             "progress; it returns to null when the walk completes."
         ),
+    )
+
+
+class GmailConnectionUpdate(BaseModel):
+    """Settings changeable on an existing connection."""
+
+    mirror_deletions: bool = Field(
+        ...,
+        description=(
+            "Enable or disable deletion mirroring. Enabling means a "
+            "permanently deleted email will delete the documents Hireflow "
+            "ingested from it, including their stored file and search "
+            "index entries, and unlink them from any candidate. This "
+            "cannot be undone and re-syncing will not bring them back."
+        ),
+        examples=[True],
     )

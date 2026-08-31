@@ -31,10 +31,13 @@ from uuid import UUID
 
 from app.adapters.protocols import (
     GmailApi,
+    GmailHistoryEvent,
     GmailMessage,
     GmailOAuth,
+    HistoryExpired,
     InvalidGrant,
 )
+from app.domain.exceptions import NotFound
 from app.models import (
     ActivityAction,
     GmailConnection,
@@ -85,6 +88,9 @@ class SyncReport:
     backfilled: int = 0
     backfill_cursor: datetime | None = None
     backfill_finished: bool = False
+    source_deleted: int = 0
+    source_restored: int = 0
+    documents_deleted: int = 0
 
     @property
     def work_done(self) -> int:
@@ -114,6 +120,10 @@ class SyncReport:
                 f"{name}:{count}" for name, count in self.errors_by_type.most_common(3)
             )
             parts.append(f"error_types={top}")
+        if self.source_deleted or self.source_restored or self.documents_deleted:
+            parts.append(f"source_deleted={self.source_deleted}")
+            parts.append(f"source_restored={self.source_restored}")
+            parts.append(f"docs_deleted={self.documents_deleted}")
         if self.backfilled or self.backfill_cursor or self.backfill_finished:
             parts.append(f"backfilled={self.backfilled}")
             if self.backfill_finished:
@@ -184,6 +194,22 @@ class GmailSyncService:
 
         report = SyncReport()
 
+        # Change detection first, so a message deleted in Gmail is marked
+        # before this run's drains touch anything. Isolated from the rest:
+        # losing change detection must never cost us new resumes.
+        try:
+            await self._history_pass(
+                connection=connection,
+                owner=owner,
+                access_token=tokens.access_token,
+                report=report,
+            )
+        except Exception:
+            logger.exception(
+                "history pass failed for %s; continuing with ingestion",
+                connection.gmail_email,
+            )
+
         # New mail always outranks history: a connection working through
         # three years of backfill must not stop ingesting today's resumes.
         await self._drain(
@@ -219,6 +245,141 @@ class GmailSyncService:
             "gmail sync complete for %s: %s", connection.gmail_email, report.summary()
         )
         return report
+
+    async def _history_pass(
+        self,
+        *,
+        connection: GmailConnection,
+        owner: User,
+        access_token: str,
+        report: SyncReport,
+    ) -> None:
+        """Replay Gmail's change feed since the stored cursor."""
+        if connection.last_history_id is None:
+            # Nothing to diff against on a first run. Seed and wait for
+            # the next one — anything that changed before we had a cursor
+            # is simply not knowable.
+            profile = await self._api.get_profile(access_token)
+            await self._connections.set_history_id(connection, profile.history_id)
+            logger.info(
+                "seeded history cursor for %s at %s",
+                connection.gmail_email,
+                profile.history_id,
+            )
+            return
+
+        # Order is load-bearing: a message can be trashed and restored
+        # inside one page, and only its final state is true. Replaying
+        # into a dict keyed by message id keeps the last event per
+        # message; folding into sets would lose that.
+        latest: dict[str, GmailHistoryEvent] = {}
+        newest_history_id = connection.last_history_id
+        page_token: str | None = None
+
+        try:
+            for _ in range(self._max_pages):
+                page = await self._api.list_history(
+                    access_token,
+                    start_history_id=connection.last_history_id,
+                    page_token=page_token,
+                )
+                for message_id, event in page.events:
+                    latest[message_id] = event
+                if page.history_id:
+                    newest_history_id = page.history_id
+                if not page.next_page_token:
+                    break
+                page_token = page.next_page_token
+        except HistoryExpired:
+            # The changes inside the gap are unrecoverable — closing that
+            # would mean listing every message and diffing the ledger,
+            # which is the full scan the history API exists to avoid.
+            logger.warning(
+                "history cursor expired for %s; re-seeding", connection.gmail_email
+            )
+            await self._connections.set_history_id(connection, None)
+            return
+
+        for message_id, event in latest.items():
+            await self._apply_history_event(
+                connection=connection,
+                owner=owner,
+                message_id=message_id,
+                event=event,
+                report=report,
+            )
+
+        await self._connections.set_history_id(connection, newest_history_id)
+
+    async def _apply_history_event(
+        self,
+        *,
+        connection: GmailConnection,
+        owner: User,
+        message_id: str,
+        event: GmailHistoryEvent,
+        report: SyncReport,
+    ) -> None:
+        row = await self._ingested.get_by_message_id(connection.id, message_id)
+        if row is None:
+            # A message we never ingested. Most history traffic is this.
+            return
+
+        if event is GmailHistoryEvent.RESTORED:
+            if row.source_deleted_at is not None:
+                await self._ingested.set_source_deleted(row, None)
+                report.source_restored += 1
+            return
+
+        await self._ingested.set_source_deleted(row, datetime.now(UTC))
+        report.source_deleted += 1
+
+        # Trashing is reversible, so it never destroys anything. Only a
+        # message Gmail reports as permanently gone does, and only on a
+        # connection whose owner opted in.
+        if event is GmailHistoryEvent.DELETED and connection.mirror_deletions:
+            await self._mirror_deletion(
+                connection=connection, owner=owner, row=row, report=report
+            )
+
+    async def _mirror_deletion(
+        self,
+        *,
+        connection: GmailConnection,
+        owner: User,
+        row: GmailIngestedMessage,
+        report: SyncReport,
+    ) -> None:
+        """Delete the documents a permanently-deleted message produced.
+
+        Irreversible: drops the blob, the embeddings, and — via
+        ``ON DELETE CASCADE`` on ``candidate_attachments`` — the file's
+        link to any candidate. Every deletion is logged so an audit can
+        answer why a document vanished.
+        """
+        for document_id in row.document_ids:
+            try:
+                await self._documents.delete(document_id, actor=owner)
+            except NotFound:
+                # Already removed by hand. Nothing to mirror.
+                continue
+            except Exception:
+                logger.exception(
+                    "failed to mirror deletion of document %s", document_id
+                )
+                continue
+
+            report.documents_deleted += 1
+            await self._activity.log(
+                actor_id=connection.user_id,
+                action=ActivityAction.DOCUMENT_DELETE,
+                resource_type="document",
+                resource_id=str(document_id),
+                detail=(
+                    f"mirrored Gmail deletion of message {row.gmail_message_id} "
+                    f"on {connection.gmail_email}"
+                ),
+            )
 
     async def _drain(
         self,

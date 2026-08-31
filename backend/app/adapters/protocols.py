@@ -796,6 +796,50 @@ class GmailMessagePage:
     next_page_token: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class GmailProfile:
+    """``users.getProfile`` — used to seed a history cursor."""
+
+    email_address: str
+    history_id: str
+
+
+class GmailHistoryEvent(StrEnum):
+    """What happened to a message, from Hireflow's point of view.
+
+    Gmail's raw event vocabulary is wider; these are the three outcomes
+    that change what we do. ``TRASHED`` is reversible (the user can pull
+    a message back out of Trash), ``DELETED`` is not.
+    """
+
+    TRASHED = "trashed"
+    RESTORED = "restored"
+    DELETED = "deleted"
+
+
+@dataclass(frozen=True, slots=True)
+class GmailHistoryPage:
+    """One page of ``users.history.list``.
+
+    ``events`` preserves Gmail's ascending history order. Callers must
+    apply them in sequence — a message can be trashed and restored
+    inside a single page, and only the last event for it is true.
+    """
+
+    events: list[tuple[str, GmailHistoryEvent]]
+    history_id: str | None
+    next_page_token: str | None
+
+
+class HistoryExpired(Exception):
+    """Raised when ``startHistoryId`` is too old for Gmail to serve.
+
+    Google keeps history for roughly a week, sometimes only hours. The
+    only recovery is to re-seed the cursor and fall back on the
+    date-window sync; the changes inside the gap are unrecoverable.
+    """
+
+
 class InvalidGrant(Exception):
     """Raised by the OAuth refresh when Google returns ``invalid_grant``.
 
@@ -816,3 +860,13 @@ class GmailApi(Protocol):
     async def download_attachment(
         self, access_token: str, message_id: str, attachment_id: str
     ) -> bytes: ...
+
+    async def get_profile(self, access_token: str) -> GmailProfile: ...
+
+    async def list_history(
+        self,
+        access_token: str,
+        *,
+        start_history_id: str,
+        page_token: str | None = None,
+    ) -> GmailHistoryPage: ...
