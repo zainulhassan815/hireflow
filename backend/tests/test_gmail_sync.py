@@ -832,7 +832,8 @@ async def test_trashing_marks_but_never_deletes(
 
     report = await _run_sync(connection.id)
 
-    assert report.source_deleted == 1
+    assert report.source_trashed == 1
+    assert report.source_purged == 0
     assert report.documents_deleted == 0
     assert (await _ingested_row(connection, "msg-trash")).source_deleted_at is not None
     assert await _document_exists(doc_id)
@@ -851,7 +852,8 @@ async def test_restore_clears_the_mark(connection, admin_user, enqueued_tasks) -
 
     report = await _run_sync(connection.id)
 
-    assert report.source_deleted == 0
+    assert report.source_trashed == 0
+    assert report.source_purged == 0
     assert (await _ingested_row(connection, "msg-back")).source_deleted_at is None
 
 
@@ -870,7 +872,8 @@ async def test_permanent_delete_without_optin_keeps_the_document(
 
     report = await _run_sync(connection.id)
 
-    assert report.source_deleted == 1
+    assert report.source_purged == 1
+    assert report.source_trashed == 0
     assert report.documents_deleted == 0
     assert await _document_exists(doc_id)
 
@@ -895,6 +898,8 @@ async def test_permanent_delete_with_optin_removes_the_document(
 
     report = await _run_sync(connection.id)
 
+    assert report.source_purged == 1
+    assert report.source_trashed == 0
     assert report.documents_deleted == 1
     assert not await _document_exists(doc_id)
 
@@ -926,7 +931,8 @@ async def test_history_for_unknown_message_is_ignored(
 
     report = await _run_sync(connection.id)
 
-    assert report.source_deleted == 0
+    assert report.source_trashed == 0
+    assert report.source_purged == 0
     assert (await _reload(connection)).last_history_id == "999"
 
 
