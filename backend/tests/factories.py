@@ -29,7 +29,6 @@ async def make_gmail_connection(
             "openid",
             "email",
             "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.send",
         ],
     )
     session.add(connection)

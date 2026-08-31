@@ -5,12 +5,12 @@ The SDK (google-auth / google-api-python-client) is intentionally avoided
 — it pulls in a large dependency surface for what amounts to four HTTP
 calls.
 
-Scopes requested at authorize time bundle everything Gmail-integration
-features need so the user sees one consent screen:
+Scopes are kept to the minimum the app actually exercises. Adding one
+later forces every connected user through a fresh consent screen, so a
+scope is only requested once the feature using it ships:
 
-* ``openid email`` — we read the connected Gmail address.
-* ``gmail.readonly`` — required by F51 (resume sync).
-* ``gmail.send`` — required by F52 (follow-up emails).
+* ``openid email`` — read the connected Gmail address.
+* ``gmail.readonly`` — find and download resume attachments.
 """
 
 from __future__ import annotations
@@ -33,7 +33,6 @@ _SCOPES = [
     "openid",
     "email",
     "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.send",
 ]
 
 

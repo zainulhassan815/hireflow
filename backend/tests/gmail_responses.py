@@ -12,11 +12,7 @@ import base64
 TOKEN_RESPONSE = {
     "access_token": "test-access-token",
     "expires_in": 3599,
-    "scope": (
-        "openid email "
-        "https://www.googleapis.com/auth/gmail.readonly "
-        "https://www.googleapis.com/auth/gmail.send"
-    ),
+    "scope": ("openid email https://www.googleapis.com/auth/gmail.readonly"),
     "token_type": "Bearer",
     # The token endpoint only returns refresh_token on the initial
     # exchange, not on refresh. Mirror that — tests that need a

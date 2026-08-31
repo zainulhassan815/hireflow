@@ -54,7 +54,7 @@ export function EmailConnection() {
         </div>
         <Typography variant="muted">
           Connect one or more Gmail accounts so Hireflow can auto-ingest resume
-          attachments and send follow-ups. Each mailbox syncs independently.
+          attachments. Read-only access; each mailbox syncs independently.
         </Typography>
       </CardHeader>
       <CardContent className="space-y-3">
