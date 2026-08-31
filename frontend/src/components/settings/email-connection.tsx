@@ -325,7 +325,9 @@ function BackfillDialog({
             onClick={() =>
               backfill.mutate({
                 path: { connection_id: connection.id },
-                body: { until },
+                // The generated client types this as Date; a date-only
+                // string parses as UTC midnight, so no off-by-one.
+                body: { until: new Date(until) },
               })
             }
           >
