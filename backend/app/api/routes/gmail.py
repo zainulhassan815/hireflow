@@ -20,6 +20,8 @@ from app.domain.exceptions import GmailAuthError, NotFound
 from app.schemas.errors import ErrorResponse
 from app.schemas.gmail import (
     GmailAuthorizeResponse,
+    GmailBackfillRequest,
+    GmailBackfillResponse,
     GmailConnection,
     GmailSyncTriggerResponse,
 )
@@ -123,6 +125,8 @@ async def list_gmail_connections(
             connected_at=c.created_at,
             last_synced_at=c.last_synced_at,
             scopes=c.scopes,
+            backfill_before=c.backfill_before,
+            backfill_until=c.backfill_until,
         )
         for c in connections
     ]
@@ -161,6 +165,55 @@ async def gmail_sync_now(
 
     sync_gmail_connection.delay(str(connection.id))
     return GmailSyncTriggerResponse(connection_id=connection.id)
+
+
+@router.post(
+    "/connections/{connection_id}/backfill",
+    response_model=GmailBackfillResponse,
+    status_code=202,
+    summary="Backfill older mail for a connection",
+    description=(
+        "Arms the connection to walk backwards through its mail history "
+        "towards ``until``, pulling one batch per sync run rather than all "
+        "at once. Returns 202; the first batch is enqueued immediately and "
+        "subsequent batches ride the regular sync schedule.\n\n"
+        "The walk starts at the far edge of the window incremental sync "
+        "already covers, so recent mail is never re-fetched. Poll ``GET "
+        "/api/auth/gmail/connections`` and watch ``backfill_before`` move "
+        "into the past; it returns to null when the walk finishes. Calling "
+        "this again on a connection already backfilling restarts the walk "
+        "from the top with the new ``until``."
+    ),
+    responses={
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        404: {
+            "model": ErrorResponse,
+            "description": "Connection not found or not owned by the current user",
+        },
+        422: {
+            "model": ErrorResponse,
+            "description": "``until`` is not a date in the past",
+        },
+    },
+)
+async def gmail_backfill(
+    connection_id: UUID,
+    body: GmailBackfillRequest,
+    current_user: CurrentUser,
+    gmail: GmailServiceDep,
+) -> GmailBackfillResponse:
+    connection = await gmail.start_backfill(
+        current_user.id, connection_id, until=body.until
+    )
+
+    from app.worker.tasks import sync_gmail_connection
+
+    sync_gmail_connection.delay(str(connection.id))
+    return GmailBackfillResponse(
+        connection_id=connection.id,
+        backfill_before=connection.backfill_before,
+        backfill_until=connection.backfill_until,
+    )
 
 
 @router.delete(

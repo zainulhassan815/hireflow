@@ -11,9 +11,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from app.worker.celery_app import celery
+
+if TYPE_CHECKING:
+    from app.services.gmail_sync_service import SyncReport
 
 logger = logging.getLogger(__name__)
 
@@ -309,7 +313,7 @@ async def _load_connection_ids() -> list[UUID]:
         return [c.id for c in await repo.list_all()]
 
 
-async def _run_sync(connection_id: UUID) -> None:
+async def _run_sync(connection_id: UUID) -> SyncReport:
     from app.adapters.gmail_api import GoogleGmailApi
     from app.adapters.gmail_oauth import GoogleGmailOAuth
     from app.adapters.minio_storage import MinioBlobStorage
@@ -367,5 +371,6 @@ async def _run_sync(connection_id: UUID) -> None:
             max_messages_per_run=settings.gmail_sync_max_messages_per_run,
             initial_window_days=settings.gmail_sync_initial_window_days,
             claim_timeout_minutes=settings.gmail_sync_claim_timeout_minutes,
+            max_pages_per_run=settings.gmail_sync_max_pages_per_run,
         )
-        await sync_service.sync(connection_id)
+        return await sync_service.sync(connection_id)

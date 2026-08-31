@@ -29,6 +29,8 @@ from tests.gmail_responses import (
     MESSAGE_ID,
     TOKEN_RESPONSE,
     attachment_response,
+    list_response,
+    message_response,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -456,3 +458,234 @@ async def test_sync_candidate_service_ignores_non_resume(admin_user) -> None:
 
         count = session.scalar(select(func.count()).select_from(Candidate))
         assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# Backfill
+# ---------------------------------------------------------------------------
+
+_GMAIL_LIST = "https://gmail.googleapis.com/gmail/v1/users/me/messages"
+
+
+def _ms(dt: datetime) -> int:
+    return int(dt.timestamp() * 1000)
+
+
+def _mount_token(respx_mock) -> None:
+    respx_mock.post("https://oauth2.googleapis.com/token").mock(
+        return_value=httpx.Response(200, json=TOKEN_RESPONSE)
+    )
+
+
+def _mount_list_for(respx_mock, query: str, body: dict) -> None:
+    """Serve ``body`` only for the list call carrying exactly ``query``."""
+    respx_mock.get(_GMAIL_LIST, params__contains={"q": query}).mock(
+        return_value=httpx.Response(200, json=body)
+    )
+
+
+def _mount_message(respx_mock, message_id: str, *, at: datetime) -> None:
+    respx_mock.get(f"{_GMAIL_LIST}/{message_id}").mock(
+        return_value=httpx.Response(
+            200, json=message_response(message_id, internal_date_ms=_ms(at))
+        )
+    )
+    respx_mock.get(f"{_GMAIL_LIST}/{message_id}/attachments/att-{message_id}").mock(
+        return_value=httpx.Response(
+            200, json=attachment_response(b"%PDF-1.4 backfilled")
+        )
+    )
+
+
+def _incremental_query() -> str:
+    """Query a never-synced connection issues on its incremental pass."""
+    from app.core.config import settings
+
+    return f"has:attachment newer_than:{settings.gmail_sync_initial_window_days}d"
+
+
+def _backfill_query(cursor: datetime) -> str:
+    return f"has:attachment before:{cursor + timedelta(days=1):%Y/%m/%d}"
+
+
+async def _arm_backfill(connection, *, before: datetime, until: datetime):
+    from app.core.db import SessionLocal
+    from app.repositories.gmail_connection import GmailConnectionRepository
+
+    async with SessionLocal() as session:
+        repo = GmailConnectionRepository(session)
+        conn = await repo.get_by_id(connection.id)
+        await repo.start_backfill(conn, before=before, until=until)
+
+
+async def _reload(connection):
+    from app.core.db import SessionLocal
+    from app.repositories.gmail_connection import GmailConnectionRepository
+
+    async with SessionLocal() as session:
+        return await GmailConnectionRepository(session).get_by_id(connection.id)
+
+
+@respx.mock
+async def test_budget_counts_work_not_dedup_skips(
+    connection, enqueued_tasks, monkeypatch
+) -> None:
+    """A run must page past already-ingested mail to reach new mail.
+
+    The regression this guards: budgeting on messages *scanned* let a
+    single run spend its whole allowance on free dedup skips and ingest
+    nothing, which made any backfill impossible.
+    """
+    from app.core.config import settings
+    from app.core.db import SessionLocal
+
+    monkeypatch.setattr(settings, "gmail_sync_max_messages_per_run", 1)
+
+    seen = [f"old-{i}" for i in range(5)]
+    async with SessionLocal() as session:
+        for mid in seen:
+            await make_ingested_message(
+                session, connection_id=connection.id, gmail_message_id=mid
+            )
+
+    _mount_token(respx.mock)
+    _mount_list_for(respx.mock, _incremental_query(), list_response(*seen, "fresh-one"))
+    _mount_message(respx.mock, "fresh-one", at=datetime(2026, 8, 20, tzinfo=UTC))
+
+    from app.worker.tasks import _run_sync
+
+    report = await _run_sync(connection.id)
+
+    assert report.skipped_dedup == 5
+    assert report.ingested == 1
+    assert report.work_done == 1
+
+
+@respx.mock
+async def test_backfill_cursor_advances_to_oldest_processed(
+    connection, enqueued_tasks
+) -> None:
+    cursor = datetime(2026, 6, 1, tzinfo=UTC)
+    oldest = datetime(2026, 5, 20, 9, 30, tzinfo=UTC)
+    await _arm_backfill(
+        connection, before=cursor, until=datetime(2024, 1, 1, tzinfo=UTC)
+    )
+
+    _mount_token(respx.mock)
+    _mount_list_for(respx.mock, _incremental_query(), LIST_MESSAGES_EMPTY)
+    _mount_list_for(
+        respx.mock, _backfill_query(cursor), list_response("older-a", "older-b")
+    )
+    _mount_message(respx.mock, "older-a", at=datetime(2026, 5, 28, tzinfo=UTC))
+    _mount_message(respx.mock, "older-b", at=oldest)
+
+    from app.worker.tasks import _run_sync
+
+    report = await _run_sync(connection.id)
+
+    assert report.backfilled == 2
+    assert (await _reload(connection)).backfill_before == oldest
+
+
+@respx.mock
+async def test_backfill_steps_back_a_day_when_window_fully_ingested(
+    connection, enqueued_tasks
+) -> None:
+    """A pass that is all dedup must still make progress in time.
+
+    Otherwise the cursor never moves and the walk repeats the same
+    already-ingested window forever.
+    """
+    from app.core.db import SessionLocal
+
+    cursor = datetime(2026, 6, 1, tzinfo=UTC)
+    await _arm_backfill(
+        connection, before=cursor, until=datetime(2024, 1, 1, tzinfo=UTC)
+    )
+    async with SessionLocal() as session:
+        await make_ingested_message(
+            session, connection_id=connection.id, gmail_message_id="already-done"
+        )
+
+    _mount_token(respx.mock)
+    _mount_list_for(respx.mock, _incremental_query(), LIST_MESSAGES_EMPTY)
+    _mount_list_for(respx.mock, _backfill_query(cursor), list_response("already-done"))
+
+    from app.worker.tasks import _run_sync
+
+    report = await _run_sync(connection.id)
+
+    assert report.backfilled == 0
+    assert (await _reload(connection)).backfill_before == cursor - timedelta(days=1)
+
+
+@respx.mock
+async def test_backfill_completes_when_no_older_mail(
+    connection, enqueued_tasks
+) -> None:
+    cursor = datetime(2026, 6, 1, tzinfo=UTC)
+    await _arm_backfill(
+        connection, before=cursor, until=datetime(2024, 1, 1, tzinfo=UTC)
+    )
+
+    _mount_token(respx.mock)
+    _mount_list_for(respx.mock, _incremental_query(), LIST_MESSAGES_EMPTY)
+    _mount_list_for(respx.mock, _backfill_query(cursor), LIST_MESSAGES_EMPTY)
+
+    from app.worker.tasks import _run_sync
+
+    report = await _run_sync(connection.id)
+
+    assert report.backfill_finished is True
+    reloaded = await _reload(connection)
+    assert reloaded.backfill_before is None
+    assert reloaded.backfill_until is None
+
+
+@respx.mock
+async def test_backfill_completes_on_reaching_floor(connection, enqueued_tasks) -> None:
+    cursor = datetime(2026, 6, 1, tzinfo=UTC)
+    floor = datetime(2026, 5, 25, tzinfo=UTC)
+    await _arm_backfill(connection, before=cursor, until=floor)
+
+    _mount_token(respx.mock)
+    _mount_list_for(respx.mock, _incremental_query(), LIST_MESSAGES_EMPTY)
+    _mount_list_for(respx.mock, _backfill_query(cursor), list_response("past-floor"))
+    # Older than the floor, so the cursor lands at or past it.
+    _mount_message(respx.mock, "past-floor", at=datetime(2026, 5, 24, tzinfo=UTC))
+
+    from app.worker.tasks import _run_sync
+
+    await _run_sync(connection.id)
+
+    assert (await _reload(connection)).backfill_before is None
+
+
+@respx.mock
+async def test_incremental_keeps_priority_over_backfill(
+    connection, enqueued_tasks, monkeypatch
+) -> None:
+    """New mail is ingested even while a backfill is mid-walk."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "gmail_sync_max_messages_per_run", 1)
+
+    cursor = datetime(2026, 6, 1, tzinfo=UTC)
+    await _arm_backfill(
+        connection, before=cursor, until=datetime(2024, 1, 1, tzinfo=UTC)
+    )
+
+    _mount_token(respx.mock)
+    _mount_list_for(respx.mock, _incremental_query(), list_response("todays-mail"))
+    _mount_list_for(respx.mock, _backfill_query(cursor), list_response("ancient"))
+    _mount_message(respx.mock, "todays-mail", at=datetime(2026, 8, 30, tzinfo=UTC))
+    _mount_message(respx.mock, "ancient", at=datetime(2026, 5, 1, tzinfo=UTC))
+
+    from app.worker.tasks import _run_sync
+
+    report = await _run_sync(connection.id)
+
+    # The single unit of budget went to new mail, not to history.
+    assert report.ingested == 1
+    assert report.backfilled == 0
+    assert (await _reload(connection)).backfill_before == cursor
