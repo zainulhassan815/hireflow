@@ -10,8 +10,8 @@ setup: ## First-time setup (install, env, services, migrate, seed)
 services: ## Start backing Docker services (postgres, redis, minio, chromadb)
 	docker compose up -d postgres redis minio chromadb
 
-api: services ## Run FastAPI on :8080 (foreground; one terminal)
-	cd backend && uv run uvicorn app.main:app --reload --port 8080
+api: services ## Run FastAPI on :8090 (foreground; one terminal)
+	cd backend && uv run uvicorn app.main:app --reload --port 8090
 
 worker: services ## Run Celery worker (foreground; one terminal)
 	cd backend && uv run celery -A app.worker.celery_app worker --loglevel=info --concurrency=1

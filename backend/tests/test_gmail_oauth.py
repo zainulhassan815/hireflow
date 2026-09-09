@@ -40,7 +40,7 @@ def gmail_oauth_configured(monkeypatch):
     monkeypatch.setattr(
         deps.settings,
         "gmail_redirect_uri",
-        "http://localhost:8080/api/auth/gmail/callback",
+        "http://localhost:8090/api/auth/gmail/callback",
     )
     monkeypatch.setattr(
         deps,
@@ -48,7 +48,7 @@ def gmail_oauth_configured(monkeypatch):
         GoogleGmailOAuth(
             client_id=GMAIL_CLIENT_ID,
             client_secret="test-client-secret",
-            redirect_uri="http://localhost:8080/api/auth/gmail/callback",
+            redirect_uri="http://localhost:8090/api/auth/gmail/callback",
         ),
     )
 

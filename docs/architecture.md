@@ -11,7 +11,7 @@ Reference for how Hireflow is structured. Read this before touching code.
 ```
 Host machine
   ├── :5173  Vite dev server (frontend)
-  ├── :8080  uvicorn (backend API)
+  ├── :8090  uvicorn (backend API)
   ├── Celery worker (background tasks)
   │
   └── Docker services (ports exposed to host for dev):
@@ -29,7 +29,7 @@ Internet
   │
   :80 ──→ nginx (frontend static + /api/ reverse proxy)
               │
-              ├──→ backend:8080  (uvicorn)
+              ├──→ backend:8090  (uvicorn)
               ├──→ worker         (celery, same Docker image)
               │
               └── internal network (no host ports) ──┐
