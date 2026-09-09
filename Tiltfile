@@ -19,15 +19,15 @@ local_resource(
 
 local_resource(
     'backend',
-    serve_cmd='uv run uvicorn app.main:app --reload --port 8080',
+    serve_cmd='uv run uvicorn app.main:app --reload --port 8090',
     serve_dir='backend',
     serve_env={'PYTHONUNBUFFERED': '1'},
     resource_deps=['postgres', 'redis', 'chromadb', 'minio-setup'],
     readiness_probe=probe(
-        http_get=http_get_action(port=8080, path='/api/health'),
+        http_get=http_get_action(port=8090, path='/api/health'),
         period_secs=2,
     ),
-    links=[link('http://localhost:8080/docs', 'Swagger')],
+    links=[link('http://localhost:8090/docs', 'Swagger')],
     labels=['app'],
 )
 
