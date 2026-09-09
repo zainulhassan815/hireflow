@@ -10,6 +10,7 @@ Weights are tunable. The combined score is stored on the Application record.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from uuid import UUID
 
@@ -58,7 +59,9 @@ class MatchingService:
         if not candidates:
             return []
 
-        vector_scores = self._get_vector_scores(job, candidates)
+        vector_scores = await asyncio.to_thread(
+            self._get_vector_scores, job, candidates
+        )
 
         results = []
         for candidate in candidates:

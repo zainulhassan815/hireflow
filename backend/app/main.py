@@ -1,4 +1,7 @@
+import asyncio
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -27,11 +30,37 @@ def _configure_dev_logging() -> None:
         )
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Warm heavy models in the background, without delaying startup.
+
+    The reranker is lazy and lives only in this process — the Celery
+    worker loads its own copy — so before this hook the first search or
+    RAG query was the one that paid a multi-minute cold load.
+
+    Deliberately not awaited. Startup stays fast, ``--reload`` stays
+    usable, and readiness probes pass immediately. A query arriving
+    mid-warm blocks on the loader's own lock inside a worker thread, so
+    that caller waits for its own answer while the rest of the API keeps
+    serving.
+    """
+    from app.api import deps
+
+    task = asyncio.create_task(asyncio.to_thread(deps.warm_models))
+    # Held on app state so the task is not garbage-collected mid-flight.
+    app.state.model_warm_task = task
+    try:
+        yield
+    finally:
+        task.cancel()
+
+
 def create_app() -> FastAPI:
     _configure_dev_logging()
     get_cipher()  # fail-fast if ENCRYPTION_KEYS is unset
 
     app = FastAPI(
+        lifespan=_lifespan,
         title=settings.app_name,
         description="AI-Powered HR Screening and Document Retrieval System Using RAG",
         version="0.1.0",

@@ -11,10 +11,10 @@ services: ## Start backing Docker services (postgres, redis, minio, chromadb)
 	docker compose up -d postgres redis minio chromadb
 
 api: services ## Run FastAPI on :8090 (foreground; one terminal)
-	cd backend && uv run uvicorn app.main:app --reload --port 8090
+	cd backend && HF_HUB_DISABLE_XET=1 uv run uvicorn app.main:app --reload --port 8090
 
 worker: services ## Run Celery worker (foreground; one terminal)
-	cd backend && uv run celery -A app.worker.celery_app worker --loglevel=info --concurrency=1
+	cd backend && HF_HUB_DISABLE_XET=1 uv run celery -A app.worker.celery_app worker --loglevel=info --concurrency=1
 
 beat: services ## Run Celery beat scheduler (foreground; one terminal)
 	cd backend && uv run celery -A app.worker.celery_app beat --loglevel=info

@@ -77,6 +77,20 @@ class CrossEncoderReranker:
             ordered = ordered[:top_n]
         return ordered
 
+    def warm(self) -> None:
+        """Load the model now so the first query does not wait for it.
+
+        Swallows failures on purpose: a warm that cannot reach the model
+        hub must not stop the API from starting, and ``_ensure_loaded``
+        will retry on first use.
+        """
+        try:
+            self._ensure_loaded()
+        except Exception:
+            logger.warning(
+                "reranker warm failed; will retry on first use", exc_info=True
+            )
+
     def _ensure_loaded(self) -> CrossEncoder:
         if self._model is not None:
             return self._model

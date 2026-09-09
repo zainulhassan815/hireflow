@@ -18,6 +18,9 @@ class NullReranker:
     def model_name(self) -> str:
         return "none"
 
+    def warm(self) -> None:
+        """No model, nothing to load."""
+
     def rerank(
         self,
         query: str,
