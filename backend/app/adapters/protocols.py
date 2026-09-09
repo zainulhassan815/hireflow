@@ -290,9 +290,21 @@ class Reranker(Protocol):
     the query simultaneously and returns a better-ordered list. Cost is
     per-query only; no index-time work.
 
-    Called synchronously from the FastAPI request handler; if inference
-    is heavy enough to matter, callers should hop to a thread.
+    Synchronous on purpose — Celery workers call it directly, and async
+    callers must hop to a thread (``asyncio.to_thread``). Inference is
+    real GPU/CPU work and the first call additionally materialises the
+    model, so running it on an event loop stops the whole process.
     """
+
+    def warm(self) -> None:
+        """Materialise the model ahead of first use.
+
+        Called off the request path at startup so a user's first query
+        does not pay a cold model load. Implementations must be safe to
+        call more than once and must not raise: a failed warm leaves the
+        lazy path to try again.
+        """
+        ...
 
     def rerank(
         self,

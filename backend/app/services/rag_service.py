@@ -353,10 +353,11 @@ class RagService:
             )
             return None
 
-        # F81.g — classify intent, compose an intent-specific system
-        # prompt. Classifier is CPU-bound and fast (single embed_query
-        # call + cosine comparisons); no ``to_thread`` hop needed.
-        intent_result = self._classifier.classify(search_query)
+        # The cosine comparisons are trivial, but the ``embed_query``
+        # underneath them is model inference and can trigger a first-use
+        # model load, so this hops off the loop like every other adapter
+        # call that reaches a model.
+        intent_result = await asyncio.to_thread(self._classifier.classify, search_query)
         system_prompt = build_system_prompt(intent_result.intent)
 
         context_parts: list[str] = []

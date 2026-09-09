@@ -21,7 +21,10 @@ local_resource(
     'backend',
     serve_cmd='uv run uvicorn app.main:app --reload --port 8090',
     serve_dir='backend',
-    serve_env={'PYTHONUNBUFFERED': '1'},
+    # HF_HUB_DISABLE_XET: HuggingFace's xet transfer backend stalls
+    # indefinitely on some networks — a 0-byte .incomplete blob and no
+    # progress, which reads as a hung app. Plain HTTP is slower but finishes.
+    serve_env={'PYTHONUNBUFFERED': '1', 'HF_HUB_DISABLE_XET': '1'},
     resource_deps=['postgres', 'redis', 'chromadb', 'minio-setup'],
     readiness_probe=probe(
         http_get=http_get_action(port=8090, path='/api/health'),
@@ -35,6 +38,7 @@ local_resource(
     'celery-worker',
     serve_cmd='uv run celery -A app.worker.celery_app worker --loglevel=info --concurrency=1',
     serve_dir='backend',
+    serve_env={'HF_HUB_DISABLE_XET': '1'},
     resource_deps=['postgres', 'redis'],
     labels=['app'],
 )

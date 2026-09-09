@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from uuid import UUID, uuid4
 
@@ -96,7 +97,7 @@ class DocumentService:
         await self._storage.delete(doc.storage_key)
         if self._vector_store:
             try:
-                self._vector_store.delete(str(document_id))
+                await asyncio.to_thread(self._vector_store.delete, str(document_id))
             except Exception:
                 logger.warning("failed to remove embeddings for %s", document_id)
         # F89.c — mirror cleanup for the doc-level similarity vector.
@@ -104,7 +105,9 @@ class DocumentService:
         # for docs uploaded before F89.c shipped.
         if self._similarity_store:
             try:
-                self._similarity_store.delete_document_vector(str(document_id))
+                await asyncio.to_thread(
+                    self._similarity_store.delete_document_vector, str(document_id)
+                )
             except Exception:
                 logger.warning("failed to remove doc-level vector for %s", document_id)
         await self._documents.delete(doc)

@@ -136,6 +136,17 @@ except Exception:
     _reranker = NullReranker()
 
 
+def warm_models() -> None:
+    """Materialise lazily-loaded models. Runs in a worker thread.
+
+    The embedder is already warm by this point — constructing the intent
+    classifier below embeds its canonical queries at import. The reranker
+    is the one that stays cold until a query needs it.
+    """
+    _reranker.warm()
+    _logger.info("model warm complete: reranker=%s", _reranker.model_name)
+
+
 # F89.a — heuristic query parser. Stateless, zero-LLM, sub-millisecond
 # per call. Single shared instance reused across /search and /rag.
 _query_parser = HeuristicQueryParser(

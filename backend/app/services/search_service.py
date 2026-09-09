@@ -18,6 +18,7 @@ path, raw RRF scores not normalized). F85 added the lexical path.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections import defaultdict
@@ -153,8 +154,12 @@ class SearchService:
 
         owner_filter = None if actor.role == UserRole.ADMIN else actor.id
 
-        vector_hits = self._vector_search(
-            query, document_type, limit * 3, owner_id=owner_filter
+        vector_hits = await asyncio.to_thread(
+            self._vector_search,
+            query,
+            document_type,
+            limit * 3,
+            owner_id=owner_filter,
         )
 
         # F86.c: vector chunks can outlive the docs they came from —
@@ -270,7 +275,9 @@ class SearchService:
         # chunk-level is the natural unit since 512-token limit forbids
         # whole-doc reranking anyway.
         if self._reranker is not None and results:
-            results = self._rerank_results(query, results, limit)
+            results = await asyncio.to_thread(
+                self._rerank_results, query, results, limit
+            )
         else:
             results = results[:limit]
 
@@ -313,7 +320,9 @@ class SearchService:
 
         # Vector path — reuse the private helper that handles
         # embedder selection, distance filtering, and the where clause.
-        vector_hits = self._vector_search(query, None, limit * 3, owner_id=owner_filter)
+        vector_hits = await asyncio.to_thread(
+            self._vector_search, query, None, limit * 3, owner_id=owner_filter
+        )
         vector_hits = await self._drop_orphan_vector_hits(vector_hits)
 
         # Lexical path — F88 acronym + typo + tech-token preservation.
@@ -420,7 +429,7 @@ class SearchService:
             )
 
         if self._reranker is not None and hydrated:
-            return self._rerank_chunks(query, hydrated, limit)
+            return await asyncio.to_thread(self._rerank_chunks, query, hydrated, limit)
         return hydrated[:limit]
 
     async def retrieve_candidate_summaries(
@@ -460,8 +469,11 @@ class SearchService:
 
         # Over-fetch a bit so the per-lane cutoff doesn't trim
         # below ``limit``.
-        raw_hits = self._candidate_summary_store.query_candidate_summaries(
-            query, n_results=max(limit * 2, 5), where=where
+        raw_hits = await asyncio.to_thread(
+            self._candidate_summary_store.query_candidate_summaries,
+            query,
+            n_results=max(limit * 2, 5),
+            where=where,
         )
 
         cutoff = (

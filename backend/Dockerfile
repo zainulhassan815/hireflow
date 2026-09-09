@@ -22,6 +22,9 @@ COPY . .
 
 ENV PATH="/app/.venv/bin:$PATH"
 
+# HuggingFace's xet transfer backend stalls indefinitely on some networks — a 0-byte .incomplete blob and no progress, which reads as a hung app. Plain HTTP is slower but finishes.
+ENV HF_HUB_DISABLE_XET=1
+
 EXPOSE 8090
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8090"]
