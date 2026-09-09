@@ -165,7 +165,7 @@ export function ChatPage() {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex h-full min-h-0">
+    <div data-full-bleed className="flex h-full min-h-0">
       <aside className="hidden w-64 shrink-0 flex-col border-r md:flex">
         <div className="p-3">
           <Button
@@ -194,7 +194,9 @@ export function ChatPage() {
             <Spinner className="size-5" />
           </div>
         ) : isEmpty ? (
-          <EmptyState onPick={ask} />
+          <div className="flex flex-1 items-center justify-center overflow-y-auto">
+            <EmptyState onPick={ask} />
+          </div>
         ) : (
           <div className="flex-1 space-y-6 overflow-y-auto px-4 py-6">
             {messages.map((message) =>

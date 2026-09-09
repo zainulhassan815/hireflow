@@ -16,6 +16,7 @@ import {
   ListIcon,
   MoreHorizontalIcon,
   SearchIcon,
+  SlidersHorizontalIcon,
   TrashIcon,
   UploadIcon,
   XIcon,
@@ -28,6 +29,11 @@ import {
   type DocumentResponse,
 } from "@/api";
 import { DocumentFilterBar } from "@/components/documents/document-filter-bar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   EMPTY_FILTERS,
   type FilterState,
@@ -107,6 +113,13 @@ export function DocumentsPage() {
   const [view, setView] = React.useState<"list" | "grid">("list");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [filters, setFilters] = React.useState<FilterState>(EMPTY_FILTERS);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const activeFilters =
+    (filters.document_type ? 1 : 0) +
+    (filters.skills.length > 0 ? 1 : 0) +
+    (filters.min_experience_years !== null ? 1 : 0) +
+    (filters.date_from ? 1 : 0) +
+    (filters.date_to ? 1 : 0);
   const [uploadOpen, setUploadOpen] = React.useState(false);
   const [confirmDelete, setConfirmDelete] =
     React.useState<DocumentResponse | null>(null);
@@ -407,7 +420,32 @@ export function DocumentsPage() {
             </Button>
           </div>
         </div>
-        <DocumentFilterBar value={filters} onChange={setFilters} />
+        {/* Collapsed by default. The filter panel is taller than the
+            first screenful on mobile, so leaving it open put every
+            document below the fold for a user who mostly just wants to
+            see what is there. It springs open when a filter is active so
+            a narrowed list never looks unexplained. */}
+        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <CollapsibleTrigger
+            render={
+              <Button variant="outline" size="sm">
+                <SlidersHorizontalIcon
+                  className="size-4"
+                  data-icon="inline-start"
+                />
+                Filters
+                {activeFilters > 0 && (
+                  <span className="bg-foreground text-background ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs tabular-nums">
+                    {activeFilters}
+                  </span>
+                )}
+              </Button>
+            }
+          />
+          <CollapsibleContent className="pt-3">
+            <DocumentFilterBar value={filters} onChange={setFilters} />
+          </CollapsibleContent>
+        </Collapsible>
         <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <span className="tabular-nums">
             {filtered.length === documents.length

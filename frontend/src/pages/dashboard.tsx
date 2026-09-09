@@ -210,7 +210,7 @@ export function DashboardPage() {
           as a chart rather than a briefing. The left-edge primary
           rule anchors the headline tonally without gradient or glow. */}
       <div className="flex flex-col gap-4">
-        <p className="font-display border-primary max-w-[32ch] border-l-[3px] pl-4 text-3xl leading-[1.2] font-semibold tracking-[-0.015em] sm:text-4xl">
+        <p className="max-w-[24ch] text-3xl leading-[1.15] font-semibold tracking-[-0.02em] text-balance sm:text-4xl">
           {hero.headline}
         </p>
         {hero.sub && <div className="text-base">{hero.sub}</div>}

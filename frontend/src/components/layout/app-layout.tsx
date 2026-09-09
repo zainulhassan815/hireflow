@@ -32,7 +32,11 @@ export function AppLayout() {
           whole page body. Overriding min-width to 0 lets flex-1
           actually constrain the main area; `overflow-auto` scopes
           the scroll inside the main region. */}
-      <SidebarInset className="h-dvh min-w-0 overflow-auto p-6">
+      {/* `data-full-bleed` lets a route opt out of the standard page
+          padding and scroll. Chat needs the full height to pin its
+          composer to the bottom; every other page wants the padded,
+          scrollable frame. */}
+      <SidebarInset className="h-dvh min-w-0 overflow-auto p-6 has-[[data-full-bleed]]:overflow-hidden has-[[data-full-bleed]]:p-0">
         <Outlet />
       </SidebarInset>
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
