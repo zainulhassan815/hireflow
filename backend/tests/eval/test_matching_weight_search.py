@@ -14,6 +14,7 @@ Pure measurement — it does not change any weights itself. Run with
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from statistics import mean
 
@@ -85,7 +86,7 @@ def _score_weight_set(
     }
 
 
-async def test_matching_weight_search(seeded_matching_corpus, eval_owner) -> None:
+async def test_matching_weight_search(seeded_matching_corpus, matching_owner) -> None:
     """Harvest signal breakdowns, sweep the weight grid, write the audit."""
     from app.adapters.chroma_store import ChromaVectorStore
     from app.adapters.embeddings.registry import get_embedding_provider
@@ -113,7 +114,7 @@ async def test_matching_weight_search(seeded_matching_corpus, eval_owner) -> Non
         )
         for case in MATCH_CASES:
             results = await service.match_candidates_to_job(
-                job_ids[case.job_slug], eval_owner.id
+                job_ids[case.job_slug], matching_owner.id
             )
             breakdowns[case.job_slug] = {
                 id_to_slug[r["candidate"].id]: r["breakdown"] for r in results
@@ -158,7 +159,12 @@ async def test_matching_weight_search(seeded_matching_corpus, eval_owner) -> Non
     verdict = "retune" if lift >= _RETUNE_THRESHOLD else "validated"
 
     _print_report(current, best, recommended, lift, verdict, current_rank, by_spearman)
-    _write_audit(current, best, recommended, lift, verdict, current_rank, by_spearman)
+    # Opt-in: writing on every run destroys the "before" the moment you
+    # measure an "after". See _compare_to_baseline in test_search_quality.
+    if os.environ.get("EVAL_WRITE_BASELINE") == "1":
+        _write_audit(
+            current, best, recommended, lift, verdict, current_rank, by_spearman
+        )
 
     assert current["must_not_top_violations"] == 0, (
         "current 45/20/35 weights produce a must_not_top violation"

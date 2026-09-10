@@ -16,6 +16,7 @@ Run with ``make eval-matching``.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from statistics import mean
 
@@ -29,7 +30,7 @@ _BASELINE_PATH = Path(__file__).parent / "matching_baseline.json"
 _MIN_MEAN_SPEARMAN = 0.4  # soft floor; prints if below, does not block
 
 
-async def test_matching_quality_report(seeded_matching_corpus, eval_owner) -> None:
+async def test_matching_quality_report(seeded_matching_corpus, matching_owner) -> None:
     """Run matching for every labeled job; print the report; write the
     baseline; fail on must_not_top violations."""
     from app.adapters.chroma_store import ChromaVectorStore
@@ -59,7 +60,7 @@ async def test_matching_quality_report(seeded_matching_corpus, eval_owner) -> No
 
         for case in MATCH_CASES:
             results = await service.match_candidates_to_job(
-                job_ids[case.job_slug], eval_owner.id
+                job_ids[case.job_slug], matching_owner.id
             )
             model_order = [id_to_slug[r["candidate"].id] for r in results]
             score_by_slug = {id_to_slug[r["candidate"].id]: r["score"] for r in results}
@@ -98,7 +99,10 @@ async def test_matching_quality_report(seeded_matching_corpus, eval_owner) -> No
     mean_top3 = mean(r["top3_overlap"] for r in per_case)
 
     _print_report(per_case, mean_spearman, top1_accuracy, mean_top3)
-    _write_baseline(per_case, mean_spearman, top1_accuracy, mean_top3)
+    # Opt-in: writing on every run destroys the "before" the moment you
+    # measure an "after". See _compare_to_baseline in test_search_quality.
+    if os.environ.get("EVAL_WRITE_BASELINE") == "1":
+        _write_baseline(per_case, mean_spearman, top1_accuracy, mean_top3)
 
     if hard_failures:
         lines = "\n  - ".join(hard_failures)

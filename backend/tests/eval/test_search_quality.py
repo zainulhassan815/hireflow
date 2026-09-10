@@ -13,6 +13,7 @@ raise it as we iterate.
 from __future__ import annotations
 
 import json
+import os
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean
@@ -128,7 +129,10 @@ async def test_search_quality_report(slug_to_document_id, eval_owner):
 
     _print_report(per_case, by_bucket, overall_p5, overall_r5, overall_mrr)
 
-    _write_baseline(per_case, overall_p5, overall_r5, overall_mrr)
+    _compare_to_baseline(overall_p5, overall_r5, overall_mrr)
+    if os.environ.get("EVAL_WRITE_BASELINE") == "1":
+        _write_baseline(per_case, overall_p5, overall_r5, overall_mrr)
+        print("  baseline.json REWRITTEN (EVAL_WRITE_BASELINE=1)")
 
     if hard_failures:
         lines = "\n  - ".join(hard_failures)
@@ -169,6 +173,33 @@ def _print_report(
             f"  [{row['bucket']:10s}] P@5={row['p@5']:.2f} MRR={row['mrr']:.2f} "
             f"'{row['query'][:50]}' → {row['returned'][:3]} ({status})"
         )
+
+
+def _compare_to_baseline(p5: float, r5: float, mrr: float) -> None:
+    """Print the delta against the committed baseline.
+
+    Writing is opt-in via ``EVAL_WRITE_BASELINE=1``. It used to happen
+    on every run, which destroyed the "before" the moment you measured
+    an "after" — and silently recorded whichever invocation ran last,
+    so a full-directory run (a contaminated corpus) could overwrite a
+    clean single-module run.
+    """
+    if not _BASELINE_PATH.exists():
+        print("\n  no committed baseline to compare against")
+        return
+    old = json.loads(_BASELINE_PATH.read_text())["overall"]
+    print("\n  vs committed baseline:")
+    for label, now, then in (
+        ("p@5", p5, old["p@5"]),
+        ("r@5", r5, old["r@5"]),
+        ("mrr", mrr, old["mrr"]),
+    ):
+        delta = now - then
+        flag = (
+            "" if abs(delta) < 5e-4 else ("  <-- CHANGED" if delta < 0 else "  <-- up")
+        )
+        print(f"    {label:<4} {then:.4f} -> {now:.4f}  ({delta:+.4f}){flag}")
+    print("  (set EVAL_WRITE_BASELINE=1 to record these as the new baseline)")
 
 
 def _write_baseline(

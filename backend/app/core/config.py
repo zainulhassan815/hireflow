@@ -136,6 +136,11 @@ class Settings(BaseSettings):
     # explicit float to override for this deploy — rarely needed, but
     # the operator knob is there. Legacy value for bge-small was 0.35;
     # that lives in the embedder's threshold table now.
+    # Suffix appended to every ChromaDB collection name. Tests and the
+    # eval harness set it so they get their own collections instead of
+    # sharing the dev ones — they previously did share, and the eval's
+    # per-run corpus accumulated there indefinitely.
+    chroma_collection_suffix: str = ""
     search_max_distance: float | None = None
     # RAG's chunk lane gets a looser ceiling than /search on purpose.
     # Lexical hits only *boost* vector-retrieved chunks — they can never

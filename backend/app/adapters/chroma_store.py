@@ -26,6 +26,7 @@ from app.adapters.protocols import (
     SimilarDocumentHit,
     VectorHit,
 )
+from app.core.config import settings
 from app.domain.exceptions import DocumentNotIndexed
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,7 @@ class ChromaVectorStore:
         # = a new collection; old one stays around until manually dropped
         # (see scripts/reindex_embeddings.py).
         model_slug = _safe_collection_suffix(embedder.model_name)
+        model_slug = f"{model_slug}{settings.chroma_collection_suffix}"
         self._collection_name = f"{_COLLECTION_PREFIX}_{model_slug}"
         self._collection = self._client.get_or_create_collection(
             name=self._collection_name,
