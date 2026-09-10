@@ -39,6 +39,12 @@ local_resource(
     serve_cmd='uv run celery -A app.worker.celery_app worker --loglevel=info --concurrency=1',
     serve_dir='backend',
     serve_env={'HF_HUB_DISABLE_XET': '1'},
+    # `deps` is what makes Tilt watch files and restart the resource.
+    # Without it a serve_cmd starts once and runs stale code forever.
+    # The backend and frontend get away with omitting it only because
+    # uvicorn --reload and Vite watch for themselves; Celery has no
+    # equivalent, so these two need Tilt to do it.
+    deps=['backend/app'],
     resource_deps=['postgres', 'redis'],
     labels=['app'],
 )
@@ -47,6 +53,9 @@ local_resource(
     'celery-beat',
     serve_cmd='uv run celery -A app.worker.celery_app beat --loglevel=info',
     serve_dir='backend',
+    # Beat only reads the schedule at startup, so a changed interval or a
+    # new periodic task needs the same restart-on-change as the worker.
+    deps=['backend/app/worker'],
     resource_deps=['redis'],
     labels=['app'],
 )
