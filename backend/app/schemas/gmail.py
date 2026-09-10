@@ -63,6 +63,20 @@ class GmailConnection(BaseModel):
         ),
         examples=["2024-01-01T00:00:00Z"],
     )
+    needs_reauth: bool = Field(
+        False,
+        description=(
+            "True when Google rejected the stored refresh token and the "
+            "mailbox must be reconnected. Syncing is paused, but nothing "
+            "is lost: the ingest history, backfill progress and deletion "
+            "setting all survive, so reconnecting the same address "
+            "resumes where it stopped and re-imports nothing.\n\n"
+            "Expect this roughly weekly while the OAuth consent screen is "
+            "in Testing — Google expires refresh tokens after 7 days in "
+            "that mode."
+        ),
+        examples=[False],
+    )
     mirror_deletions: bool = Field(
         False,
         description=(
@@ -149,6 +163,20 @@ class GmailBackfillResponse(BaseModel):
 class GmailConnectionUpdate(BaseModel):
     """Settings changeable on an existing connection."""
 
+    needs_reauth: bool = Field(
+        False,
+        description=(
+            "True when Google rejected the stored refresh token and the "
+            "mailbox must be reconnected. Syncing is paused, but nothing "
+            "is lost: the ingest history, backfill progress and deletion "
+            "setting all survive, so reconnecting the same address "
+            "resumes where it stopped and re-imports nothing.\n\n"
+            "Expect this roughly weekly while the OAuth consent screen is "
+            "in Testing — Google expires refresh tokens after 7 days in "
+            "that mode."
+        ),
+        examples=[False],
+    )
     mirror_deletions: bool = Field(
         ...,
         description=(

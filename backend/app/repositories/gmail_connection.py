@@ -59,10 +59,27 @@ class GmailConnectionRepository:
         user context. HTTP handlers must use ``get_for_user``."""
         return await self._db.get(GmailConnection, connection_id)
 
-    async def list_all(self) -> list[GmailConnection]:
-        """Used by the sync fan-out task to iterate every active connection."""
-        result = await self._db.execute(select(GmailConnection))
+    async def list_all(self, *, include_needs_reauth: bool) -> list[GmailConnection]:
+        """Connections for the sync fan-out.
+
+        ``include_needs_reauth`` is required rather than defaulted: a
+        connection whose token Google already rejected fails on every
+        tick, so the scheduler must opt in deliberately to see it.
+        """
+        stmt = select(GmailConnection)
+        if not include_needs_reauth:
+            stmt = stmt.where(GmailConnection.reauth_required_at.is_(None))
+        result = await self._db.execute(stmt)
         return list(result.scalars().all())
+
+    async def mark_needs_reauth(self, conn: GmailConnection) -> None:
+        """Flag a dead refresh token without destroying the connection.
+
+        Deleting the row would cascade the ingest ledger away, and the
+        next reconnect would re-import every message as new.
+        """
+        conn.reauth_required_at = datetime.now(UTC)
+        await self._db.commit()
 
     async def upsert(
         self,
@@ -76,6 +93,9 @@ class GmailConnectionRepository:
         if existing is not None:
             existing.refresh_token = refresh_token
             existing.scopes = scopes
+            # Reconnecting is what clears the flag; the row, its ledger
+            # and its settings carry straight on from where they stopped.
+            existing.reauth_required_at = None
             conn = existing
         else:
             conn = GmailConnection(

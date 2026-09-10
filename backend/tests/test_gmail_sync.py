@@ -312,36 +312,110 @@ async def test_sync_empty_inbox_produces_no_documents(
 
 
 @respx.mock
-async def test_invalid_grant_auto_disconnects(connection, admin_user) -> None:
-    """Revoked-at-source refresh token → connection deleted + activity logged."""
+async def test_invalid_grant_marks_for_reauth_without_deleting(
+    connection, admin_user
+) -> None:
+    """A rejected refresh token must not destroy the connection.
+
+    Google expires refresh tokens after 7 days while the consent screen
+    is in Testing, so this fires weekly. Deleting the row cascades
+    ``gmail_ingested_messages`` away, and the next reconnect re-imports
+    every message and duplicates every attachment.
+    """
+    from sqlalchemy import func, select
+
+    from app.core.db import SessionLocal
+    from app.models import (
+        ActivityAction,
+        ActivityLog,
+        GmailConnection,
+        GmailIngestedMessage,
+    )
+    from app.worker.tasks import _run_sync
+
+    async with SessionLocal() as session:
+        await make_ingested_message(
+            session, connection_id=connection.id, gmail_message_id="already-seen"
+        )
+
     respx.post("https://oauth2.googleapis.com/token").mock(
         return_value=httpx.Response(400, json={"error": "invalid_grant"})
     )
 
-    from app.worker.tasks import _run_sync
-
-    await _run_sync(connection.id)
-
-    from sqlalchemy import func, select
-
-    from app.core.db import SessionLocal
-    from app.models import ActivityAction, ActivityLog, GmailConnection
+    report = await _run_sync(connection.id)
+    assert report.needs_reauth is True
 
     async with SessionLocal() as session:
-        connections = await session.scalar(
-            select(func.count()).select_from(GmailConnection)
+        surviving = await session.get(GmailConnection, connection.id)
+        assert surviving is not None, "connection must survive a dead token"
+        assert surviving.reauth_required_at is not None
+
+        # The ledger is the thing that prevents re-import; it must outlive
+        # the token failure.
+        ledger = await session.scalar(
+            select(func.count()).select_from(GmailIngestedMessage)
         )
-        assert connections == 0
+        assert ledger == 1
 
         log = (
             await session.execute(
                 select(ActivityLog).where(
-                    ActivityLog.action == ActivityAction.GMAIL_DISCONNECT
+                    ActivityLog.action == ActivityAction.GMAIL_REAUTH_REQUIRED
                 )
             )
         ).scalar_one()
         assert log.actor_id == admin_user.id
-        assert "auto-disconnected" in (log.detail or "")
+        assert "needs reconnecting" in (log.detail or "")
+
+
+async def test_reconnect_reuses_the_row_and_keeps_the_ledger(
+    connection, admin_user
+) -> None:
+    """The property this whole issue is about.
+
+    Reconnecting the same mailbox must land on the same connection id, so
+    the dedup ledger still applies and nothing is imported twice.
+    """
+    from sqlalchemy import func, select
+
+    from app.core.db import SessionLocal
+    from app.models import GmailIngestedMessage
+    from app.repositories.gmail_connection import GmailConnectionRepository
+
+    async with SessionLocal() as session:
+        repo = GmailConnectionRepository(session)
+        await make_ingested_message(
+            session, connection_id=connection.id, gmail_message_id="seen-before"
+        )
+        await repo.mark_needs_reauth(await repo.get_by_id(connection.id))
+
+    async with SessionLocal() as session:
+        revived = await GmailConnectionRepository(session).upsert(
+            user_id=admin_user.id,
+            gmail_email=connection.gmail_email,
+            refresh_token="fresh-token-after-reconnect",
+            scopes=["openid", "email"],
+        )
+        assert revived.id == connection.id, "reconnect must not mint a new connection"
+        assert revived.reauth_required_at is None
+
+        ledger = await session.scalar(
+            select(func.count()).select_from(GmailIngestedMessage)
+        )
+        assert ledger == 1, "ledger must survive the reconnect"
+
+
+async def test_fanout_skips_connections_awaiting_reauth(connection) -> None:
+    """A connection Google already rejected fails on every tick."""
+    from app.core.db import SessionLocal
+    from app.repositories.gmail_connection import GmailConnectionRepository
+
+    async with SessionLocal() as session:
+        repo = GmailConnectionRepository(session)
+        assert len(await repo.list_all(include_needs_reauth=False)) == 1
+        await repo.mark_needs_reauth(await repo.get_by_id(connection.id))
+        assert await repo.list_all(include_needs_reauth=False) == []
+        assert len(await repo.list_all(include_needs_reauth=True)) == 1
 
 
 # ---------------------------------------------------------------------------

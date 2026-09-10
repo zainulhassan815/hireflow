@@ -31,6 +31,7 @@ class ActivityAction(StrEnum):
     GMAIL_DISCONNECT = "gmail_disconnect"
     GMAIL_SYNC_RUN = "gmail_sync_run"
     GMAIL_SETTINGS_UPDATE = "gmail_settings_update"
+    GMAIL_REAUTH_REQUIRED = "gmail_reauth_required"
 
 
 class ActivityLog(UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from uuid import UUID, uuid4
 
@@ -68,12 +69,39 @@ class DocumentService:
                 f"Allowed: PDF, DOCX, DOC, PNG, JPEG, TIFF."
             )
 
+        # Identical bytes collapse to one document. The same resume
+        # routinely arrives twice — re-synced after a Gmail reconnect, or
+        # emailed and also uploaded by hand — and without this each copy
+        # became a separate document, a separate blob and a separate set
+        # of vectors competing with each other in retrieval.
+        content_sha256 = hashlib.sha256(data).hexdigest()
+        existing = await self._documents.get_live_by_content_hash(
+            owner.id, content_sha256
+        )
+        if existing is not None:
+            logger.info(
+                "document %s already holds these bytes; reusing it for %r",
+                existing.id,
+                filename,
+            )
+            return existing
+
+        # A previous attempt on these bytes failed. Release its claim on
+        # the hash so the retry can take it, and let the old row rot as
+        # the audit record of the failure.
+        superseded = await self._documents.get_by_content_hash_any_status(
+            owner.id, content_sha256
+        )
+        if superseded is not None:
+            await self._documents.clear_content_hash(superseded)
+
         storage_key = f"{owner.id}/{uuid4()}/{filename}"
         blob = await self._storage.put(storage_key, data, mime_type)
         return await self._documents.create(
             owner_id=owner.id,
             filename=filename,
             mime_type=mime_type,
+            content_sha256=content_sha256,
             size_bytes=blob.size,
             storage_key=blob.key,
         )

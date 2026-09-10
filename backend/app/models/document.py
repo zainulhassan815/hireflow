@@ -4,7 +4,14 @@ import uuid
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, FetchedValue, ForeignKey, String, Text
+from sqlalchemy import (
+    BigInteger,
+    FetchedValue,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -52,6 +59,11 @@ class AuthorSource(StrEnum):
 
 class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id", "content_sha256", name="uq_documents_owner_content"
+        ),
+    )
 
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -64,6 +76,23 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     storage_key: Mapped[str] = mapped_column(String(1024), nullable=False, unique=True)
+    # SHA-256 of the file bytes, unique per owner, so the same file
+    # arriving twice — re-synced after a Gmail reconnect, or uploaded by
+    # hand as well as by email — collapses to one document.
+    #
+    # Nullable because the constraint had to land on a table of existing
+    # rows: Postgres treats NULLs as distinct, so unhashed rows never
+    # collide. scripts/dedupe_documents.py backfills them.
+    #
+    # A FAILED document's hash is cleared when a replacement supersedes
+    # it, so the constraint keeps meaning "at most one *live* document
+    # per (owner, content)".
+    #
+    # Two Gmail messages carrying the same attachment now converge on one
+    # document, so both ledger rows record the same id in
+    # ``document_ids`` — deleting it via deletion-mirroring leaves the
+    # other row pointing at a document that no longer exists.
+    content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     status: Mapped[DocumentStatus] = mapped_column(
         SAEnum(

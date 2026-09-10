@@ -310,7 +310,9 @@ async def _load_connection_ids() -> list[UUID]:
 
     async with WorkerSessionLocal() as session:
         repo = GmailConnectionRepository(session)
-        return [c.id for c in await repo.list_all()]
+        # A connection Google has already rejected fails on every tick;
+        # leave it out until the user reconnects.
+        return [c.id for c in await repo.list_all(include_needs_reauth=False)]
 
 
 async def _run_sync(connection_id: UUID) -> SyncReport:
