@@ -54,6 +54,14 @@ celery.conf.update(
             "task": "sync_all_gmail_connections",
             "schedule": schedule(run_every=settings.gmail_sync_interval_minutes * 60),
         },
+        # Recovers documents a dying worker left stuck in PROCESSING.
+        # Runs well inside ``document_stall_timeout_minutes`` so a
+        # stranded document is picked up on the sweep after it goes
+        # stale rather than waiting a full timeout again.
+        "requeue-stalled-documents": {
+            "task": "requeue_stalled_documents",
+            "schedule": schedule(run_every=300),
+        },
     },
 )
 

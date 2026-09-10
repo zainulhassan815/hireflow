@@ -212,9 +212,10 @@ async def clean_redis() -> AsyncIterator[None]:
 class EnqueuedTasks:
     """Records which Celery tasks were `.delay()`-ed during a test.
 
-    Use as a list-like object for assertions:
+    ``for_task`` returns the positional args of each call, so a
+    single-argument task reads as a list of 1-tuples:
 
-        assert enqueued_tasks.for_task("extract_document_text") == [str(doc.id)]
+        assert enqueued_tasks.for_task("extract_document_text") == [(str(doc.id),)]
     """
 
     def __init__(self) -> None:

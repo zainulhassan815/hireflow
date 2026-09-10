@@ -96,6 +96,14 @@ class Settings(BaseSettings):
     # File Upload
     max_file_size_mb: int = 10
 
+    # A document is marked PROCESSING before extraction starts and only
+    # cleared on success or failure, so a worker killed in between
+    # strands the row: the retry path skips anything that isn't PENDING,
+    # so nothing ever picks it up again. Anything still PROCESSING after
+    # this long is assumed abandoned and requeued. Must stay comfortably
+    # above the slowest real extraction (OCR + LLM contextualization).
+    document_stall_timeout_minutes: int = 15
+
     # F105.b — LibreOffice headless CLI used by OfficeToPdfProvider.
     # Override ``libreoffice_bin`` on macOS (``soffice``) or in exotic
     # installs. Default timeout is generous for small resumes; the
@@ -130,17 +138,18 @@ class Settings(BaseSettings):
     vision_model: str | None = None
     ollama_base_url: str = "http://localhost:11434"
 
+    # Suffix appended to every ChromaDB collection name. Tests and the
+    # eval harness set it so they get their own collections instead of
+    # sharing the dev ones — they previously did share, and the eval's
+    # per-run corpus accumulated there indefinitely.
+    chroma_collection_suffix: str = ""
+
     # Search relevance (F80 / F85.d). When ``None``, SearchService
     # asks the configured embedder for its recommended threshold
     # (per-model table in ``SentenceTransformerEmbedder``). Set an
     # explicit float to override for this deploy — rarely needed, but
     # the operator knob is there. Legacy value for bge-small was 0.35;
     # that lives in the embedder's threshold table now.
-    # Suffix appended to every ChromaDB collection name. Tests and the
-    # eval harness set it so they get their own collections instead of
-    # sharing the dev ones — they previously did share, and the eval's
-    # per-run corpus accumulated there indefinitely.
-    chroma_collection_suffix: str = ""
     search_max_distance: float | None = None
     # RAG's chunk lane gets a looser ceiling than /search on purpose.
     # Lexical hits only *boost* vector-retrieved chunks — they can never

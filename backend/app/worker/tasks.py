@@ -179,6 +179,70 @@ def extract_document_text(self, document_id: str) -> None:
         prep_session.close()
 
 
+@celery.task(name="requeue_stalled_documents", bind=True, acks_late=True)
+def requeue_stalled_documents(self) -> int:
+    """Requeue documents a dying worker left mid-extraction.
+
+    ``ExtractionService.process`` commits ``PROCESSING`` before it
+    starts and only clears it on success or failure, and it skips any
+    document that isn't ``PENDING``. So a worker killed in between
+    strands the row permanently: ``acks_late`` does redeliver the task,
+    but the redelivered run hits that guard, logs "skipping", and acks
+    — burning the one redelivery the document had. It then stays
+    unindexed and invisible to search forever, with nothing to notice.
+
+    Returns the number requeued so the log line is useful.
+
+    ponytail: a document that reliably kills the worker gets resurrected
+    every sweep. A per-document attempt counter is the fix if that ever
+    actually happens; a crash loop is loud enough to spot first.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select, update
+
+    from app.core.config import settings
+    from app.core.db import get_sync_db
+    from app.models import Document, DocumentStatus
+
+    cutoff = datetime.now(UTC) - timedelta(
+        minutes=settings.document_stall_timeout_minutes
+    )
+    session = get_sync_db()
+    try:
+        stalled = list(
+            session.execute(
+                select(Document.id).where(
+                    Document.status == DocumentStatus.PROCESSING,
+                    Document.updated_at < cutoff,
+                )
+            ).scalars()
+        )
+        if not stalled:
+            return 0
+        session.execute(
+            update(Document)
+            .where(Document.id.in_(stalled))
+            .values(status=DocumentStatus.PENDING)
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    # Enqueue only after the reset commits, so the task can never find
+    # the row still marked PROCESSING and skip it all over again.
+    for document_id in stalled:
+        extract_document_text.delay(str(document_id))
+
+    logger.warning(
+        "requeued %d document(s) stalled in PROCESSING for over %d minutes: %s",
+        len(stalled),
+        settings.document_stall_timeout_minutes,
+        ", ".join(str(d) for d in stalled),
+    )
+    return len(stalled)
+
+
 # ---------- F103.c.2 — targeted re-embed ----------
 
 
