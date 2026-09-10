@@ -50,6 +50,19 @@ class GmailConnection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Set when Google rejects the stored refresh token. The row, its
+    # ingest ledger, backfill cursor and mirroring setting all survive,
+    # so reconnecting the same address lands on this same row via
+    # UNIQUE (user_id, gmail_email) and re-imports nothing. Deleting the
+    # row instead would cascade the ledger away and duplicate every
+    # document on the next sync.
+    #
+    # The stored refresh_token is left in place: it is known dead but
+    # inert, and the column is NOT NULL.
+    reauth_required_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Cursor into Gmail's history feed. Null means "not seeded yet" —
     # either a fresh connection or a cursor Google aged out (history
     # survives roughly a week, sometimes only hours), in which case the

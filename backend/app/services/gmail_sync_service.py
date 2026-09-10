@@ -84,7 +84,7 @@ class SyncReport:
     skipped_no_eligible_attachment: int = 0
     errors: int = 0
     errors_by_type: Counter[str] = field(default_factory=Counter)
-    disconnected: bool = False
+    needs_reauth: bool = False
     backfilled: int = 0
     backfill_cursor: datetime | None = None
     backfill_finished: bool = False
@@ -107,8 +107,8 @@ class SyncReport:
 
     def summary(self) -> str:
         """Short single-line summary for activity log / beat output."""
-        if self.disconnected:
-            return "auto-disconnected: token revoked"
+        if self.needs_reauth:
+            return "needs reconnecting: refresh token rejected"
         parts = [
             f"scanned={self.scanned}",
             f"ingested={self.ingested}",
@@ -200,8 +200,8 @@ class GmailSyncService:
         try:
             tokens = await self._oauth.refresh(connection.refresh_token)
         except InvalidGrant:
-            await self._auto_disconnect(connection)
-            return SyncReport(disconnected=True)
+            await self._mark_needs_reauth(connection)
+            return SyncReport(needs_reauth=True)
 
         report = SyncReport()
 
@@ -624,19 +624,29 @@ class GmailSyncService:
             window_days = min(window_days, self._initial_window_days)
         return f"has:attachment newer_than:{window_days}d"
 
-    async def _auto_disconnect(self, connection: GmailConnection) -> None:
-        gmail_email = connection.gmail_email
-        connection_id = connection.id
-        user_id = connection.user_id
-        await self._connections.delete(connection)
+    async def _mark_needs_reauth(self, connection: GmailConnection) -> None:
+        """Flag the connection for reconnection; do not delete it.
+
+        Google expires refresh tokens after 7 days while the consent
+        screen is in Testing, so this is a routine weekly event, not a
+        rare failure. Deleting the row would cascade
+        ``gmail_ingested_messages`` away and the next reconnect would
+        re-import every message and duplicate every attachment. Keeping
+        it means ``UNIQUE (user_id, gmail_email)`` lands the reconnect on
+        this same row with its ledger, backfill cursor and mirroring
+        setting intact.
+        """
+        await self._connections.mark_needs_reauth(connection)
         await self._activity.log(
-            actor_id=user_id,
-            action=ActivityAction.GMAIL_DISCONNECT,
+            actor_id=connection.user_id,
+            action=ActivityAction.GMAIL_REAUTH_REQUIRED,
             resource_type="gmail_connection",
-            resource_id=str(connection_id),
-            detail=f"{gmail_email} auto-disconnected: token revoked",
+            resource_id=str(connection.id),
+            detail=f"{connection.gmail_email} needs reconnecting: refresh token rejected",
         )
-        logger.warning("auto-disconnected %s: refresh token revoked", gmail_email)
+        logger.warning(
+            "%s needs reconnecting: refresh token rejected", connection.gmail_email
+        )
 
 
 def _internal_date(message: GmailMessage) -> datetime | None:

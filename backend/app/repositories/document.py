@@ -28,6 +28,47 @@ class DocumentRepository:
     async def get(self, document_id: UUID) -> Document | None:
         return await self._db.get(Document, document_id)
 
+    async def get_live_by_content_hash(
+        self, owner_id: UUID, content_sha256: str
+    ) -> Document | None:
+        """An existing, usable document with these exact bytes.
+
+        FAILED documents are excluded deliberately: returning one would
+        hand the caller a row with no extracted text and no vectors, and
+        the file would silently never become searchable. A replacement is
+        created instead.
+        """
+        result = await self._db.execute(
+            select(Document).where(
+                Document.owner_id == owner_id,
+                Document.content_sha256 == content_sha256,
+                Document.status != DocumentStatus.FAILED,
+            )
+        )
+        return result.scalars().first()
+
+    async def get_by_content_hash_any_status(
+        self, owner_id: UUID, content_sha256: str
+    ) -> Document | None:
+        """Any document holding this hash, including FAILED ones."""
+        result = await self._db.execute(
+            select(Document).where(
+                Document.owner_id == owner_id,
+                Document.content_sha256 == content_sha256,
+            )
+        )
+        return result.scalars().first()
+
+    async def clear_content_hash(self, doc: Document) -> None:
+        """Release a superseded FAILED document's claim on its hash.
+
+        Keeps ``UNIQUE (owner_id, content_sha256)`` meaning "at most one
+        *live* document per (owner, content)" rather than blocking a
+        retry of a file that failed once.
+        """
+        doc.content_sha256 = None
+        await self._db.commit()
+
     async def create(
         self,
         *,
@@ -36,6 +77,7 @@ class DocumentRepository:
         mime_type: str,
         size_bytes: int,
         storage_key: str,
+        content_sha256: str | None = None,
     ) -> Document:
         doc = Document(
             owner_id=owner_id,
@@ -43,6 +85,7 @@ class DocumentRepository:
             mime_type=mime_type,
             size_bytes=size_bytes,
             storage_key=storage_key,
+            content_sha256=content_sha256,
             status=DocumentStatus.PENDING,
         )
         self._db.add(doc)

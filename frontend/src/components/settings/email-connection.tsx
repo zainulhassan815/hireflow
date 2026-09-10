@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangleIcon,
   CheckCircleIcon,
   HistoryIcon,
   MailIcon,
@@ -148,6 +149,12 @@ function ConnectionRow({
   connection: GmailConnection;
   onAfterMutate: () => void;
 }) {
+  const reconnect = useMutation({
+    ...gmailAuthorizeMutation(),
+    onSuccess: (data) => {
+      window.location.href = data.authorize_url;
+    },
+  });
   const syncNow = useMutation({
     ...gmailSyncNowMutation(),
     onSuccess: () => {
@@ -188,10 +195,17 @@ function ConnectionRow({
             <Typography variant="small" className="truncate font-medium">
               {connection.gmail_email}
             </Typography>
-            <Badge variant="outline" className="gap-1 text-green-600">
-              <CheckCircleIcon className="size-3" />
-              Connected
-            </Badge>
+            {connection.needs_reauth ? (
+              <Badge variant="outline" className="text-warning gap-1">
+                <AlertTriangleIcon className="size-3" />
+                Reconnect needed
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1 text-green-600">
+                <CheckCircleIcon className="size-3" />
+                Connected
+              </Badge>
+            )}
           </div>
           <Typography variant="muted" className="text-sm">
             {`Connected ${connectedAt.toLocaleString()}`}
@@ -199,6 +213,13 @@ function ConnectionRow({
               ? ` · Last synced ${lastSyncedAt.toLocaleString()}`
               : " · Never synced"}
           </Typography>
+          {connection.needs_reauth ? (
+            <Typography variant="muted" className="text-sm">
+              Google expired this mailbox's access, so syncing is paused.
+              Reconnect to resume — your imported documents, backfill progress
+              and settings are all kept, and nothing is imported twice.
+            </Typography>
+          ) : null}
           {backfillBefore ? (
             <Typography variant="muted" className="text-sm">
               {`Backfilling — reached ${backfillBefore.toLocaleDateString()}`}
@@ -212,13 +233,22 @@ function ConnectionRow({
         </div>
       </div>
       <div className="flex shrink-0 gap-2">
+        {connection.needs_reauth ? (
+          <Button
+            size="sm"
+            onClick={() => reconnect.mutate({})}
+            disabled={reconnect.isPending}
+          >
+            {reconnect.isPending ? "Redirecting..." : "Reconnect"}
+          </Button>
+        ) : null}
         <Button
           variant="outline"
           size="sm"
           onClick={() =>
             syncNow.mutate({ path: { connection_id: connection.id } })
           }
-          disabled={syncNow.isPending}
+          disabled={syncNow.isPending || connection.needs_reauth}
         >
           <RefreshCwIcon
             className={`size-4 ${syncNow.isPending ? "animate-spin" : ""}`}

@@ -128,6 +128,7 @@ async def list_gmail_connections(
             scopes=c.scopes,
             backfill_before=c.backfill_before,
             backfill_until=c.backfill_until,
+            needs_reauth=c.reauth_required_at is not None,
             mirror_deletions=c.mirror_deletions,
         )
         for c in connections
@@ -213,6 +214,7 @@ async def update_gmail_connection(
         scopes=connection.scopes,
         backfill_before=connection.backfill_before,
         backfill_until=connection.backfill_until,
+        needs_reauth=connection.reauth_required_at is not None,
         mirror_deletions=connection.mirror_deletions,
     )
 
