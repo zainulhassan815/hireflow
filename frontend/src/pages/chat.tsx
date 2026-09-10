@@ -56,13 +56,29 @@ export function ChatPage() {
 
   const createConversation = useMutation(createConversationMutation());
 
-  // Hydrate the thread from the server whenever the route changes, so a
-  // direct link or a reload lands on the full conversation.
+  // Which thread the local `messages` array is currently showing. The
+  // hydrate effect below replaces the whole array, so it must know when
+  // local state is already authoritative and leave it alone.
+  const shownConversation = React.useRef<string | null>(null);
+
+  // Hydrate from the server when the reader opens a *different* thread —
+  // a sidebar click, a direct link, a reload.
+  //
+  // It must never run against a turn in flight. The assistant message is
+  // only persisted when the stream closes, so a refetch mid-turn returns
+  // the user's question alone; replacing the array with that destroys
+  // the placeholder the deltas are streaming into, and the answer
+  // silently renders nowhere.
   React.useEffect(() => {
+    if (isSending) return;
     if (!routeId) {
-      setMessages([]);
+      if (shownConversation.current !== null) {
+        setMessages([]);
+        shownConversation.current = null;
+      }
       return;
     }
+    if (shownConversation.current === routeId) return;
     if (!history.data) return;
     setMessages(
       history.data.map((m) => ({
@@ -75,7 +91,8 @@ export function ChatPage() {
         intent: m.intent as ChatMessage["intent"],
       }))
     );
-  }, [routeId, history.data]);
+    shownConversation.current = routeId;
+  }, [routeId, history.data, isSending]);
 
   React.useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -100,6 +117,8 @@ export function ChatPage() {
         return;
       }
     }
+
+    shownConversation.current = conversationId;
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
