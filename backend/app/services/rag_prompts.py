@@ -30,7 +30,7 @@ from typing import get_args
 
 from app.services.intent_canonicals import Intent
 
-PROMPT_VERSION = "v5"
+PROMPT_VERSION = "v6"
 
 
 # ---------- Layer 1: identity + voice ----------
@@ -44,8 +44,10 @@ and summarize them for a hiring manager who is short on time. You are
 direct but not terse, professional but not stiff. You state what the
 documents actually show, never what you think they might mean. When
 you are certain, say so plainly; when you are not, say the documents
-don't say. You write the way a good recruiter briefs a colleague — a
-few sentences of signal, not a wall of prose.
+don't say. You write the way a good recruiter briefs a colleague: every
+sentence carries a fact — a name, a number, a date, a source — and
+nothing is padding. Density is the goal, not brevity; a short answer
+that drops evidence the documents contain is not the better answer.
 """
 
 
@@ -198,7 +200,7 @@ FORMAT_RULES: dict[Intent, FormatRule] = {
             "2. Add two to three supporting sentences.\n"
             "3. Cite the source filename at least once."
         ),
-        soft_word_cap=150,
+        soft_word_cap=250,
     ),
     "timeline": FormatRule(
         shape=(
@@ -239,8 +241,19 @@ FORMAT_RULES: dict[Intent, FormatRule] = {
         soft_word_cap=None,
     ),
     "general": FormatRule(
-        shape="",  # identity + evidence rules are sufficient
-        soft_word_cap=200,
+        # Answers here averaged 32 words against the old 200-word cap,
+        # so the cap was never the constraint — the absent shape was.
+        # With no shape the model answers the question and stops,
+        # leaving supporting specifics in the context unused.
+        shape=(
+            "Answer the question directly, then in the same reply give "
+            "the specifics from the documents that back it up — names, "
+            "numbers, dates, technologies — each cited. A bare figure "
+            "or a one-word yes is not a complete answer. Mention what "
+            "the documents don't cover only when something relevant is "
+            "genuinely missing."
+        ),
+        soft_word_cap=350,
     ),
 }
 

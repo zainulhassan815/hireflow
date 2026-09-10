@@ -136,7 +136,24 @@ class Settings(BaseSettings):
     # explicit float to override for this deploy — rarely needed, but
     # the operator knob is there. Legacy value for bge-small was 0.35;
     # that lives in the embedder's threshold table now.
+    # Suffix appended to every ChromaDB collection name. Tests and the
+    # eval harness set it so they get their own collections instead of
+    # sharing the dev ones — they previously did share, and the eval's
+    # per-run corpus accumulated there indefinitely.
+    chroma_collection_suffix: str = ""
     search_max_distance: float | None = None
+    # RAG's chunk lane gets a looser ceiling than /search on purpose.
+    # Lexical hits only *boost* vector-retrieved chunks — they can never
+    # introduce one — so a cutoff that /search survives (its lexical lane
+    # still returns documents) leaves RAG with nothing at all. Measured:
+    # three of eight live questions had a best distance of 0.362-0.370
+    # and returned zero chunks at 0.35.
+    #
+    # Safe to loosen here because RAG has downstream protection /search
+    # lacks: the cross-encoder reorders what survives, the context gate
+    # bounds it, and the prompt has an explicit "not covered by the
+    # documents" path. Set to None to fall back to search_max_distance.
+    rag_chunk_max_distance: float | None = 0.45
     search_confidence_high: float = 0.02
     search_confidence_medium: float = 0.01
     search_max_highlights_per_doc: int = 3
@@ -203,6 +220,12 @@ class Settings(BaseSettings):
     # Conversation memory (F81.f). History gets its own budget so a long
     # chat can never crowd out the evidence chunks the context gate
     # selected — the two compete for prompt space otherwise.
+    # Backstop against one document monopolising the context window.
+    # Applied after near-duplicate suppression, so it counts distinct
+    # content. Generous on purpose: a question whose answer genuinely
+    # lives in a single file must still have room to be answered.
+    rag_max_chunks_per_document: int = 3
+
     rag_history_token_budget: int = 800
     # Turns injected into the answer prompt.
     rag_history_max_turns: int = 10

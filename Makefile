@@ -44,6 +44,7 @@ generate: ## Regenerate frontend API client
 # The `_test` DB name is the last-line-of-defence check inside the
 # fixtures themselves.
 TEST_ENV = DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/hr_screening_test \
+           CHROMA_COLLECTION_SUFFIX=_test \
            REDIS_URL=redis://localhost:6379/15 \
            DEBUG=false \
            ENCRYPTION_KEYS=bwKiCtnOedgvw_E3RtRehIznu_GR2i_8sAPM2oBRYv0=

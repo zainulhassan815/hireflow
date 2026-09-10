@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import Counter
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -343,7 +344,16 @@ class RagService:
 
         cutoff = settings.rag_context_max_distance
         budget = settings.rag_context_token_budget
-        kept, tokens_used = self._apply_context_gate(chunks, cutoff, budget)
+        # A caller who pinned document_ids has already expressed intent;
+        # capping per document would then fight the request.
+        kept, tokens_used = self._apply_context_gate(
+            chunks,
+            cutoff,
+            budget,
+            per_document_cap=(
+                None if document_ids else settings.rag_max_chunks_per_document
+            ),
+        )
         if not kept and not candidates:
             logger.info(
                 "rag context: 0/%d chunks kept (cutoff=%s, budget=%d)",
@@ -533,7 +543,11 @@ class RagService:
 
     @staticmethod
     def _apply_context_gate(
-        chunks: list[RetrievedChunk], cutoff: float | None, budget: int
+        chunks: list[RetrievedChunk],
+        cutoff: float | None,
+        budget: int,
+        *,
+        per_document_cap: int | None,
     ) -> tuple[list[RetrievedChunk], int]:
         """Apply F81.b distance filter + F81.c token budget.
 
@@ -552,9 +566,45 @@ class RagService:
         """
         kept: list[RetrievedChunk] = []
         tokens_used = 0
+        seen_text: set[tuple[Any, str]] = set()
+        per_document: Counter[Any] = Counter()
         for chunk in chunks:
             if cutoff is not None and chunk.distance > cutoff:
                 continue
+
+            # Forms repeat themselves. A fee challan carries the same
+            # paragraph on its bank, student and office copies, so
+            # retrieval happily returns five ranked copies of one
+            # paragraph and the answer never reaches the model. These
+            # are literal repeats, not paraphrases, so an exact match on
+            # normalised text is enough — shingling would be machinery
+            # for a problem this already solves.
+            #
+            # Scoped per document on purpose. Templated files share
+            # boilerplate, and collapsing across documents would drop
+            # real citations — three offer letters cut to one — which is
+            # the very failure this gate exists to prevent. Whole
+            # duplicate files are already handled at ingestion by the
+            # content-hash check.
+            fingerprint = (
+                chunk.document_id,
+                " ".join(chunk.text.split()).casefold()[:200],
+            )
+            if fingerprint in seen_text:
+                continue
+            seen_text.add(fingerprint)
+
+            # Backstop for a document with many genuinely distinct
+            # chunks. Deliberately applied *after* dedup, so the
+            # allowance is spent on distinct content rather than on
+            # repeats, and deliberately generous: a question whose
+            # answer really does live in one file must keep room.
+            if (
+                per_document_cap is not None
+                and per_document[chunk.document_id] >= per_document_cap
+            ):
+                continue
+
             chunk_tokens = _estimate_tokens(chunk.text)
             if not kept and chunk_tokens > budget:
                 logger.warning(
@@ -567,5 +617,6 @@ class RagService:
             if tokens_used + chunk_tokens > budget:
                 break
             kept.append(chunk)
+            per_document[chunk.document_id] += 1
             tokens_used += chunk_tokens
         return kept, tokens_used

@@ -174,23 +174,36 @@ async def eval_owner():
             await session.execute(delete(model))
         await session.commit()
 
-        # Also wipe the ChromaDB documents collection. We don't have a
-        # "truncate collection" API; delete-by-filter covers it.
+        # Also wipe the eval's ChromaDB collections.
+        #
+        # This used to call ``store.delete(fixture.slug)``, but that
+        # method takes a *document id* and the fixtures are seeded under
+        # fresh UUIDs — so it deleted nothing, ever. Every run's corpus
+        # accumulated instead, in a collection shared with dev data,
+        # and matching scores drifted with the junk. Twenty runs' worth
+        # (164 vectors across 20 dead owners) had piled up.
+        #
+        # Dropping the collections outright is both simpler and actually
+        # correct. Guarded by the ``_test`` suffix so this can never
+        # touch the dev collections.
         try:
-            from app.adapters.chroma_store import ChromaVectorStore
-            from app.adapters.embeddings.registry import (
-                get_embedding_provider,
-            )
+            import chromadb
+
             from app.core.config import settings
 
-            store = ChromaVectorStore(
-                host=settings.chroma_host,
-                port=settings.chroma_port,
-                embedder=get_embedding_provider(settings),
+            assert settings.chroma_collection_suffix.endswith("_test"), (
+                "refusing to drop collections without a _test suffix; "
+                f"got {settings.chroma_collection_suffix!r}"
             )
-            # Delete every chunk we'll seed. We know the slugs.
-            for fixture in FIXTURE_DOCS:
-                store.delete(fixture.slug)
+            client = chromadb.HttpClient(
+                host=settings.chroma_host, port=settings.chroma_port
+            )
+            for existing in client.list_collections():
+                name = existing if isinstance(existing, str) else existing.name
+                if name.endswith(settings.chroma_collection_suffix):
+                    client.delete_collection(name)
+        except AssertionError:
+            raise
         except Exception:
             # If Chroma is down the eval will fail explicitly below.
             pass
@@ -208,6 +221,35 @@ async def eval_owner():
 async def eval_owner_id(eval_owner) -> UUID:
     """UUID convenience for seeding code that doesn't need the full User."""
     return eval_owner.id
+
+
+@pytest.fixture(scope="session")
+async def matching_owner(eval_owner):
+    """A second owner, holding the matching corpus only.
+
+    The matching résumés live in the same ChromaDB chunk collection as
+    the search fixtures, so seeding them under ``eval_owner`` put them
+    in front of every search-quality query: running the whole eval
+    directory scored p@5 0.2087 where the search eval alone scored
+    0.2522, and whichever ran last wrote ``baseline.json``. Ownership
+    scoping already isolates them for free — the search actor simply
+    never sees another owner's chunks.
+
+    Depends on ``eval_owner`` so it is created after that fixture's
+    once-per-session database wipe, not before it.
+    """
+    from app.adapters.argon2_hasher import Argon2Hasher
+    from app.core.db import SessionLocal
+    from app.models import UserRole
+    from app.repositories.user import UserRepository
+
+    async with SessionLocal() as session:
+        return await UserRepository(session).create(
+            email="eval-matching-owner@hireflow.test",
+            hashed_password=Argon2Hasher().hash("eval-matching-password"),
+            full_name="Eval Matching Owner",
+            role=UserRole.HR,
+        )
 
 
 @pytest.fixture(scope="session")
@@ -321,15 +363,19 @@ def document_id_to_slug(
 
 @pytest.fixture(scope="session")
 async def seeded_matching_corpus(
-    eval_owner_id: UUID,
+    matching_owner,
 ) -> tuple[dict[str, UUID], dict[str, UUID]]:
     """Seed the matching corpus: candidate résumés (indexed in ChromaDB so
     the vector signal is live), their ``Candidate`` rows, and the jobs.
 
-    Returns ``({candidate_slug: id}, {job_slug: id})``. Independent of
-    ``seeded_fixtures`` — separate slugs, so the search-quality eval's
-    baseline is unaffected.
+    Returns ``({candidate_slug: id}, {job_slug: id})``.
+
+    Owned by ``matching_owner``, not ``eval_owner``. Separate slugs are
+    not enough to keep this corpus out of the search-quality eval —
+    both share one ChromaDB collection, so only ownership scoping
+    actually isolates them.
     """
+    eval_owner_id = matching_owner.id
     from app.adapters.chroma_store import ChromaVectorStore
     from app.adapters.contextualizers.registry import get_contextualizer
     from app.adapters.embeddings.registry import get_embedding_provider

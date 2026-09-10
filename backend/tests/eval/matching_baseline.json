@@ -1,6 +1,6 @@
 {
   "overall": {
-    "mean_spearman": 0.831,
+    "mean_spearman": 0.8618,
     "top1_accuracy": 1.0,
     "mean_top3_overlap": 0.7503
   },
@@ -24,7 +24,7 @@
     },
     {
       "job": "job_frontend",
-      "spearman": 0.599,
+      "spearman": 0.671,
       "top1_hit": true,
       "top3_overlap": 0.667,
       "model_top3": [
@@ -41,7 +41,7 @@
     },
     {
       "job": "job_devops",
-      "spearman": 0.867,
+      "spearman": 0.93,
       "top1_hit": true,
       "top3_overlap": 0.667,
       "model_top3": [
@@ -58,7 +58,7 @@
     },
     {
       "job": "job_data_scientist",
-      "spearman": 0.921,
+      "spearman": 0.909,
       "top1_hit": true,
       "top3_overlap": 0.667,
       "model_top3": [

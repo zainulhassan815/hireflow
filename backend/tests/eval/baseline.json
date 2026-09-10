@@ -2,7 +2,7 @@
   "overall": {
     "p@5": 0.2522,
     "r@5": 1.0,
-    "mrr": 0.7898
+    "mrr": 0.8152
   },
   "cases": [
     {
@@ -15,8 +15,8 @@
       "returned": [
         "resume_python_senior",
         "letter_cover_jane",
-        "resume_javascript_junior",
         "resume_devops",
+        "resume_javascript_junior",
         "resume_data_scientist"
       ],
       "p@5": 0.4,
@@ -63,13 +63,13 @@
         "resume_data_scientist"
       ],
       "returned": [
+        "resume_data_scientist",
         "resume_devops",
-        "letter_cover_jane",
-        "resume_data_scientist"
+        "letter_cover_jane"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
-      "mrr": 0.333,
+      "mrr": 1.0,
       "must_not_contain_violation": [],
       "notes": ""
     },
@@ -331,14 +331,14 @@
         "resume_data_scientist"
       ],
       "returned": [
+        "letter_cover_jane",
         "resume_devops",
         "resume_python_senior",
-        "resume_data_scientist",
-        "letter_cover_jane"
+        "resume_data_scientist"
       ],
       "p@5": 0.2,
       "r@5": 1.0,
-      "mrr": 0.333,
+      "mrr": 0.25,
       "must_not_contain_violation": [],
       "notes": "ml expands to 'machine learning'"
     },
