@@ -364,7 +364,7 @@ async def test_system_prompt_carries_fallback_contract_and_evidence_rules() -> N
     assert "square brackets" in prompt
 
     # Default word cap for the prose intent.
-    assert "200 words" in prompt
+    assert "350 words" in prompt
 
     # Voice layer (identity) present.
     assert "HR research assistant" in prompt

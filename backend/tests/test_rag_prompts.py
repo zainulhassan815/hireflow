@@ -34,12 +34,12 @@ def _normalised(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def test_prompt_version_is_v5() -> None:
-    """F104.a bumped v4 → v5 to record the new candidate-anchor
-    naming bullet. Literal pin so a developer rebasing an older
-    revision and forgetting to renumber trips the assert rather
-    than silently shipping a regression."""
-    assert PROMPT_VERSION == "v5"
+def test_prompt_version_is_v6() -> None:
+    """v5 → v6 records the general-intent shape and the density
+    reframe in the identity layer. Literal pin so a developer rebasing
+    an older revision and forgetting to renumber trips the assert
+    rather than silently shipping a regression."""
+    assert PROMPT_VERSION == "v6"
 
 
 def test_format_rules_cover_every_intent() -> None:
@@ -73,8 +73,8 @@ def test_general_prompt_contains_identity_and_evidence_rules() -> None:
     # Evidence rules present.
     assert "Not in the provided documents." in prompt
     assert "square brackets" in prompt
-    # Default word cap — general intent is the only one with 200.
-    assert "200 words" in prompt
+    # Default word cap — general intent is the only one with 350.
+    assert "350 words" in prompt
     # No few-shot for general.
     assert "Example:" not in prompt
 
