@@ -203,6 +203,12 @@ class Settings(BaseSettings):
     # Conversation memory (F81.f). History gets its own budget so a long
     # chat can never crowd out the evidence chunks the context gate
     # selected — the two compete for prompt space otherwise.
+    # Backstop against one document monopolising the context window.
+    # Applied after near-duplicate suppression, so it counts distinct
+    # content. Generous on purpose: a question whose answer genuinely
+    # lives in a single file must still have room to be answered.
+    rag_max_chunks_per_document: int = 3
+
     rag_history_token_budget: int = 800
     # Turns injected into the answer prompt.
     rag_history_max_turns: int = 10
