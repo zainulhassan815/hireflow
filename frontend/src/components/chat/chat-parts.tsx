@@ -86,6 +86,10 @@ type Segment =
   | { kind: "text"; value: string }
   | { kind: "citation"; citation: SourceCitation };
 
+// Inline citation marker the answer emits, e.g. "[jane_doe_resume.pdf]".
+// matchAll clones the regex internally, so one shared instance is safe.
+const CITATION_MARKER = /\[([^[\]\n]+)\]/g;
+
 function parseSegments(
   content: string,
   citations: SourceCitation[] | undefined
@@ -96,9 +100,8 @@ function parseSegments(
   const byFilename = new Map(citations.map((c) => [c.filename, c]));
   const byLower = new Map(citations.map((c) => [c.filename.toLowerCase(), c]));
   const segments: Segment[] = [];
-  const regex = /\[([^[\]\n]+)\]/g;
   let lastIndex = 0;
-  for (const match of content.matchAll(regex)) {
+  for (const match of content.matchAll(CITATION_MARKER)) {
     const [fullMatch, inner] = match;
     const citation = byFilename.get(inner) ?? byLower.get(inner.toLowerCase());
     if (!citation) continue;
@@ -113,6 +116,35 @@ function parseSegments(
     segments.push({ kind: "text", value: content.slice(lastIndex) });
   }
   return segments;
+}
+
+/**
+ * The sources the answer actually cites.
+ *
+ * Retrieval deliberately over-fetches — the context gate fills a token
+ * budget, so chunks reach the model that the answer may never draw on.
+ * Listing all of them credits documents the answer had nothing to do
+ * with (a sales summary "sourced" from an unrelated vendor contract).
+ * The model already marks what it used with inline `[filename]`, so
+ * that is the signal.
+ *
+ * While streaming, the set grows as citations arrive. Once the answer
+ * is complete, an uncited answer falls back to the full set rather than
+ * showing nothing — losing provenance entirely is the worse failure.
+ */
+function citedSources(
+  content: string,
+  sources: SourceCitation[] | undefined,
+  isStreaming: boolean
+): SourceCitation[] | undefined {
+  if (!sources || sources.length === 0) return sources;
+  const named = new Set<string>();
+  for (const match of content.matchAll(CITATION_MARKER)) {
+    named.add(match[1].toLowerCase());
+  }
+  const used = sources.filter((s) => named.has(s.filename.toLowerCase()));
+  if (used.length === 0 && !isStreaming) return sources;
+  return used;
 }
 
 const sourceDomId = (messageId: string, index: number) =>
@@ -296,9 +328,14 @@ export function ThinkingDots() {
   );
 }
 
-function SourcesPanel({ message }: { message: ChatMessage }) {
+function SourcesPanel({
+  message,
+  sources,
+}: {
+  message: ChatMessage;
+  sources: SourceCitation[];
+}) {
   const [open, setOpen] = React.useState(false);
-  const sources = message.sources ?? [];
   if (sources.length === 0) return null;
 
   return (
@@ -406,6 +443,9 @@ export function AssistantMessage({
   isStreaming: boolean;
 }) {
   const isEmpty = isStreaming && !message.content;
+  // One derivation shared by the inline markers and the panel — they
+  // index into the same array to scroll a marker to its source.
+  const sources = citedSources(message.content, message.sources, isStreaming);
   return (
     <div className="flex gap-3">
       <div className="bg-foreground text-background font-display mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
@@ -417,12 +457,12 @@ export function AssistantMessage({
         ) : (
           <AssistantMarkdown
             content={message.content}
-            sources={message.sources}
+            sources={sources}
             messageId={message.id}
             isStreaming={isStreaming}
           />
         )}
-        <SourcesPanel message={message} />
+        <SourcesPanel message={message} sources={sources ?? []} />
         <MessageMeta message={message} />
       </div>
     </div>
