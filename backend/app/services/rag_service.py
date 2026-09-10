@@ -566,7 +566,7 @@ class RagService:
         """
         kept: list[RetrievedChunk] = []
         tokens_used = 0
-        seen_text: set[str] = set()
+        seen_text: set[tuple[Any, str]] = set()
         per_document: Counter[Any] = Counter()
         for chunk in chunks:
             if cutoff is not None and chunk.distance > cutoff:
@@ -579,7 +579,17 @@ class RagService:
             # are literal repeats, not paraphrases, so an exact match on
             # normalised text is enough — shingling would be machinery
             # for a problem this already solves.
-            fingerprint = " ".join(chunk.text.split()).casefold()[:200]
+            #
+            # Scoped per document on purpose. Templated files share
+            # boilerplate, and collapsing across documents would drop
+            # real citations — three offer letters cut to one — which is
+            # the very failure this gate exists to prevent. Whole
+            # duplicate files are already handled at ingestion by the
+            # content-hash check.
+            fingerprint = (
+                chunk.document_id,
+                " ".join(chunk.text.split()).casefold()[:200],
+            )
             if fingerprint in seen_text:
                 continue
             seen_text.add(fingerprint)
