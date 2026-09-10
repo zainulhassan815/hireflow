@@ -137,6 +137,18 @@ class Settings(BaseSettings):
     # the operator knob is there. Legacy value for bge-small was 0.35;
     # that lives in the embedder's threshold table now.
     search_max_distance: float | None = None
+    # RAG's chunk lane gets a looser ceiling than /search on purpose.
+    # Lexical hits only *boost* vector-retrieved chunks — they can never
+    # introduce one — so a cutoff that /search survives (its lexical lane
+    # still returns documents) leaves RAG with nothing at all. Measured:
+    # three of eight live questions had a best distance of 0.362-0.370
+    # and returned zero chunks at 0.35.
+    #
+    # Safe to loosen here because RAG has downstream protection /search
+    # lacks: the cross-encoder reorders what survives, the context gate
+    # bounds it, and the prompt has an explicit "not covered by the
+    # documents" path. Set to None to fall back to search_max_distance.
+    rag_chunk_max_distance: float | None = 0.45
     search_confidence_high: float = 0.02
     search_confidence_medium: float = 0.01
     search_max_highlights_per_doc: int = 3

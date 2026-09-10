@@ -24,6 +24,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from functools import partial
 from typing import Any, Literal
 from uuid import UUID
 
@@ -321,7 +322,14 @@ class SearchService:
         # Vector path — reuse the private helper that handles
         # embedder selection, distance filtering, and the where clause.
         vector_hits = await asyncio.to_thread(
-            self._vector_search, query, None, limit * 3, owner_id=owner_filter
+            partial(
+                self._vector_search,
+                query,
+                None,
+                limit * 3,
+                owner_id=owner_filter,
+                max_distance=settings.rag_chunk_max_distance,
+            )
         )
         vector_hits = await self._drop_orphan_vector_hits(vector_hits)
 
@@ -780,6 +788,7 @@ class SearchService:
         n_results: int,
         *,
         owner_id: UUID | None = None,
+        max_distance: float | None = None,
     ) -> list[VectorHit]:
         if self._vector_store is None:
             return []
@@ -811,7 +820,11 @@ class SearchService:
         # 1) explicit ``settings.search_max_distance`` override
         # 2) embedder's per-model recommendation
         # 3) safe default (0.5)
-        threshold = self._resolve_distance_threshold()
+        threshold = (
+            max_distance
+            if max_distance is not None
+            else self._resolve_distance_threshold()
+        )
         return [h for h in hits if h.distance <= threshold]
 
     def _resolve_distance_threshold(self) -> float:
